@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+/* 🌍 Global scrollbar hide (WebKit browsers) */
+*::-webkit-scrollbar {
+  display: none;
+}
+
+* {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;     /* Firefox */
+}
+
+/* 🚫 Disable Chrome autofill background & keep text color consistent */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  transition: background-color 9999s ease-in-out 0s;
+  box-shadow: 0 0 0px 1000px #1f2937 inset !important; /* match Tailwind gray-800 bg */
+  -webkit-text-fill-color: white !important;
+}
+@layer utilities {
+  .calendar-white::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
+}
