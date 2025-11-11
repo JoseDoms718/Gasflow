@@ -1,20 +1,19 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
+import axios from "axios";
+import { useNavigate } from "react-router-dom"; // <- import useNavigate
 
-export default function OtpVerificationForm({
-    email,
-    onVerifyOtp,      // function(otp) => promise
-    onCancel,         // optional function() => promise
-    onResendOtp,      // function() => promise
-}) {
+export default function OtpVerificationForm({ email, onVerifyOtp }) {
     const [otp, setOtp] = useState("");
     const [loading, setLoading] = useState(false);
     const [sendingOtp, setSendingOtp] = useState(false);
     const [resendTimer, setResendTimer] = useState(60);
     const timerRef = useRef(null);
 
-    // Start countdown when component mounts
+    const navigate = useNavigate(); // <- initialize navigate
+
+    // Start countdown
     useEffect(() => {
         setResendTimer(60);
         if (timerRef.current) clearInterval(timerRef.current);
@@ -32,6 +31,7 @@ export default function OtpVerificationForm({
         return () => clearInterval(timerRef.current);
     }, []);
 
+    // Verify OTP
     const handleVerify = async (e) => {
         e.preventDefault();
         if (!otp.trim() || otp.length !== 6) {
@@ -41,27 +41,49 @@ export default function OtpVerificationForm({
 
         try {
             setLoading(true);
-            await onVerifyOtp(otp);
+            await axios.post("http://localhost:5000/verify-otp", { email, otp });
+            toast.success("✅ OTP verified successfully!");
             setOtp("");
+            if (onVerifyOtp) await onVerifyOtp(otp);
         } catch (err) {
             console.error("❌ OTP verification error:", err);
-            toast.error(err?.message || "Invalid or expired OTP.");
+            toast.error(err?.response?.data?.error || "Invalid or expired OTP.");
         } finally {
             setLoading(false);
         }
     };
 
+    // Resend OTP
     const handleResend = async () => {
         if (resendTimer > 0 || sendingOtp) return;
+
         try {
             setSendingOtp(true);
-            await onResendOtp();
-            setResendTimer(60); // restart timer
+            await axios.post("http://localhost:5000/send-otp", { email, action: "resend" });
+            toast.success("✅ OTP resent successfully!");
+            setResendTimer(60);
         } catch (err) {
             console.error("❌ Resend OTP error:", err);
-            toast.error(err?.message || "Failed to resend OTP.");
+            toast.error(err?.response?.data?.error || "Failed to resend OTP.");
         } finally {
             setSendingOtp(false);
+        }
+    };
+
+    // Cancel OTP
+    const handleCancel = async () => {
+        try {
+            await axios.post("http://localhost:5000/send-otp", { email, action: "cancel" });
+            toast.success("✅ OTP canceled successfully!");
+            setOtp("");
+            clearInterval(timerRef.current);
+            setResendTimer(0);
+
+            // Redirect to /login
+            navigate("/");
+        } catch (err) {
+            console.error("❌ Cancel OTP error:", err);
+            toast.error(err?.response?.data?.error || "Failed to cancel OTP.");
         }
     };
 
@@ -95,15 +117,13 @@ export default function OtpVerificationForm({
                     {loading ? <Loader2 className="mx-auto animate-spin" size={22} /> : "Verify OTP"}
                 </button>
 
-                {onCancel && (
-                    <button
-                        type="button"
-                        onClick={onCancel}
-                        className="flex-1 py-3 rounded-full font-semibold text-lg text-white bg-red-600 hover:bg-red-700 transition"
-                    >
-                        Cancel
-                    </button>
-                )}
+                <button
+                    type="button"
+                    onClick={handleCancel}
+                    className="flex-1 py-3 rounded-full font-semibold text-lg text-white bg-red-600 hover:bg-red-700 transition"
+                >
+                    Cancel
+                </button>
             </div>
 
             <button

@@ -38,14 +38,19 @@ export default function ManageRequestsSection() {
     if (!window.confirm("Are you sure you want to approve this registration?")) return;
     setLoadingId(otpId);
     try {
-      await axios.post(
+      const res = await axios.post(
         `http://localhost:5000/business-owner/approve/${otpId}`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      toast.success("✅ Registration approved successfully");
-      setSelectedRequest(null);
-      fetchRequests();
+
+      if (res.data.success) {
+        toast.success(res.data.message || "✅ Registration approved successfully");
+        setSelectedRequest(null);
+        fetchRequests();
+      } else {
+        toast.error(res.data.error || "⚠️ Failed to approve registration");
+      }
     } catch (err) {
       console.error("Approval error:", err);
       toast.error(err.response?.data?.error || "⚠️ Failed to approve registration");
@@ -58,14 +63,19 @@ export default function ManageRequestsSection() {
     if (!window.confirm("Are you sure you want to reject this registration?")) return;
     setLoadingId(otpId);
     try {
-      await axios.post(
+      const res = await axios.post(
         `http://localhost:5000/business-owner/reject/${otpId}`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      toast.success("❌ Registration rejected successfully");
-      setSelectedRequest(null);
-      fetchRequests();
+
+      if (res.data.success) {
+        toast.success(res.data.message || "❌ Registration rejected successfully");
+        setSelectedRequest(null);
+        fetchRequests();
+      } else {
+        toast.error(res.data.error || "⚠️ Failed to reject registration");
+      }
     } catch (err) {
       console.error("Reject error:", err);
       toast.error(err.response?.data?.error || "⚠️ Failed to reject registration");
@@ -90,8 +100,8 @@ export default function ManageRequestsSection() {
           </thead>
           <tbody className="bg-white">
             {requests.length > 0 ? (
-              requests.map((req, i) => (
-                <tr key={i} className="hover:bg-gray-50">
+              requests.map((req) => (
+                <tr key={req.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-semibold">{req.name}</td>
                   <td className="px-4 py-3">{req.role}</td>
                   <td className="px-4 py-3">{req.barangay}</td>
@@ -149,27 +159,22 @@ export default function ManageRequestsSection() {
                 <span className="font-semibold">Name:</span>
                 <span className="ml-1 text-gray-200">{selectedRequest.name}</span>
               </div>
-
               <div className="flex items-center gap-2">
                 <span className="font-semibold">Role:</span>
                 <span className="ml-1 text-gray-200">{selectedRequest.role}</span>
               </div>
-
               <div className="flex items-center gap-2">
                 <span className="font-semibold">Barangay:</span>
                 <span className="ml-1 text-gray-200">{selectedRequest.barangay}</span>
               </div>
-
               <div className="flex items-center gap-2">
                 <span className="font-semibold">Municipality:</span>
                 <span className="ml-1 text-gray-200">{selectedRequest.municipality}</span>
               </div>
-
               <div className="flex items-center gap-2">
                 <span className="font-semibold">Email:</span>
                 <span className="ml-1 text-gray-200">{selectedRequest.email}</span>
               </div>
-
               <div className="flex items-center gap-2">
                 <span className="font-semibold">Phone:</span>
                 <span className="ml-1 text-gray-200">{selectedRequest.contact_number}</span>

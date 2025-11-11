@@ -105,6 +105,43 @@ router.post("/approve/:otpId", authenticateToken, async (req, res) => {
   }
 });
 
+router.post("/reject/:otpId", authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role.toLowerCase() !== "admin") {
+      return res.status(403).json({ error: "Forbidden: Admins only." });
+    }
+
+    const { otpId } = req.params;
+
+    // Fetch the OTP record first
+    const [otpRecords] = await db.query("SELECT * FROM email_otps WHERE id = ?", [otpId]);
+    if (otpRecords.length === 0) {
+      return res.status(404).json({ error: "Pending registration not found." });
+    }
+
+    // Fetch images associated with this OTP (to delete files from disk)
+    const [images] = await db.query("SELECT * FROM otp_images WHERE otp_id = ?", [otpId]);
+
+    // Delete image files from disk
+    for (let img of images) {
+      const filePath = path.join(__dirname, "../", img.image_url); // ensure path is correct
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+
+    // Delete images from DB
+    await db.query("DELETE FROM otp_images WHERE otp_id = ?", [otpId]);
+
+    // Delete the OTP record
+    await db.query("DELETE FROM email_otps WHERE id = ?", [otpId]);
+
+    res.json({ success: true, message: "❌ Business owner registration rejected successfully." });
+  } catch (err) {
+    console.error("❌ Reject business owner error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
 /* -----------------------------------------
    ✅ Get All Pending Registrations (Admin Only)

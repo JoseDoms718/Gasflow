@@ -558,7 +558,7 @@ export function EditableSelect({ label, field, value, options = [], editMode, se
             {editMode[field] ? (
                 <div className="flex items-center justify-between gap-2 bg-gray-800 px-3 py-2 rounded-lg border border-gray-700">
                     <select
-                        className="bg-transparent outline-none w-full"
+                        className="bg-gray-800 text-white outline-none w-full"
                         value={normalizedValue ?? ""}
                         onChange={handleChange}
                     >
@@ -566,11 +566,11 @@ export function EditableSelect({ label, field, value, options = [], editMode, se
 
                         {options.map((opt) =>
                             typeof opt === "string" ? (
-                                <option key={opt} value={opt}>
+                                <option key={opt} value={opt} className="text-white">
                                     {opt}
                                 </option>
                             ) : (
-                                <option key={opt.value} value={opt.value}>
+                                <option key={opt.value} value={opt.value} className="text-white">
                                     {opt.label}
                                 </option>
                             )

@@ -1,7 +1,6 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../config/db");
-const bcrypt = require("bcrypt");
 
 // --------------------
 // Verify OTP → create user
@@ -21,27 +20,30 @@ router.post("/", async (req, res) => {
       [email]
     );
 
-    if (rows.length === 0) return res.status(400).json({ error: "No OTP found for this email." });
+    if (rows.length === 0) {
+      return res.status(400).json({ error: "No OTP found for this email." });
+    }
 
     const record = rows[0];
     const now = new Date();
 
-    // Delete OTP immediately to prevent reuse
-    await db.query("DELETE FROM email_otps WHERE email = ?", [email]);
-
-    // Validate OTP after deletion
+    // Validate OTP
     if (record.otp !== otp) return res.status(400).json({ error: "Invalid OTP." });
     if (now > new Date(record.expires_at)) return res.status(400).json({ error: "OTP expired." });
 
-    // Get user info directly from the OTP record
+    // Delete OTP immediately to prevent reuse
+    await db.query("DELETE FROM email_otps WHERE email = ?", [email]);
+
+    // Get user info from OTP record
     const { name, contact_number, barangay_id, password, role } = record;
-    if (!name || !password || !role)
+    if (!name || !password || !role) {
       return res.status(400).json({ error: "Missing registration info in OTP record." });
+    }
 
     // Determine account type
     const accountType = role === "users" ? "active" : "pending";
 
-    // Use hashed password from OTP record directly
+    // Use hashed password from OTP record
     const hashedPassword = password;
 
     // Insert user into users table
@@ -50,9 +52,9 @@ router.post("/", async (req, res) => {
       [name, email, contact_number, barangay_id, hashedPassword, role, accountType]
     );
 
-    // TODO: Copy images if needed from otp_images → user_images
-
+    // ✅ Registration complete
     res.json({ success: true, message: "🎉 Registration complete! Account created." });
+
   } catch (err) {
     console.error("❌ Error verifying OTP:", err);
     res.status(500).json({ error: "Server error during OTP verification." });

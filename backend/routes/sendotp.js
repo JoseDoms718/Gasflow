@@ -18,7 +18,11 @@ function normalizePHNumber(number) {
   return number;
 }
 
-// Send / Resend / Cancel OTP
+/**
+ * POST /send-otp
+ * Handles sending, resending, and canceling OTPs.
+ * Body: { email, action, name?, contact_number?, barangay_id?, password?, role? }
+ */
 router.post("/", async (req, res) => {
   let { name, email, contact_number, barangay_id, password, role, action } = req.body;
 
@@ -26,15 +30,51 @@ router.post("/", async (req, res) => {
 
   try {
     // ----------------------------
-    // Cancel OTP / registration
+    // Cancel OTP
     // ----------------------------
     if (action === "cancel") {
       await db.query("DELETE FROM email_otps WHERE email = ?", [email]);
-      return res.json({ success: true, message: "❌ OTP / registration canceled successfully." });
+      return res.json({ success: true, message: "✅ OTP canceled successfully." });
     }
 
     // ----------------------------
-    // Send / Resend OTP
+    // Check existing OTP
+    // ----------------------------
+    const [existingOtp] = await db.query(
+      "SELECT * FROM email_otps WHERE email = ? ORDER BY created_at DESC LIMIT 1",
+      [email]
+    );
+
+    // ----------------------------
+    // Resend OTP
+    // ----------------------------
+    if (action === "resend") {
+      if (!existingOtp || existingOtp.length === 0) {
+        return res.status(400).json({ error: "No previous OTP found. Please register again." });
+      }
+
+      const lastSent = new Date(existingOtp[0].created_at);
+      const diffSeconds = (Date.now() - lastSent.getTime()) / 1000;
+      if (diffSeconds < 60) {
+        return res.status(429).json({ error: `⏳ Please wait ${Math.ceil(60 - diffSeconds)}s before resending OTP.` });
+      }
+
+      // Generate new OTP
+      const otp = crypto.randomInt(100000, 999999).toString();
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+
+      // Update OTP
+      await db.query(
+        "UPDATE email_otps SET otp = ?, expires_at = ?, created_at = NOW() WHERE email = ?",
+        [otp, expiresAt, email]
+      );
+
+      await sendEmail(email, "Your OTP Code", `Your OTP code is ${otp}. It will expire in 5 minutes.`);
+      return res.json({ success: true, message: "✅ OTP resent successfully!" });
+    }
+
+    // ----------------------------
+    // First-time send OTP (registration)
     // ----------------------------
     if (!name || !contact_number || !barangay_id || !password) {
       return res.status(400).json({ error: "All fields are required." });
@@ -42,10 +82,10 @@ router.post("/", async (req, res) => {
 
     contact_number = normalizePHNumber(contact_number);
     if (!PH_MOBILE_REGEX.test(contact_number)) {
-      return res.status(400).json({ error: "Invalid mobile format. Use +639XXXXXXXXX" });
+      return res.status(400).json({ error: "Invalid mobile number. Use +639XXXXXXXXX format." });
     }
 
-    // Prevent sending if email exists in users table
+    // Prevent sending if email exists
     const [existingUser] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
     if (existingUser.length > 0) return res.status(400).json({ error: "Email already exists." });
 
@@ -53,16 +93,12 @@ router.post("/", async (req, res) => {
     const [barangayExists] = await db.query("SELECT * FROM barangays WHERE barangay_id = ?", [barangay_id]);
     if (barangayExists.length === 0) return res.status(400).json({ error: "Invalid barangay selected." });
 
-    // Rate-limit: 60s resend interval
-    const [lastOtp] = await db.query(
-      "SELECT created_at FROM email_otps WHERE email = ? ORDER BY created_at DESC LIMIT 1",
-      [email]
-    );
-    if (lastOtp.length > 0) {
-      const lastSent = new Date(lastOtp[0].created_at);
+    // Rate-limit: 60s resend
+    if (existingOtp && existingOtp.length > 0) {
+      const lastSent = new Date(existingOtp[0].created_at);
       const diffSeconds = (Date.now() - lastSent.getTime()) / 1000;
       if (diffSeconds < 60) {
-        return res.status(429).json({ error: `⏳ Please wait ${Math.ceil(60 - diffSeconds)} seconds before resending OTP.` });
+        return res.status(429).json({ error: `⏳ Please wait ${Math.ceil(60 - diffSeconds)}s before sending OTP.` });
       }
     }
 
@@ -72,12 +108,12 @@ router.post("/", async (req, res) => {
 
     // Generate OTP
     const otp = crypto.randomInt(100000, 999999).toString();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
-    // Delete old OTP for this email (cleanup)
+    // Cleanup old OTPs
     await db.query("DELETE FROM email_otps WHERE email = ?", [email]);
 
-    // Insert new OTP record
+    // Insert new OTP
     await db.query(
       `INSERT INTO email_otps 
       (email, otp, expires_at, created_at, name, barangay_id, contact_number, password, role)
@@ -85,13 +121,13 @@ router.post("/", async (req, res) => {
       [email, otp, expiresAt, name, barangay_id, contact_number, hashedPassword, role]
     );
 
-    // Send OTP via email
     await sendEmail(email, "Your OTP Code", `Your OTP code is ${otp}. It will expire in 5 minutes.`);
 
     res.json({ success: true, message: "✅ OTP sent! Please verify to complete registration." });
+
   } catch (err) {
-    console.error("❌ Error sending/resending OTP:", err);
-    res.status(500).json({ error: "Failed to send OTP." });
+    console.error("❌ Error handling OTP:", err);
+    res.status(500).json({ error: "Failed to process OTP." });
   }
 });
 
