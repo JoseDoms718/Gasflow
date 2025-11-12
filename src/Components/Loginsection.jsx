@@ -18,11 +18,16 @@ export default function Loginsection() {
   const [otpEmail, setOtpEmail] = useState(""); // email passed to OTP form
   const navigate = useNavigate();
 
+  // ----------------------
   // Auto-login if token exists
+  // ----------------------
   useEffect(() => {
     const token = localStorage.getItem("token");
     const user = localStorage.getItem("user");
     if (token && user) {
+      // ✅ Set Axios default header for all requests
+      axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+
       const parsed = JSON.parse(user);
       switch (parsed.role) {
         case "users":
@@ -39,56 +44,68 @@ export default function Loginsection() {
           navigate("/admininventory");
           break;
         default:
-          break;
+          toast.error("Unknown role: " + parsed.role);
       }
     }
   }, [navigate]);
 
+  // ----------------------
+  // LOGIN HANDLER
+  // ----------------------
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (!email || !password) {
+      toast.error("Email and password are required.");
+      return;
+    }
+
     try {
       const res = await axios.post("http://localhost:5000/auth/login", { email, password });
 
-      if (res.data.success) {
-        if (res.data.type.toLowerCase() !== "active") {
-          toast.error("Your account is not active yet. Please wait for admin approval.");
-          return;
-        }
-
-        localStorage.setItem("token", res.data.token);
-        localStorage.setItem(
-          "user",
-          JSON.stringify({
-            id: res.data.userId,
-            name: res.data.name,
-            role: res.data.role,
-            municipality: res.data.municipality,
-            barangay: res.data.barangay,
-            contact_number: res.data.contact_number || "",
-          })
-        );
-
-        axios.defaults.headers.common["Authorization"] = `Bearer ${res.data.token}`;
-
-        switch (res.data.role) {
-          case "users":
-          case "business_owner":
-            navigate("/homepage");
-            break;
-          case "branch_manager":
-            navigate("/branchorder");
-            break;
-          case "retailer":
-            navigate("/retailerorder");
-            break;
-          case "admin":
-            navigate("/admininventory");
-            break;
-          default:
-            toast.error("Unknown role: " + res.data.role);
-        }
-      } else {
+      if (!res.data.success) {
         toast.error(res.data.error || "Login failed");
+        return;
+      }
+
+      if (res.data.type.toLowerCase() !== "active") {
+        toast.error("Your account is not active yet. Please wait for admin approval.");
+        return;
+      }
+
+      // ✅ Store token and user info
+      localStorage.setItem("token", res.data.token);
+      localStorage.setItem(
+        "user",
+        JSON.stringify({
+          id: res.data.userId,
+          name: res.data.name,
+          role: res.data.role,
+          municipality: res.data.municipality,
+          barangay_id: res.data.barangay_id, // ✅ include barangay_id
+          contact_number: res.data.contact_number || "",
+        })
+      );
+
+      // ✅ Set Axios default header
+      axios.defaults.headers.common["Authorization"] = `Bearer ${res.data.token}`;
+
+      // ✅ Redirect based on role
+      switch (res.data.role) {
+        case "users":
+        case "business_owner":
+          navigate("/homepage");
+          break;
+        case "branch_manager":
+          navigate("/branchorder");
+          break;
+        case "retailer":
+          navigate("/retailerorder");
+          break;
+        case "admin":
+          navigate("/admininventory");
+          break;
+        default:
+          toast.error("Unknown role: " + res.data.role);
       }
     } catch (err) {
       console.error("❌ Login error:", err);
@@ -184,7 +201,7 @@ export default function Loginsection() {
               {userType === "normal" && (
                 <Userform
                   setIsOtpActive={setIsOtpActive}
-                  setOtpEmail={setOtpEmail} // ✅ pass email to OTP
+                  setOtpEmail={setOtpEmail}
                 />
               )}
               {userType === "business" && <Businessownerform setIsOtpActive={setIsOtpActive} />}
@@ -200,11 +217,11 @@ export default function Loginsection() {
                 onVerifyOtp={() => {
                   toast.success("Account verified successfully!");
                   setIsOtpActive(false);
-                  setOtpEmail(""); // ✅ reset OTP email
+                  setOtpEmail("");
                 }}
                 onCancel={() => {
                   setIsOtpActive(false);
-                  setOtpEmail(""); // ✅ reset OTP email
+                  setOtpEmail("");
                   toast.success("OTP cancelled.");
                 }}
               />
@@ -220,7 +237,7 @@ export default function Loginsection() {
                 onClick={() => {
                   setIsLogin(!isLogin);
                   setIsOtpActive(false);
-                  setOtpEmail(""); // ✅ reset OTP email on toggle
+                  setOtpEmail("");
                 }}
                 className="underline font-medium"
               >

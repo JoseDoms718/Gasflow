@@ -25,11 +25,12 @@ function authenticateToken(req, res, next) {
 
     // ✅ Normalize decoded user info so req.user.id always exists
     req.user = {
-      id: decoded.user_id || decoded.id,
-      role: decoded.role,
-      name: decoded.name,
-      municipality: decoded.municipality,
-    };
+    id: decoded.user_id || decoded.id,
+    role: decoded.role,
+    name: decoded.name,
+    municipality: decoded.municipality,
+    barangay_id: decoded.barangay_id, // <-- ADD THIS
+  };
 
     next();
   } catch (err) {

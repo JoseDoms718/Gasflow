@@ -14,7 +14,7 @@ import OrderInfoModal from "./OrderInfoModal";
 
 const BASE_URL = "http://localhost:5000";
 
-// 🔹 Inline helper to normalize image URLs
+// 🔹 Normalize image URLs
 const normalizeImageUrl = (url) => {
   if (!url) return "/placeholder.png";
   return url.startsWith("http") ? url : `${BASE_URL}/${url.replace(/^\/+/, "")}`;
@@ -31,15 +31,18 @@ export default function Orderlist({ role: propRole }) {
   const role = propRole || user?.role || "user";
   const isRetailer = role === "retailer";
 
-  // 🔹 Get cart from localStorage and normalize images
+  // 🔹 Get user cart from localStorage
   const getUserCart = useCallback(() => {
     const token = localStorage.getItem("token");
     const cartKey = token ? `cart_${token}` : "cart_guest";
     const cart = JSON.parse(localStorage.getItem(cartKey)) || [];
-    return cart.map((item) => ({ ...item, image_url: normalizeImageUrl(item.image_url) }));
+    return cart.map((item) => ({
+      ...item,
+      image_url: normalizeImageUrl(item.image_url),
+    }));
   }, []);
 
-  // 🔹 Fetch backend orders + merge local cart
+  // 🔹 Fetch orders and merge local cart
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
@@ -58,10 +61,14 @@ export default function Orderlist({ role: propRole }) {
       if (res.data.success && res.data.orders.length) {
         backendOrders = res.data.orders.map((o) => ({
           ...o,
-          items: o.items.map((i) => ({ ...i, image_url: normalizeImageUrl(i.image_url) })),
+          items: o.items.map((i) => ({
+            ...i,
+            image_url: normalizeImageUrl(i.image_url),
+          })),
         }));
       }
 
+      // Include local cart
       const localCart = getUserCart();
       if (localCart.length) {
         const pseudoOrder = {
@@ -82,7 +89,7 @@ export default function Orderlist({ role: propRole }) {
     }
   }, [getUserCart]);
 
-  // 🔹 Initial fetch + listen for localStorage changes
+  // 🔹 Initial fetch + cart sync
   useEffect(() => {
     fetchOrders();
     const handleStorageChange = (e) => {
@@ -92,9 +99,38 @@ export default function Orderlist({ role: propRole }) {
     return () => window.removeEventListener("storage", handleStorageChange);
   }, [fetchOrders]);
 
-  const toggleOrder = (id) => setExpandedOrder(expandedOrder === id ? null : id);
+  const toggleOrder = (id) =>
+    setExpandedOrder(expandedOrder === id ? null : id);
 
-  // 🔹 Cart/order actions
+  // 🔹 Update local cart without reload
+  const updateLocalCart = (updatedCart) => {
+    const token = localStorage.getItem("token");
+    const cartKey = token ? `cart_${token}` : "cart_guest";
+    if (updatedCart.length) localStorage.setItem(cartKey, JSON.stringify(updatedCart));
+    else localStorage.removeItem(cartKey);
+
+    setOrders((prev) => {
+      const newOrders = [...prev];
+      const cartIndex = newOrders.findIndex((o) => o.order_id === "local_cart");
+      if (cartIndex !== -1) {
+        newOrders[cartIndex] = {
+          order_id: "local_cart",
+          status: "cart",
+          items: updatedCart.map((item) => ({
+            ...item,
+            image_url: normalizeImageUrl(item.image_url),
+          })),
+          total_price: updatedCart.reduce(
+            (sum, i) => sum + i.price * i.quantity,
+            0
+          ),
+        };
+      }
+      return newOrders;
+    });
+  };
+
+  // 🔹 Handle order/cart actions
   const handleOrderAction = async (order_id, newStatus) => {
     const token = localStorage.getItem("token");
     if (!token) return toast.error("Please log in first.");
@@ -109,7 +145,7 @@ export default function Orderlist({ role: propRole }) {
           const cartKey = token ? `cart_${token}` : "cart_guest";
           localStorage.removeItem(cartKey);
           toast.success("🗑️ Cart cleared successfully!");
-          fetchOrders();
+          updateLocalCart([]);
           return;
         }
       }
@@ -121,7 +157,11 @@ export default function Orderlist({ role: propRole }) {
       );
 
       if (res.data.success) {
-        toast.success(newStatus === "pending" ? "✅ Order checked out!" : "❌ Order cancelled!");
+        toast.success(
+          newStatus === "pending"
+            ? "✅ Order checked out!"
+            : "❌ Order cancelled!"
+        );
         fetchOrders();
       } else toast.error("Failed to update order status.");
     } catch (err) {
@@ -130,7 +170,7 @@ export default function Orderlist({ role: propRole }) {
     }
   };
 
-  // 🔹 Confirm checkout modal (local cart only)
+  // 🔹 Confirm checkout modal
   const handleConfirmCheckout = async (info) => {
     try {
       const token = localStorage.getItem("token");
@@ -154,13 +194,10 @@ export default function Orderlist({ role: propRole }) {
       );
 
       if (res.data.success) {
-        // ✅ Remove cart and show success
         localStorage.removeItem(cartKey);
         toast.success("✅ Checkout successful!");
         setShowModal(false);
-
-        // 🔹 Reload the page to ensure images load correctly
-        window.location.reload();
+        window.location.reload(); // keep this so images refresh
       } else toast.error("Checkout failed.");
     } catch (err) {
       console.error("❌ Checkout error:", err);
@@ -168,10 +205,11 @@ export default function Orderlist({ role: propRole }) {
     }
   };
 
-  // 🔹 Filter orders based on tab
+  // 🔹 Filter by tab
   const filteredOrders = orders.filter((order) => {
     if (activeTab === "cart") return order.status === "cart";
-    if (activeTab === "current") return !["cart", "cancelled", "delivered"].includes(order.status);
+    if (activeTab === "current")
+      return !["cart", "cancelled", "delivered"].includes(order.status);
     if (activeTab === "finished") return order.status === "delivered";
     return false;
   });
@@ -180,8 +218,8 @@ export default function Orderlist({ role: propRole }) {
     return (
       <section
         className={`${isRetailer
-          ? "bg-white text-gray-900 py-6 mt-0 min-h-[80vh]"
-          : "bg-gray-900 text-white py-12 mt-12 h-dvh"
+            ? "bg-white text-gray-900 py-6 mt-0 min-h-[80vh]"
+            : "bg-gray-900 text-white py-12 mt-12 h-dvh"
           } flex items-center justify-center`}
       >
         <p>Loading your orders...</p>
@@ -191,15 +229,17 @@ export default function Orderlist({ role: propRole }) {
   return (
     <section
       className={`${isRetailer
-        ? "text-gray-900 bg-transparent py-6 mt-0 min-h-[80vh]"
-        : "bg-gray-900 text-white py-12 mt-12 h-dvh"
+          ? "text-gray-900 bg-transparent py-6 mt-0 min-h-[80vh]"
+          : "bg-gray-900 text-white py-12 mt-12 h-dvh"
         } flex flex-col`}
     >
       <div className="container mx-auto px-6">
         {!isRetailer && (
           <>
             <h2 className="text-3xl font-bold text-white mb-2">My Orders</h2>
-            <p className="text-gray-300 mb-8">View and manage your cart, current, and finished orders.</p>
+            <p className="text-gray-300 mb-8">
+              View and manage your cart, current, and finished orders.
+            </p>
           </>
         )}
 
@@ -233,43 +273,85 @@ export default function Orderlist({ role: propRole }) {
           })}
         </div>
 
-
         {/* Orders List */}
-        <div className={`${isRetailer ? "bg-white border border-gray-200" : "bg-gray-800"} rounded-lg shadow-md p-6 flex flex-col h-[60vh]`}>
+        <div
+          className={`${isRetailer
+              ? "bg-white border border-gray-200"
+              : "bg-gray-800"
+            } rounded-lg shadow-md p-6 flex flex-col h-[60vh]`}
+        >
           {filteredOrders.length ? (
-            <div className={`space-y-4 overflow-y-auto pr-2 flex-1 ${isRetailer ? "text-gray-800" : "text-white"}`}>
+            <div
+              className={`space-y-4 overflow-y-auto pr-2 flex-1 ${isRetailer ? "text-gray-800" : "text-white"
+                }`}
+            >
               {filteredOrders.map((order) => {
                 const isExpanded = expandedOrder === order.order_id;
                 const firstItem = order.items?.[0];
 
                 return (
-                  <div key={order.order_id} className={`rounded-lg overflow-hidden ${isRetailer ? "bg-gray-50 border border-gray-200" : "bg-gray-700"}`}>
+                  <div
+                    key={order.order_id}
+                    className={`rounded-lg overflow-hidden ${isRetailer
+                        ? "bg-gray-50 border border-gray-200"
+                        : "bg-gray-700"
+                      }`}
+                  >
                     {/* Header */}
                     <button
                       onClick={() => toggleOrder(order.order_id)}
-                      className={`w-full flex justify-between items-center p-4 text-left transition ${isRetailer ? "hover:bg-gray-100" : "hover:bg-gray-600"}`}
+                      className={`w-full flex justify-between items-center p-4 text-left transition ${isRetailer ? "hover:bg-gray-100" : "hover:bg-gray-600"
+                        }`}
                     >
                       <div>
-                        <h3 className={`font-semibold ${isRetailer ? "text-gray-900" : "text-white"}`}>
+                        <h3
+                          className={`font-semibold ${isRetailer ? "text-gray-900" : "text-white"
+                            }`}
+                        >
                           {firstItem?.product_name || "Unnamed Product"}
                         </h3>
-                        <p className={`text-sm ${isRetailer ? "text-gray-500" : "text-gray-300"}`}>Status: {order.status}</p>
+                        <p
+                          className={`text-sm ${isRetailer ? "text-gray-500" : "text-gray-300"
+                            }`}
+                        >
+                          Status: {order.status}
+                        </p>
                       </div>
                       <div className="flex items-center gap-3">
-                        <p className={`font-bold text-lg ${isRetailer ? "text-blue-700" : "text-blue-400"}`}>₱{order.total_price?.toLocaleString()}</p>
+                        <p
+                          className={`font-bold text-lg ${isRetailer ? "text-blue-700" : "text-blue-400"
+                            }`}
+                        >
+                          ₱{order.total_price?.toLocaleString()}
+                        </p>
                         {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                       </div>
                     </button>
 
-                    {/* Expanded Section */}
+                    {/* Expanded content */}
                     {isExpanded && (
-                      <div className={`p-4 border-t space-y-3 ${isRetailer ? "border-gray-200 bg-gray-50" : "border-gray-600 bg-gray-800"}`}>
+                      <div
+                        className={`p-4 border-t space-y-3 ${isRetailer
+                            ? "border-gray-200 bg-gray-50"
+                            : "border-gray-600 bg-gray-800"
+                          }`}
+                      >
                         <div className="max-h-[300px] overflow-y-auto space-y-3 pr-1">
                           {order.items.map((item, index) => (
-                            <div key={index} className={`flex items-start gap-4 rounded-md p-3 ${isRetailer ? "bg-white border border-gray-200" : "bg-gray-700"}`}>
+                            <div
+                              key={index}
+                              className={`flex items-start gap-4 rounded-md p-3 ${isRetailer
+                                  ? "bg-white border border-gray-200"
+                                  : "bg-gray-700"
+                                }`}
+                            >
                               {item.image_url && (
                                 <div className="flex-shrink-0 w-24 h-24 rounded-md overflow-hidden border border-gray-300">
-                                  <img src={item.image_url} alt={item.product_name} className="w-full h-full object-cover" />
+                                  <img
+                                    src={item.image_url}
+                                    alt={item.product_name}
+                                    className="w-full h-full object-cover"
+                                  />
                                 </div>
                               )}
 
@@ -277,21 +359,35 @@ export default function Orderlist({ role: propRole }) {
                               <div className="flex-1 flex flex-col justify-between">
                                 <div className="flex justify-between items-start">
                                   <div>
-                                    <h4 className="font-semibold text-sm md:text-base">{item.product_name}</h4>
-                                    <p className="text-xs italic text-gray-400 mt-1">{item.product_description || "No description"}</p>
+                                    <h4 className="font-semibold text-sm md:text-base">
+                                      {item.product_name}
+                                    </h4>
+                                    <p className="text-xs italic text-gray-400 mt-1">
+                                      {item.product_description ||
+                                        "No description"}
+                                    </p>
                                   </div>
 
                                   {order.order_id === "local_cart" && (
                                     <button
                                       onClick={() => {
-                                        const token = localStorage.getItem("token");
-                                        const cartKey = token ? `cart_${token}` : "cart_guest";
-                                        const cart = JSON.parse(localStorage.getItem(cartKey)) || [];
-                                        const updated = cart.filter((c) => c.product_id !== item.product_id);
-                                        if (!updated.length) localStorage.removeItem(cartKey);
-                                        else localStorage.setItem(cartKey, JSON.stringify(updated));
-                                        toast.success(`🗑️ Removed ${item.product_name} from cart`);
-                                        fetchOrders();
+                                        const token =
+                                          localStorage.getItem("token");
+                                        const cartKey = token
+                                          ? `cart_${token}`
+                                          : "cart_guest";
+                                        const cart =
+                                          JSON.parse(
+                                            localStorage.getItem(cartKey)
+                                          ) || [];
+                                        const updated = cart.filter(
+                                          (c) =>
+                                            c.product_id !== item.product_id
+                                        );
+                                        updateLocalCart(updated);
+                                        toast.success(
+                                          `🗑️ Removed ${item.product_name} from cart`
+                                        );
                                       }}
                                       className="text-red-500 hover:text-red-700 transition p-1 rounded-full hover:bg-red-100"
                                       title="Remove item"
@@ -309,15 +405,25 @@ export default function Orderlist({ role: propRole }) {
                                       min="1"
                                       value={item.quantity}
                                       onChange={(e) => {
-                                        const newQty = Math.max(1, Number(e.target.value));
-                                        const token = localStorage.getItem("token");
-                                        const cartKey = token ? `cart_${token}` : "cart_guest";
-                                        const cart = JSON.parse(localStorage.getItem(cartKey)) || [];
-                                        const updated = cart.map((c) =>
-                                          c.product_id === item.product_id ? { ...c, quantity: newQty } : c
+                                        const newQty = Math.max(
+                                          1,
+                                          Number(e.target.value)
                                         );
-                                        localStorage.setItem(cartKey, JSON.stringify(updated));
-                                        fetchOrders();
+                                        const token =
+                                          localStorage.getItem("token");
+                                        const cartKey = token
+                                          ? `cart_${token}`
+                                          : "cart_guest";
+                                        const cart =
+                                          JSON.parse(
+                                            localStorage.getItem(cartKey)
+                                          ) || [];
+                                        const updated = cart.map((c) =>
+                                          c.product_id === item.product_id
+                                            ? { ...c, quantity: newQty }
+                                            : c
+                                        );
+                                        updateLocalCart(updated);
                                       }}
                                       className="w-16 px-2 py-1 rounded border border-gray-400 text-center text-sm bg-transparent"
                                     />
@@ -325,27 +431,58 @@ export default function Orderlist({ role: propRole }) {
                                 )}
 
                                 <div className="mt-2">
-                                  <p className="font-medium text-sm md:text-base">₱{item.price?.toLocaleString()} each</p>
-                                  <p className="text-xs text-gray-500">{isRetailer ? `Buyer: ${item.buyer_name || "Unknown"}` : `Seller: ${item.seller_name || "Unknown"}`}</p>
+                                  <p className="font-medium text-sm md:text-base">
+                                    ₱{item.price?.toLocaleString()} each
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    {isRetailer
+                                      ? `Buyer: ${item.buyer_name || "Unknown"
+                                      }`
+                                      : `Seller: ${item.seller_name || "Unknown"
+                                      }`}
+                                  </p>
                                 </div>
                               </div>
                             </div>
                           ))}
                         </div>
 
-                        {/* Cart actions */}
+                        {/* Actions */}
                         {order.order_id === "local_cart" && !isRetailer && (
                           <div className="flex justify-end gap-3 pt-3 border-t border-gray-600">
-                            <button onClick={() => handleOrderAction(order.order_id, "pending")} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm">Checkout All</button>
-                            <button onClick={() => handleOrderAction(order.order_id, "cancelled")} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded text-sm">Cancel All</button>
+                            <button
+                              onClick={() =>
+                                handleOrderAction(order.order_id, "pending")
+                              }
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm"
+                            >
+                              Checkout All
+                            </button>
+                            <button
+                              onClick={() =>
+                                handleOrderAction(order.order_id, "cancelled")
+                              }
+                              className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded text-sm"
+                            >
+                              Cancel All
+                            </button>
                           </div>
                         )}
 
-                        {activeTab === "current" && !isRetailer && order.status === "pending" && (
-                          <div className="flex justify-end pt-3 border-t border-gray-600">
-                            <button onClick={() => handleOrderAction(order.order_id, "cancelled")} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded text-sm">Cancel Order</button>
-                          </div>
-                        )}
+                        {activeTab === "current" &&
+                          !isRetailer &&
+                          order.status === "pending" && (
+                            <div className="flex justify-end pt-3 border-t border-gray-600">
+                              <button
+                                onClick={() =>
+                                  handleOrderAction(order.order_id, "cancelled")
+                                }
+                                className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded text-sm"
+                              >
+                                Cancel Order
+                              </button>
+                            </div>
+                          )}
                       </div>
                     )}
                   </div>
@@ -356,13 +493,22 @@ export default function Orderlist({ role: propRole }) {
             <div className="flex flex-col items-center justify-center text-center flex-1 text-gray-500">
               <PackageOpen size={48} className="mb-4" />
               <h3 className="text-lg font-semibold">No Orders Found</h3>
-              <p className="text-sm">Your {activeTab.replace("-", " ")} list is empty for now.</p>
+              <p className="text-sm">
+                Your {activeTab.replace("-", " ")} list is empty for now.
+              </p>
             </div>
           )}
         </div>
       </div>
 
-      {showModal && <OrderInfoModal onClose={() => setShowModal(false)} onConfirm={handleConfirmCheckout} user={user} />}
+      {/* Checkout Modal */}
+      {showModal && (
+        <OrderInfoModal
+          onClose={() => setShowModal(false)}
+          onConfirm={handleConfirmCheckout}
+          user={user}
+        />
+      )}
     </section>
   );
 }

@@ -7,23 +7,18 @@ import EditProfileModal from "../Modals/EditProfileModal";
 
 export default function NavBar() {
   const navigate = useNavigate();
-  const [user, setUser] = useState(null);
-  const [loadingUser, setLoadingUser] = useState(true);
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem("user");
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const dropdownRef = useRef(null);
 
-  /* Load user from token */
+  /* Fetch latest user silently */
   useEffect(() => {
     const token = localStorage.getItem("token");
-    const savedUser = localStorage.getItem("user");
-
-    if (savedUser) setUser(JSON.parse(savedUser));
-
-    if (!token) {
-      setLoadingUser(false);
-      return;
-    }
+    if (!token) return;
 
     axios
       .get("http://localhost:5000/auth/me", {
@@ -43,8 +38,7 @@ export default function NavBar() {
         localStorage.removeItem("token");
         localStorage.removeItem("user");
         setUser(null);
-      })
-      .finally(() => setLoadingUser(false));
+      });
   }, []);
 
   /* Close dropdown on outside click */
@@ -64,8 +58,6 @@ export default function NavBar() {
       navigate("/login");
     }
   };
-
-  if (loadingUser) return null;
 
   return (
     <nav className="fixed z-10 top-0 left-0 w-full bg-white text-gray-800 shadow-md transition-all duration-300">

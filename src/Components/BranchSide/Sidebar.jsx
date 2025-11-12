@@ -18,34 +18,36 @@ export default function Sidebar({ role }) {
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
 
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // ✅ Initialize user instantly from localStorage for zero delay
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem("user");
+    return savedUser ? JSON.parse(savedUser) : { name: "Guest", role: "guest" };
+  });
   const [showEditModal, setShowEditModal] = useState(false);
 
+  // ✅ Fetch latest user data silently (no visual loading)
   useEffect(() => {
+    if (!token) return;
+
     const fetchUser = async () => {
-      const localUser = localStorage.getItem("user");
-      if (localUser) setUser(JSON.parse(localUser));
-
-      if (!token) {
-        setUser({ name: "Guest", role: "guest" });
-        setLoading(false);
-        return;
-      }
-
       try {
         const res = await axios.get("http://localhost:5000/auth/me", {
           headers: { Authorization: `Bearer ${token}` },
         });
-        setUser(res.data.user);
-        localStorage.setItem("user", JSON.stringify(res.data.user));
+
+        if (res.data?.success) {
+          setUser(res.data.user);
+          localStorage.setItem("user", JSON.stringify(res.data.user));
+        } else {
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+          setUser({ name: "Guest", role: "guest" });
+        }
       } catch (err) {
         console.error("Failed to fetch user info:", err);
         localStorage.removeItem("token");
         localStorage.removeItem("user");
         setUser({ name: "Guest", role: "guest" });
-      } finally {
-        setLoading(false);
       }
     };
 
@@ -56,68 +58,121 @@ export default function Sidebar({ role }) {
 
   const isActive = (path) => location.pathname === path;
 
+  // ✅ Role-based menus
   const roleMenus = {
     admin: [
-      { to: "/admininventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
-      { to: "/adminsalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
-      { to: "/adminmanageuser", label: "Manage Users", icon: <Users className="w-5 h-5" /> },
-      { to: "/adminmaintenance", label: "Maintenance & Updates", icon: <Settings className="w-5 h-5" /> },
+      {
+        to: "/admininventory",
+        label: "Products & Inventory",
+        icon: <Package className="w-5 h-5" />,
+      },
+      {
+        to: "/adminsalesreport",
+        label: "Sales Report",
+        icon: <FileText className="w-5 h-5" />,
+      },
+      {
+        to: "/adminmanageuser",
+        label: "Manage Users",
+        icon: <Users className="w-5 h-5" />,
+      },
+      {
+        to: "/adminmaintenance",
+        label: "Maintenance & Updates",
+        icon: <Settings className="w-5 h-5" />,
+      },
     ],
     branch_manager: [
-      { to: "/branchorder", label: "Orders", icon: <ShoppingCart className="w-5 h-5" /> },
-      { to: "/branchinventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
-      { to: "/branchsalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
-      { to: "/branchretailer", label: "Manage Retailers", icon: <Users className="w-5 h-5" /> },
+      {
+        to: "/branchorder",
+        label: "Orders",
+        icon: <ShoppingCart className="w-5 h-5" />,
+      },
+      {
+        to: "/branchinventory",
+        label: "Products & Inventory",
+        icon: <Package className="w-5 h-5" />,
+      },
+      {
+        to: "/branchsalesreport",
+        label: "Sales Report",
+        icon: <FileText className="w-5 h-5" />,
+      },
+      {
+        to: "/branchretailer",
+        label: "Manage Retailers",
+        icon: <Users className="w-5 h-5" />,
+      },
     ],
     retailer: [
-      { to: "/retailerorder", label: "Orders", icon: <ShoppingCart className="w-5 h-5" /> },
-      { to: "/retailerinventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
-      { to: "/retailersalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
+      {
+        to: "/retailerorder",
+        label: "Orders",
+        icon: <ShoppingCart className="w-5 h-5" />,
+      },
+      {
+        to: "/retailerinventory",
+        label: "Products & Inventory",
+        icon: <Package className="w-5 h-5" />,
+      },
+      {
+        to: "/retailersalesreport",
+        label: "Sales Report",
+        icon: <FileText className="w-5 h-5" />,
+      },
     ],
     guest: [],
   };
 
   const menuItems = roleMenus[userRole] || [];
 
-  if (loading || !user) {
-    return (
-      <div className="flex justify-center items-center h-screen bg-gray-900 text-white">
-        Loading...
-      </div>
-    );
-  }
-
   return (
     <>
+      {/* Sidebar Container */}
       <aside className="bg-gray-900 text-white w-64 min-h-screen flex flex-col fixed left-0 top-0">
         {/* Logo */}
         <div className="flex items-center gap-3 p-6 border-b border-gray-700">
-          <img src={LogoWhite} alt="Gasflow Logo" className="w-10 h-10 object-contain" />
+          <img
+            src={LogoWhite}
+            alt="Gasflow Logo"
+            className="w-10 h-10 object-contain"
+          />
           <h1 className="text-xl font-bold">Gasflow</h1>
         </div>
 
-        {/* Profile */}
+        {/* Profile Section */}
         <div className="flex items-center gap-4 p-6 border-b border-gray-700">
           <div className="w-12 h-12 bg-gray-800 rounded-full flex items-center justify-center">
             <User className="w-6 h-6 text-gray-400" />
           </div>
-          <p className="text-lg font-medium">{user?.name || "Guest"}</p>
+          <p className="text-lg font-medium truncate max-w-[140px]">
+            {user?.name || "Guest"}
+          </p>
         </div>
 
         {/* Menu */}
         <nav className="flex-1 p-4 overflow-y-auto">
           <ul className="space-y-2">
-            {menuItems.map((item) => (
-              <li key={item.to}>
-                <Link
-                  to={item.to}
-                  className={`flex items-center gap-3 p-3 rounded-lg transition ${isActive(item.to) ? "bg-gray-800" : "hover:bg-gray-800"}`}
-                >
-                  {item.icon}
-                  {item.label}
-                </Link>
+            {menuItems.length > 0 ? (
+              menuItems.map((item) => (
+                <li key={item.to}>
+                  <Link
+                    to={item.to}
+                    className={`flex items-center gap-3 p-3 rounded-lg transition ${isActive(item.to)
+                        ? "bg-gray-800"
+                        : "hover:bg-gray-800 hover:text-blue-400"
+                      }`}
+                  >
+                    {item.icon}
+                    {item.label}
+                  </Link>
+                </li>
+              ))
+            ) : (
+              <li className="text-gray-500 text-sm italic text-center mt-4">
+                No menu available
               </li>
-            ))}
+            )}
           </ul>
         </nav>
 
@@ -145,7 +200,7 @@ export default function Sidebar({ role }) {
         </div>
       </aside>
 
-      {/* Reusable EditProfileModal */}
+      {/* Edit Profile Modal */}
       <EditProfileModal
         user={user}
         showModal={showEditModal}

@@ -21,9 +21,7 @@ const handleDbError = (res, err, msg) => {
 // Admin-only route guard
 const requireAdmin = (req, res, next) => {
   if (req.user.role !== "admin") {
-    return res
-      .status(403)
-      .json({ success: false, error: "Forbidden: Admins only." });
+    return res.status(403).json({ success: false, error: "Forbidden: Admins only." });
   }
   next();
 };
@@ -33,9 +31,7 @@ router.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
-    return res
-      .status(400)
-      .json({ success: false, error: "Email and password are required." });
+    return res.status(400).json({ success: false, error: "Email and password are required." });
   }
 
   try {
@@ -47,7 +43,7 @@ router.post("/login", async (req, res) => {
       FROM users u
       LEFT JOIN barangays b ON u.barangay_id = b.barangay_id
       WHERE u.email = ?
-    `,
+      `,
       [email]
     );
 
@@ -77,22 +73,24 @@ router.post("/login", async (req, res) => {
         role: user.role,
         name: user.name,
         municipality: user.municipality,
-        barangay: user.barangay_name,
+        barangay_id: user.barangay_id,
         contact_number: user.contact_number,
       },
       process.env.JWT_SECRET || "defaultsecret",
       { expiresIn: "8h" }
     );
 
+    // ✅ Return full user info matching frontend expectations
     res.json({
       success: true,
       message: "Login successful.",
       token,
-      userId: user.user_id,
+      id: user.user_id, // renamed to `id` to match frontend
       name: user.name,
       role: user.role,
       municipality: user.municipality,
       barangay: user.barangay_name,
+      barangay_id: user.barangay_id,
       contact_number: user.contact_number,
       type: user.type,
     });
@@ -103,19 +101,16 @@ router.post("/login", async (req, res) => {
 });
 
 // 👤 CURRENT USER INFO
-// 👤 CURRENT USER INFO
 router.get("/me", authenticateToken, async (req, res) => {
   try {
     const [results] = await db.query(
       `
       SELECT u.user_id, u.name, u.email, u.contact_number, u.role, u.type,
-             u.barangay_id,  -- include the ID
-             b.barangay_name AS barangay,
-             b.municipality
+             u.barangay_id, b.barangay_name AS barangay, b.municipality
       FROM users u
       LEFT JOIN barangays b ON u.barangay_id = b.barangay_id
       WHERE u.user_id = ?
-    `,
+      `,
       [req.user.id]
     );
 
@@ -123,8 +118,22 @@ router.get("/me", authenticateToken, async (req, res) => {
       return res.status(404).json({ success: false, error: "User not found" });
     }
 
-    // Return the barangay_id as well so frontend can select the correct dropdown option
-    res.json({ success: true, user: results[0] });
+    // ✅ Standardize response for frontend
+    const user = results[0];
+    res.json({
+      success: true,
+      user: {
+        user_id: user.user_id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        type: user.type,
+        barangay_id: user.barangay_id,
+        barangay: user.barangay,
+        municipality: user.municipality,
+        contact_number: user.contact_number,
+      },
+    });
   } catch (err) {
     handleDbError(res, err, "Error fetching user info");
   }

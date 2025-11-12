@@ -25,20 +25,21 @@ function normalizePHNumber(number) {
 }
 // ✅ Add new user
 router.post("/", async (req, res) => {
+  const conn = await db.getConnection(); // use a connection to handle transactions
   try {
     const { name, email, contact_number, password, role, type, barangay_id } = req.body;
 
-    // Check required fields
+    // 🔸 Validate required fields
     if (!name || !email || !password || !role) {
       return res.status(400).json({ error: "Name, email, password, and role are required." });
     }
 
-    // Validate email format
+    // 🔸 Validate email format
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: "Invalid email format." });
     }
 
-    // Normalize and validate contact number (if provided)
+    // 🔸 Normalize and validate contact number
     let normalizedContact = null;
     if (contact_number) {
       normalizedContact = normalizePHNumber(contact_number);
@@ -49,15 +50,15 @@ router.post("/", async (req, res) => {
       }
     }
 
-    // Check if email already exists
-    const [existing] = await db.query("SELECT email FROM users WHERE email = ?", [email]);
+    // 🔸 Check duplicate email
+    const [existing] = await conn.query("SELECT email FROM users WHERE email = ?", [email]);
     if (existing.length > 0) {
       return res.status(400).json({ error: "Email already exists." });
     }
 
-    // Validate barangay_id if provided
+    // 🔸 Validate barangay_id if provided
     if (barangay_id) {
-      const [barangay] = await db.query(
+      const [barangay] = await conn.query(
         "SELECT * FROM barangays WHERE barangay_id = ?",
         [barangay_id]
       );
@@ -66,46 +67,80 @@ router.post("/", async (req, res) => {
       }
     }
 
-    // Hash password
+    // 🔸 Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Default type = 'pending' if not given
     const userType = type || "pending";
 
+    // 🔸 Start transaction
+    await conn.beginTransaction();
+
     // Insert user
-    const [result] = await db.query(
+    const [result] = await conn.query(
       `INSERT INTO users (name, email, contact_number, password, role, type, barangay_id)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [name, email, normalizedContact, hashedPassword, role, userType, barangay_id || null]
     );
 
+    const userId = result.insertId;
+
+    // 🔸 If role is branch_manager, create branch entry
+    if (role === "branch_manager") {
+      await conn.query(
+        `INSERT INTO branches (user_id, branch_name, branch_contact, barangay_id)
+         VALUES (?, ?, ?, ?)`,
+        [userId, `${name}'s Branch`, normalizedContact, barangay_id || null]
+      );
+    }
+
+    // 🔸 Commit transaction
+    await conn.commit();
+
     res.status(201).json({
       success: true,
       message: "User created successfully.",
-      user_id: result.insertId,
+      user_id: userId,
     });
   } catch (error) {
     console.error("❌ Error adding user:", error);
+    await conn.rollback();
     res.status(500).json({ error: "Internal server error" });
+  } finally {
+    conn.release();
   }
 });
-
 // --------------------
 // Fetch all users
 // --------------------
+// ✅ Fetch all users with barangay and municipality info
 router.get("/", async (req, res) => {
   try {
     const [results] = await db.query(
-      `SELECT u.*, b.barangay_name, b.municipality 
-       FROM users u 
-       LEFT JOIN barangays b ON u.barangay_id = b.barangay_id`
+      `
+      SELECT 
+        u.user_id,
+        u.name,
+        u.email,
+        u.contact_number,
+        u.role,
+        u.type,
+        u.created_at,
+        u.barangay_id,
+        b.barangay_name,
+        b.municipality
+      FROM users u
+      LEFT JOIN barangays b 
+        ON u.barangay_id = b.barangay_id
+      ORDER BY u.user_id DESC
+      `
     );
+
     res.json(results);
   } catch (err) {
     console.error("❌ Error fetching users:", err);
     res.status(500).json({ error: "Database error" });
   }
 });
+
 
 // ✅ Edit user details
 router.put("/:id", async (req, res) => {

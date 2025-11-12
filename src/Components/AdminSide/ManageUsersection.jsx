@@ -23,6 +23,7 @@ export default function ManageUsersection() {
   const [users, setUsers] = useState([]);
   const [roleFilter, setRoleFilter] = useState("All");
   const [municipalityFilter, setMunicipalityFilter] = useState("All");
+  const [barangays, setBarangays] = useState([]);
 
   // View / Edit State
   const [viewUser, setViewUser] = useState(null);
@@ -46,39 +47,61 @@ export default function ManageUsersection() {
     confirmPassword: "",
   });
 
+  // Fetch all users
   const fetchUsers = async () => {
     try {
       const res = await axios.get("http://localhost:5000/users");
       setUsers(res.data);
     } catch (err) {
       console.error("Error fetching users:", err);
+      toast.error("❌ Failed to load users.");
     }
   };
+
+  // Fetch barangays when municipality changes
+  useEffect(() => {
+    const fetchBarangays = async () => {
+      if (!formData.municipality) {
+        setBarangays([]);
+        return;
+      }
+      try {
+        const res = await axios.get("http://localhost:5000/barangays", {
+          params: { municipality: formData.municipality },
+        });
+        setBarangays(res.data);
+      } catch (err) {
+        console.error("Error fetching barangays:", err);
+      }
+    };
+    fetchBarangays();
+  }, [formData.municipality]);
 
   useEffect(() => {
     fetchUsers();
   }, []);
 
+  // Handle form inputs
   const handleChange = (e) => {
     const { name, value } = e.target;
 
     if (name === "contact_number") {
       let clean = value.replace(/[^\d]/g, "");
-
       if (clean.startsWith("63")) clean = "+" + clean;
       else if (clean.startsWith("0")) clean = "+63" + clean.slice(1);
       else if (!clean.startsWith("+63")) clean = "+63" + clean;
 
       if (clean.length > 13) clean = clean.slice(0, 13);
-
       setFormData((prev) => ({ ...prev, [name]: clean }));
     } else {
       setFormData((prev) => ({ ...prev, [name]: value }));
     }
   };
 
+  // Handle form submit
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (formData.password !== formData.confirmPassword) {
       toast.error("❌ Passwords do not match!");
       return;
@@ -87,37 +110,44 @@ export default function ManageUsersection() {
     try {
       const newUser = {
         name: formData.name,
-        barangay_id: formData.barangay_id,
-        municipality: formData.municipality,
         email: formData.email,
         contact_number: formData.contact_number,
         password: formData.password,
         role: formData.role,
+        type: formData.type,
+        barangay_id: formData.barangay_id || null,
       };
 
-      await axios.post("http://localhost:5000/users", newUser);
-      toast.success("✅ User added successfully!");
-      setShowModal(false);
+      const res = await axios.post("http://localhost:5000/users", newUser);
 
-      setFormData({
-        name: "",
-        barangay_id: "",
-        municipality: municipalities[0],
-        email: "",
-        contact_number: "+63",
-        role: roles[0],
-        type: "active",
-        password: "",
-        confirmPassword: "",
-      });
+      if (res.data.success) {
+        toast.success("✅ User added successfully!");
+        setShowModal(false);
 
-      fetchUsers();
+        // REFRESH users to include correct barangay_name
+        await fetchUsers();
+
+        // Reset form
+        setFormData({
+          name: "",
+          barangay_id: "",
+          municipality: municipalities[0],
+          email: "",
+          contact_number: "+63",
+          role: roles[0],
+          type: "active",
+          password: "",
+          confirmPassword: "",
+        });
+      }
     } catch (err) {
       console.error("Error adding user:", err);
-      toast.error("❌ Failed to add user.");
+      const msg = err.response?.data?.error || "❌ Failed to add user.";
+      toast.error(msg);
     }
   };
 
+  // Filtered list
   const filteredUsers = users.filter((user) => {
     return (
       (roleFilter === "All" || user.role === roleFilter) &&
@@ -131,6 +161,7 @@ export default function ManageUsersection() {
         <h2 className="text-2xl font-bold text-gray-900">Manage Users</h2>
       </div>
 
+      {/* Filters */}
       <div className="flex gap-4 items-center">
         <select
           value={roleFilter}
@@ -176,6 +207,7 @@ export default function ManageUsersection() {
         </div>
       </div>
 
+      {/* Table */}
       <div className="flex-1 border border-gray-300 rounded-lg shadow-md overflow-hidden bg-white relative">
         <div className="max-h-[70vh] overflow-y-auto">
           <table className="min-w-[950px] w-full border-collapse text-center relative">
@@ -209,10 +241,10 @@ export default function ManageUsersection() {
                     <td className="px-4 py-3">
                       <span
                         className={`px-2 py-1 rounded text-sm ${user.type === "active"
-                          ? "bg-green-100 text-green-700"
-                          : user.type === "inactive"
-                            ? "bg-red-100 text-red-700"
-                            : "bg-gray-200 text-gray-700"
+                            ? "bg-green-100 text-green-700"
+                            : user.type === "inactive"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-gray-200 text-gray-700"
                           }`}
                       >
                         {user.type}
@@ -236,19 +268,19 @@ export default function ManageUsersection() {
                         View
                       </button>
 
-                      {/* Archive button only clickable if inactive */}
                       <button
                         className={`px-3 py-1 rounded text-white ${user.type === "inactive"
-                          ? "bg-gray-600 hover:bg-gray-700 cursor-pointer"
-                          : "bg-gray-300 cursor-not-allowed"
+                            ? "bg-gray-600 hover:bg-gray-700 cursor-pointer"
+                            : "bg-gray-300 cursor-not-allowed"
                           }`}
                         disabled={user.type !== "inactive"}
                         onClick={async () => {
                           if (user.type !== "inactive") return;
                           try {
-                            await axios.put(`http://localhost:5000/users/${user.user_id}`, {
-                              type: "archived",
-                            });
+                            await axios.put(
+                              `http://localhost:5000/users/${user.user_id}`,
+                              { type: "archived" }
+                            );
                             toast.success("✅ User archived successfully!");
                             fetchUsers();
                           } catch (err) {
@@ -268,11 +300,13 @@ export default function ManageUsersection() {
         </div>
       </div>
 
+      {/* Modals */}
       <AddUserModal
         showModal={showModal}
         setShowModal={setShowModal}
         municipalities={municipalities}
         roles={roles}
+        barangays={barangays}
         formData={formData}
         handleChange={handleChange}
         handleSubmit={handleSubmit}

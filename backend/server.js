@@ -56,7 +56,7 @@ app.use("/expenses", expensesRoutes);
 app.use("/verify-otp", verifyOtpRoute);
 app.use("/send-otp", sendOtpRoute);
 app.use("/business-owner", businessOwnerRoutes);
-
+app.use("/branchinfo", branchInfoRoutes);
 /* -------------------------------
    ✅ Mount Branch Info Routes
 --------------------------------- */

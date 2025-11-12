@@ -31,16 +31,13 @@ const upload = multer({
   storage,
   fileFilter: (req, file, cb) => {
     const allowed = ["image/jpeg", "image/png", "image/jpg"];
-
     if (!allowed.includes(file.mimetype)) {
       req.fileValidationError = "Only JPG, JPEG, and PNG files are allowed.";
-      return cb(null, false); // ❗ IMPORTANT: don't throw error, just reject
+      return cb(null, false);
     }
-
     cb(null, true);
   },
 });
-
 
 /**
  * @route GET /branchinfo
@@ -66,7 +63,7 @@ router.get("/", authenticateToken, async (req, res) => {
         br.branch_contact,
         br.branch_picture,
         br.barangay_id,
-        b.barangay_name,
+        b.barangay_name AS barangay,
         b.municipality,
         br.created_at,
         br.updated_at
@@ -103,93 +100,124 @@ router.get("/", authenticateToken, async (req, res) => {
  * @desc Update branch info (with multer for branch_picture)
  * @access Private (Branch Manager)
  */
-router.put("/", authenticateToken, (req, res, next) => {
-  upload.single("branch_picture")(req, res, function (err) {
-    if (req.fileValidationError) {
-      return res.status(400).json({
-        success: false,
-        error: req.fileValidationError,
-      });
-    }
+router.put(
+  "/",
+  authenticateToken,
+  (req, res, next) => {
+    upload.single("branch_picture")(req, res, function (err) {
+      if (req.fileValidationError) {
+        return res.status(400).json({
+          success: false,
+          error: req.fileValidationError,
+        });
+      }
 
-    if (err instanceof multer.MulterError) {
-      return res.status(400).json({
-        success: false,
-        error: "Upload error. Try again.",
-      });
-    }
+      if (err instanceof multer.MulterError) {
+        return res.status(400).json({
+          success: false,
+          error: "Upload error. Try again.",
+        });
+      }
 
-    if (err) {
-      return res.status(500).json({
-        success: false,
-        error: "Unexpected error occurred.",
-      });
-    }
+      if (err) {
+        return res.status(500).json({
+          success: false,
+          error: "Unexpected error occurred.",
+        });
+      }
 
-    next();
-  });
-},
-async (req, res) => {
-  try {
-    if (req.user.role !== "branch_manager") {
-      return res.status(403).json({
-        success: false,
-        error: "Access denied. Only branch managers can update this resource.",
-      });
-    }
-
-    const userId = req.user.id;
-    const { branch_name = null, branch_contact = null, barangay_id = null } = req.body;
-    const branch_picture = req.file ? req.file.filename : null;
-
-    const [branchCheck] = await db.query(
-      "SELECT branch_id, branch_picture AS oldPicture FROM branches WHERE user_id = ? LIMIT 1",
-      [userId]
-    );
-
-    if (branchCheck.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: "Branch not found for this user.",
-      });
-    }
-
-    const branchId = branchCheck[0].branch_id;
-
-    if (branch_picture && branchCheck[0].oldPicture) {
-      const oldPath = path.join(uploadPath, branchCheck[0].oldPicture);
-      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-    }
-
-    await db.query(
-      `
-      UPDATE branches
-      SET 
-        branch_name = COALESCE(?, branch_name),
-        branch_contact = COALESCE(?, branch_contact),
-        branch_picture = COALESCE(?, branch_picture),
-        barangay_id = COALESCE(?, barangay_id),
-        updated_at = NOW()
-      WHERE branch_id = ?
-      `,
-      [branch_name, branch_contact, branch_picture, barangay_id, branchId]
-    );
-
-    res.json({
-      success: true,
-      message: "Branch information updated successfully.",
-      updatedImage: branch_picture || "No new image uploaded",
+      next();
     });
+  },
+  async (req, res) => {
+    try {
+      if (req.user.role !== "branch_manager") {
+        return res.status(403).json({
+          success: false,
+          error: "Access denied. Only branch managers can update this resource.",
+        });
+      }
 
-  } catch (err) {
-    console.error("❌ Error updating branch info:", err);
-    res.status(500).json({
-      success: false,
-      error: "Server error while updating branch information.",
-    });
+      const userId = req.user.id;
+      const { branch_name = null, branch_contact = null, barangay_id = null } = req.body;
+      const branch_picture = req.file ? req.file.filename : null;
+
+      const [branchCheck] = await db.query(
+        "SELECT branch_id, branch_picture AS oldPicture FROM branches WHERE user_id = ? LIMIT 1",
+        [userId]
+      );
+
+      if (branchCheck.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: "Branch not found for this user.",
+        });
+      }
+
+      const branchId = branchCheck[0].branch_id;
+
+      // Delete old picture if replaced
+      if (branch_picture && branchCheck[0].oldPicture) {
+        const oldPath = path.join(uploadPath, branchCheck[0].oldPicture);
+        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+      }
+
+      // Update branch info
+      await db.query(
+        `
+        UPDATE branches
+        SET 
+          branch_name = COALESCE(?, branch_name),
+          branch_contact = COALESCE(?, branch_contact),
+          branch_picture = COALESCE(?, branch_picture),
+          barangay_id = COALESCE(?, barangay_id),
+          updated_at = NOW()
+        WHERE branch_id = ?
+        `,
+        [branch_name, branch_contact, branch_picture, barangay_id, branchId]
+      );
+
+      // Return full updated branch object
+      const [updatedBranchArr] = await db.query(
+        `
+        SELECT 
+          br.branch_id,
+          br.branch_name,
+          br.branch_contact,
+          br.branch_picture,
+          br.barangay_id,
+          b.barangay_name AS barangay,
+          b.municipality,
+          br.created_at,
+          br.updated_at
+        FROM branches br
+        LEFT JOIN barangays b ON br.barangay_id = b.barangay_id
+        WHERE br.branch_id = ?
+        LIMIT 1
+        `,
+        [branchId]
+      );
+
+      res.json({
+        success: true,
+        message: "Branch information updated successfully.",
+        branch: updatedBranchArr[0],
+      });
+    } catch (err) {
+      console.error("❌ Error updating branch info:", err);
+      res.status(500).json({
+        success: false,
+        error: "Server error while updating branch information.",
+      });
+    }
   }
-});
-// GET all branch managers
+);
+
+/**
+ * @route GET /branchinfo/all
+ * @desc Get all branches (branch managers)
+ * @access Public
+ */
 router.get("/all", async (req, res) => {
   try {
     const [branches] = await db.query(`
@@ -198,7 +226,7 @@ router.get("/all", async (req, res) => {
         br.branch_name,
         br.branch_contact,
         br.branch_picture,
-        b.barangay_name,
+        b.barangay_name AS barangay,
         b.municipality
       FROM branches br
       LEFT JOIN barangays b ON br.barangay_id = b.barangay_id
@@ -210,7 +238,5 @@ router.get("/all", async (req, res) => {
     res.status(500).json({ success: false, error: "Failed to fetch branches" });
   }
 });
-
-
 
 module.exports = router;
