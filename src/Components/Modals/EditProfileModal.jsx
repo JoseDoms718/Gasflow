@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { X, Pencil, Check } from "lucide-react";
 import { toast } from "react-hot-toast";
 import axios from "axios";
-import EditBranchModal from "./EditBranchInfoModal"; // adjust path if needed
+import EditBranchModal from "./EditBranchInfoModal";
 
 export default function EditProfileModal({ showModal, setShowModal, onProfileUpdated }) {
     const [user, setUser] = useState(null);
@@ -15,7 +15,6 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
     const [activeTab, setActiveTab] = useState("user");
 
     const [branchEditFields, setBranchEditFields] = useState({});
-    const [branchEditMode, setBranchEditMode] = useState({});
     const [branchBarangays, setBranchBarangays] = useState([]);
 
     const roles = ["User", "Retailer", "Admin"];
@@ -36,8 +35,24 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
 
                 if (data.success) {
                     setUser(data.user);
-                    setEditFields(data.user);
-                    if (data.user.branch) setBranchEditFields(data.user.branch);
+
+                    // ensure editFields uses string for barangay_id if present
+                    setEditFields((prev) => ({
+                        ...data.user,
+                        barangay_id:
+                            data.user?.barangay_id !== undefined && data.user?.barangay_id !== null
+                                ? String(data.user.barangay_id)
+                                : prev.barangay_id ?? "",
+                    }));
+
+                    if (data.user.role === "branch_manager") {
+                        const branchRes = await axios.get("http://localhost:5000/branchinfo", {
+                            headers: { Authorization: `Bearer ${token}` },
+                        });
+                        if (branchRes.data.success) {
+                            setBranchEditFields(branchRes.data.branch);
+                        }
+                    }
                 }
             } catch (err) {
                 console.error("Failed to fetch user:", err);
@@ -61,25 +76,39 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
         fetchMunicipalities();
     }, []);
 
-    /* -------------------- FETCH USER BARANGAYS -------------------- */
+    /* -------------------- FETCH USER BARANGAYS (Option 1: filtered by municipality) -------------------- */
     useEffect(() => {
         if (!user) return;
         const municipality = editFields.municipality ?? user.municipality;
-        if (!municipality) return;
+        if (!municipality) return; // wait for municipality
 
         const fetchBarangays = async () => {
             try {
-                const res = await axios.get(`http://localhost:5000/barangays?municipality=${municipality}`);
-                setUserBarangays(res.data.map((b) => ({ value: b.id, label: b.name })));
+                const res = await axios.get(`http://localhost:5000/barangays?municipality=${encodeURIComponent(municipality)}`);
 
-                setEditFields((f) => {
-                    if ((f.barangay_id === undefined || f.barangay_id === null) && user.barangay_id) {
-                        return { ...f, barangay_id: user.barangay_id };
+                // tolerant mapping: support both { barangay_id, barangay_name } and { id, name }
+                const barangayOptions = res.data.map((b) => {
+                    const id = b.barangay_id ?? b.id ?? b.barangayId ?? b.barangay_id;
+                    const name = b.barangay_name ?? b.name ?? b.barangayName ?? b.barangay_name;
+                    return {
+                        value: id !== undefined && id !== null ? String(id) : "",
+                        label: name ?? "",
+                    };
+                });
+
+                setUserBarangays(barangayOptions);
+
+                // ensure editFields.barangay_id is set to a string if user has one
+                setEditFields((prev) => {
+                    const next = { ...prev };
+                    if ((next.barangay_id === undefined || next.barangay_id === null || next.barangay_id === "") && user.barangay_id) {
+                        next.barangay_id = String(user.barangay_id);
                     }
-                    if (f.municipality !== user.municipality) {
-                        return { ...f, barangay_id: "" };
+                    // If the municipality changed from original user value, reset barangay selection
+                    if (next.municipality !== user.municipality) {
+                        next.barangay_id = next.barangay_id ?? "";
                     }
-                    return f;
+                    return next;
                 });
             } catch (err) {
                 console.error("Error fetching user barangays:", err);
@@ -95,8 +124,17 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
 
         const fetchBranchBarangays = async () => {
             try {
-                const res = await axios.get(`http://localhost:5000/barangays?municipality=${branchEditFields.municipality}`);
-                setBranchBarangays(res.data.map((b) => ({ value: b.id, label: b.name })));
+                const res = await axios.get(
+                    `http://localhost:5000/barangays?municipality=${encodeURIComponent(branchEditFields.municipality)}`
+                );
+
+                const mapped = res.data.map((b) => {
+                    const id = b.barangay_id ?? b.id ?? b.barangayId;
+                    const name = b.barangay_name ?? b.name ?? b.barangayName;
+                    return { value: id !== undefined && id !== null ? String(id) : "", label: name ?? "" };
+                });
+
+                setBranchBarangays(mapped);
             } catch (err) {
                 console.error("Error fetching branch barangays:", err);
             }
@@ -118,7 +156,12 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
             }
 
             if (Object.keys(editFields).length > 0) {
-                await axios.put(`http://localhost:5000/users/${user.user_id}`, editFields, {
+                // when sending to backend, convert barangay_id back to number or null if empty
+                const payload = { ...editFields };
+                if (payload.barangay_id === "") payload.barangay_id = null;
+                else if (payload.barangay_id !== undefined && payload.barangay_id !== null) payload.barangay_id = Number(payload.barangay_id);
+
+                await axios.put(`http://localhost:5000/users/${user.user_id}`, payload, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
             }
@@ -159,7 +202,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
             setEditFields({});
             setEditMode({});
             setBranchEditFields({});
-            setBranchEditMode({});
+            setBranchBarangays([]);
             setEditPassword("");
             setConfirmPassword("");
             setShowModal(false);
@@ -236,7 +279,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                             <EditableSelect
                                 label="Barangay"
                                 field="barangay_id"
-                                value={editFields.barangay_id ?? user.barangay_id}
+                                value={editFields.barangay_id ?? (user.barangay_id !== undefined ? String(user.barangay_id) : "")}
                                 options={userBarangays}
                                 editMode={editMode}
                                 setEditMode={setEditMode}
@@ -284,15 +327,10 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                 {/* Branch Tab */}
                 {activeTab === "branch" && user.role === "branch_manager" && (
                     <EditBranchModal
-                        showModal={true}
                         isInline={true}
                         editBranchFields={branchEditFields}
                         setEditBranchFields={setBranchEditFields}
-                        editBranchMode={branchEditMode}
-                        setEditBranchMode={setBranchEditMode}
                         branchBarangays={branchBarangays}
-                        branchInfo={user.branch}
-                        onBranchUpdated={(updated) => setBranchEditFields(updated)}
                     />
                 )}
 
@@ -310,7 +348,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                             setEditFields(user ?? {});
                             setEditMode({});
                             setBranchEditFields(user.branch ?? {});
-                            setBranchEditMode({});
+                            setBranchBarangays([]);
                         }}
                     >
                         Cancel
@@ -321,7 +359,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
     );
 }
 
-/* -------------------- Editable Components -------------------- */
+/* -------------------- EditableField -------------------- */
 export function EditableField({ label, field, value, editMode, setEditMode, setEditFields, isPhone }) {
     const handlePhoneChange = (val) => {
         let digits = val.replace(/[^\d]/g, "");
@@ -340,18 +378,27 @@ export function EditableField({ label, field, value, editMode, setEditMode, setE
                         className="flex-1 bg-transparent outline-none"
                         value={value ?? (isPhone ? "+63" : "")}
                         onChange={(e) =>
-                            setEditFields((f) => ({ ...f, [field]: isPhone ? handlePhoneChange(e.target.value) : e.target.value }))
+                            setEditFields((f) => ({
+                                ...f,
+                                [field]: isPhone ? handlePhoneChange(e.target.value) : e.target.value,
+                            }))
                         }
                         autoFocus
                     />
-                    <button className="text-green-400 hover:text-green-600" onClick={() => setEditMode((m) => ({ ...m, [field]: false }))}>
+                    <button
+                        className="text-green-400 hover:text-green-600"
+                        onClick={() => setEditMode((m) => ({ ...m, [field]: false }))}
+                    >
                         <Check size={18} />
                     </button>
                 </div>
             ) : (
                 <div className="flex items-center justify-between bg-gray-800 px-3 py-2 rounded-lg border border-gray-700">
                     <span>{value ?? (isPhone ? "+63" : "")}</span>
-                    <button className="text-gray-400 hover:text-blue-400" onClick={() => setEditMode((m) => ({ ...m, [field]: true }))}>
+                    <button
+                        className="text-gray-400 hover:text-blue-400"
+                        onClick={() => setEditMode((m) => ({ ...m, [field]: true }))}
+                    >
                         <Pencil size={16} />
                     </button>
                 </div>
@@ -360,20 +407,19 @@ export function EditableField({ label, field, value, editMode, setEditMode, setE
     );
 }
 
+/* -------------------- ✅ FIXED EditableSelect -------------------- */
 export function EditableSelect({ label, field, value, options = [], editMode, setEditMode, setEditFields }) {
-    const normalizedValue = typeof value === "number" ? Number(value) : value;
+    const normalizedValue = value !== undefined && value !== null ? String(value) : "";
 
     const getDisplayValue = () => {
         if (!options || options.length === 0) return normalizedValue ?? "";
-        if (typeof options[0] === "string") return normalizedValue ?? "";
-        const found = options.find((opt) => opt.value === normalizedValue);
+        const found = options.find((opt) => String(opt.value) === normalizedValue);
         return found ? found.label : normalizedValue ?? "";
     };
 
     const handleChange = (e) => {
         const val = e.target.value;
-        const finalValue = typeof options[0] === "object" ? (isNaN(val) ? val : Number(val)) : val;
-        setEditFields((prev) => ({ ...prev, [field]: finalValue }));
+        setEditFields((prev) => ({ ...prev, [field]: val }));
     };
 
     return (
@@ -385,9 +431,13 @@ export function EditableSelect({ label, field, value, options = [], editMode, se
                         <option value="">Select {label}</option>
                         {options.map((opt) =>
                             typeof opt === "string" ? (
-                                <option key={opt} value={opt} className="text-white">{opt}</option>
+                                <option key={opt} value={opt}>
+                                    {opt}
+                                </option>
                             ) : (
-                                <option key={opt.value} value={opt.value} className="text-white">{opt.label}</option>
+                                <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                </option>
                             )
                         )}
                     </select>
