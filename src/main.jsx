@@ -25,6 +25,7 @@ import BranchSalesReportPage from "./Pages/BranchManager/BranchSalesReportpage";
 import WalkinOrderpage from "./Pages/BranchManager/WalkinOrderPage";
 import BranchRetailerpage from "./Pages/BranchManager/BranchRetailerpage";
 import RetailerReqPage from "./Pages/BranchManager/RetailerReqpage";
+import BranchInquirypage from "./Pages/BranchManager/BranchInquirypage";
 
 // Retailer
 import RetailerOrderpage from "./Pages/Retailer/RetailerOrderpage";
@@ -39,6 +40,7 @@ import AdminMaintenancepage from "./Pages/Admin/AdminMaintenancepage";
 import AdminManagebanners from "./Pages/Admin/AdminManagebannerpage";
 import AdminManageservicespage from "./Pages/Admin/AdminManageservicepage";
 import AdminManageUserRequestpage from "./Pages/Admin/AdminManageUserRequestpage";
+import AdminInquirypage from "./Pages/Admin/AdminInquirypage";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
@@ -66,6 +68,7 @@ createRoot(document.getElementById("root")).render(
         <Route path="/branchretailer" element={<BranchRetailerpage />} />
         <Route path="/walkinorder" element={<WalkinOrderpage />} />
         <Route path="/retailerreq" element={<RetailerReqPage />} />
+        <Route path="//branchinquiries" element={<BranchInquirypage />} />
 
         {/* RETAILER */}
         <Route path="/retailerorder" element={<RetailerOrderpage />} />
@@ -80,6 +83,7 @@ createRoot(document.getElementById("root")).render(
         <Route path="/adminmanagebanners" element={<AdminManagebanners />} />
         <Route path="/adminmanageservices" element={<AdminManageservicespage />} />
         <Route path="/adminmanageuserrequest" element={<AdminManageUserRequestpage />} />
+        <Route path="/admininquiries" element={<AdminInquirypage />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>

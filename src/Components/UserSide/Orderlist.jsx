@@ -21,15 +21,16 @@ const normalizeImageUrl = (url) => {
 };
 
 export default function Orderlist({ role: propRole }) {
-  const [activeTab, setActiveTab] = useState("cart");
+  const user = JSON.parse(localStorage.getItem("user"));
+  const role = propRole || user?.role || "user";
+  const isRetailer = role === "retailer";
+
+  const defaultTab = isRetailer ? "current" : "cart";
+  const [activeTab, setActiveTab] = useState(defaultTab);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedOrder, setExpandedOrder] = useState(null);
   const [showModal, setShowModal] = useState(false);
-
-  const user = JSON.parse(localStorage.getItem("user"));
-  const role = propRole || user?.role || "user";
-  const isRetailer = role === "retailer";
 
   // 🔹 Get user cart from localStorage
   const getUserCart = useCallback(() => {
@@ -68,16 +69,18 @@ export default function Orderlist({ role: propRole }) {
         }));
       }
 
-      // Include local cart
-      const localCart = getUserCart();
-      if (localCart.length) {
-        const pseudoOrder = {
-          order_id: "local_cart",
-          status: "cart",
-          items: localCart,
-          total_price: localCart.reduce((sum, i) => sum + i.price * i.quantity, 0),
-        };
-        backendOrders = [pseudoOrder, ...backendOrders];
+      // Include local cart only for non-retailers
+      if (!isRetailer) {
+        const localCart = getUserCart();
+        if (localCart.length) {
+          const pseudoOrder = {
+            order_id: "local_cart",
+            status: "cart",
+            items: localCart,
+            total_price: localCart.reduce((sum, i) => sum + i.price * i.quantity, 0),
+          };
+          backendOrders = [pseudoOrder, ...backendOrders];
+        }
       }
 
       setOrders(backendOrders);
@@ -87,7 +90,7 @@ export default function Orderlist({ role: propRole }) {
     } finally {
       setLoading(false);
     }
-  }, [getUserCart]);
+  }, [getUserCart, isRetailer]);
 
   // 🔹 Initial fetch + cart sync
   useEffect(() => {
@@ -99,8 +102,7 @@ export default function Orderlist({ role: propRole }) {
     return () => window.removeEventListener("storage", handleStorageChange);
   }, [fetchOrders]);
 
-  const toggleOrder = (id) =>
-    setExpandedOrder(expandedOrder === id ? null : id);
+  const toggleOrder = (id) => setExpandedOrder(expandedOrder === id ? null : id);
 
   // 🔹 Update local cart without reload
   const updateLocalCart = (updatedCart) => {
@@ -120,10 +122,7 @@ export default function Orderlist({ role: propRole }) {
             ...item,
             image_url: normalizeImageUrl(item.image_url),
           })),
-          total_price: updatedCart.reduce(
-            (sum, i) => sum + i.price * i.quantity,
-            0
-          ),
+          total_price: updatedCart.reduce((sum, i) => sum + i.price * i.quantity, 0),
         };
       }
       return newOrders;
@@ -197,7 +196,7 @@ export default function Orderlist({ role: propRole }) {
         localStorage.removeItem(cartKey);
         toast.success("✅ Checkout successful!");
         setShowModal(false);
-        window.location.reload(); // keep this so images refresh
+        window.location.reload(); // refresh images
       } else toast.error("Checkout failed.");
     } catch (err) {
       console.error("❌ Checkout error:", err);
@@ -218,8 +217,8 @@ export default function Orderlist({ role: propRole }) {
     return (
       <section
         className={`${isRetailer
-            ? "bg-white text-gray-900 py-6 mt-0 min-h-[80vh]"
-            : "bg-gray-900 text-white py-12 mt-12 h-dvh"
+          ? "bg-white text-gray-900 py-6 mt-0 min-h-[80vh]"
+          : "bg-gray-900 text-white py-12 mt-12 h-dvh"
           } flex items-center justify-center`}
       >
         <p>Loading your orders...</p>
@@ -229,8 +228,8 @@ export default function Orderlist({ role: propRole }) {
   return (
     <section
       className={`${isRetailer
-          ? "text-gray-900 bg-transparent py-6 mt-0 min-h-[80vh]"
-          : "bg-gray-900 text-white py-12 mt-12 h-dvh"
+        ? "text-gray-900 bg-transparent py-6 mt-0 min-h-[80vh]"
+        : "bg-gray-900 text-white py-12 mt-12 h-dvh"
         } flex flex-col`}
     >
       <div className="container mx-auto px-6">
@@ -246,14 +245,15 @@ export default function Orderlist({ role: propRole }) {
         {/* Tabs */}
         <div
           className={`flex flex-wrap items-center gap-3 ${isRetailer
-              ? "justify-start mb-4 border-b border-gray-200 pb-2"
-              : "justify-start mb-8"
+            ? "justify-start mb-4 border-b border-gray-200 pb-2"
+            : "justify-start mb-8"
             }`}
         >
-          {[
-            { key: "cart", icon: ShoppingCart, label: "Cart" },
-            { key: "current", icon: Clock, label: "Current Orders" },
-            { key: "finished", icon: CheckCircle, label: "Finished Orders" },
+          {[...(isRetailer
+            ? []
+            : [{ key: "cart", icon: ShoppingCart, label: "Cart" }]),
+          { key: "current", icon: Clock, label: "Current Orders" },
+          { key: "finished", icon: CheckCircle, label: "Finished Orders" },
           ].map((tab) => {
             const Icon = tab.icon;
             return (
@@ -261,10 +261,10 @@ export default function Orderlist({ role: propRole }) {
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${activeTab === tab.key
-                    ? "bg-blue-600 text-white shadow"
-                    : isRetailer
-                      ? "bg-gray-100 text-gray-800 hover:bg-gray-200"
-                      : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+                  ? "bg-blue-600 text-white shadow"
+                  : isRetailer
+                    ? "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                    : "bg-gray-800 text-gray-300 hover:bg-gray-700"
                   }`}
               >
                 <Icon size={18} /> {tab.label}
@@ -276,8 +276,8 @@ export default function Orderlist({ role: propRole }) {
         {/* Orders List */}
         <div
           className={`${isRetailer
-              ? "bg-white border border-gray-200"
-              : "bg-gray-800"
+            ? "bg-white border border-gray-200"
+            : "bg-gray-800"
             } rounded-lg shadow-md p-6 flex flex-col h-[60vh]`}
         >
           {filteredOrders.length ? (
@@ -292,9 +292,7 @@ export default function Orderlist({ role: propRole }) {
                 return (
                   <div
                     key={order.order_id}
-                    className={`rounded-lg overflow-hidden ${isRetailer
-                        ? "bg-gray-50 border border-gray-200"
-                        : "bg-gray-700"
+                    className={`rounded-lg overflow-hidden ${isRetailer ? "bg-gray-50 border border-gray-200" : "bg-gray-700"
                       }`}
                   >
                     {/* Header */}
@@ -331,18 +329,14 @@ export default function Orderlist({ role: propRole }) {
                     {/* Expanded content */}
                     {isExpanded && (
                       <div
-                        className={`p-4 border-t space-y-3 ${isRetailer
-                            ? "border-gray-200 bg-gray-50"
-                            : "border-gray-600 bg-gray-800"
+                        className={`p-4 border-t space-y-3 ${isRetailer ? "border-gray-200 bg-gray-50" : "border-gray-600 bg-gray-800"
                           }`}
                       >
                         <div className="max-h-[300px] overflow-y-auto space-y-3 pr-1">
                           {order.items.map((item, index) => (
                             <div
                               key={index}
-                              className={`flex items-start gap-4 rounded-md p-3 ${isRetailer
-                                  ? "bg-white border border-gray-200"
-                                  : "bg-gray-700"
+                              className={`flex items-start gap-4 rounded-md p-3 ${isRetailer ? "bg-white border border-gray-200" : "bg-gray-700"
                                 }`}
                             >
                               {item.image_url && (
@@ -363,26 +357,19 @@ export default function Orderlist({ role: propRole }) {
                                       {item.product_name}
                                     </h4>
                                     <p className="text-xs italic text-gray-400 mt-1">
-                                      {item.product_description ||
-                                        "No description"}
+                                      {item.product_description || "No description"}
                                     </p>
                                   </div>
 
                                   {order.order_id === "local_cart" && (
                                     <button
                                       onClick={() => {
-                                        const token =
-                                          localStorage.getItem("token");
-                                        const cartKey = token
-                                          ? `cart_${token}`
-                                          : "cart_guest";
+                                        const token = localStorage.getItem("token");
+                                        const cartKey = token ? `cart_${token}` : "cart_guest";
                                         const cart =
-                                          JSON.parse(
-                                            localStorage.getItem(cartKey)
-                                          ) || [];
+                                          JSON.parse(localStorage.getItem(cartKey)) || [];
                                         const updated = cart.filter(
-                                          (c) =>
-                                            c.product_id !== item.product_id
+                                          (c) => c.product_id !== item.product_id
                                         );
                                         updateLocalCart(updated);
                                         toast.success(
@@ -405,19 +392,11 @@ export default function Orderlist({ role: propRole }) {
                                       min="1"
                                       value={item.quantity}
                                       onChange={(e) => {
-                                        const newQty = Math.max(
-                                          1,
-                                          Number(e.target.value)
-                                        );
-                                        const token =
-                                          localStorage.getItem("token");
-                                        const cartKey = token
-                                          ? `cart_${token}`
-                                          : "cart_guest";
+                                        const newQty = Math.max(1, Number(e.target.value));
+                                        const token = localStorage.getItem("token");
+                                        const cartKey = token ? `cart_${token}` : "cart_guest";
                                         const cart =
-                                          JSON.parse(
-                                            localStorage.getItem(cartKey)
-                                          ) || [];
+                                          JSON.parse(localStorage.getItem(cartKey)) || [];
                                         const updated = cart.map((c) =>
                                           c.product_id === item.product_id
                                             ? { ...c, quantity: newQty }
@@ -436,10 +415,8 @@ export default function Orderlist({ role: propRole }) {
                                   </p>
                                   <p className="text-xs text-gray-500">
                                     {isRetailer
-                                      ? `Buyer: ${item.buyer_name || "Unknown"
-                                      }`
-                                      : `Seller: ${item.seller_name || "Unknown"
-                                      }`}
+                                      ? `Buyer: ${item.buyer_name || "Unknown"}`
+                                      : `Seller: ${item.seller_name || "Unknown"}`}
                                   </p>
                                 </div>
                               </div>
@@ -448,20 +425,17 @@ export default function Orderlist({ role: propRole }) {
                         </div>
 
                         {/* Actions */}
+                        {/* Actions */}
                         {order.order_id === "local_cart" && !isRetailer && (
                           <div className="flex justify-end gap-3 pt-3 border-t border-gray-600">
                             <button
-                              onClick={() =>
-                                handleOrderAction(order.order_id, "pending")
-                              }
+                              onClick={() => handleOrderAction(order.order_id, "pending")}
                               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm"
                             >
                               Checkout All
                             </button>
                             <button
-                              onClick={() =>
-                                handleOrderAction(order.order_id, "cancelled")
-                              }
+                              onClick={() => handleOrderAction(order.order_id, "cancelled")}
                               className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded text-sm"
                             >
                               Cancel All
@@ -469,20 +443,16 @@ export default function Orderlist({ role: propRole }) {
                           </div>
                         )}
 
-                        {activeTab === "current" &&
-                          !isRetailer &&
-                          order.status === "pending" && (
-                            <div className="flex justify-end pt-3 border-t border-gray-600">
-                              <button
-                                onClick={() =>
-                                  handleOrderAction(order.order_id, "cancelled")
-                                }
-                                className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded text-sm"
-                              >
-                                Cancel Order
-                              </button>
-                            </div>
-                          )}
+                        {activeTab === "current" && order.status === "pending" && (
+                          <div className="flex justify-end pt-3 border-t border-gray-600">
+                            <button
+                              onClick={() => handleOrderAction(order.order_id, "cancelled")}
+                              className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded text-sm"
+                            >
+                              Cancel Order
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

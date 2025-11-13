@@ -18,14 +18,14 @@ export default function Sidebar({ role }) {
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
 
-  // ✅ Initialize user instantly from localStorage for zero delay
+  // Initialize user from localStorage
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem("user");
     return savedUser ? JSON.parse(savedUser) : { name: "Guest", role: "guest" };
   });
   const [showEditModal, setShowEditModal] = useState(false);
 
-  // ✅ Fetch latest user data silently (no visual loading)
+  // Fetch latest user data
   useEffect(() => {
     if (!token) return;
 
@@ -55,71 +55,28 @@ export default function Sidebar({ role }) {
   }, [token]);
 
   const userRole = role || user?.role || "guest";
-
   const isActive = (path) => location.pathname === path;
 
-  // ✅ Role-based menus
+  // Role-based menus
   const roleMenus = {
     admin: [
-      {
-        to: "/admininventory",
-        label: "Products & Inventory",
-        icon: <Package className="w-5 h-5" />,
-      },
-      {
-        to: "/adminsalesreport",
-        label: "Sales Report",
-        icon: <FileText className="w-5 h-5" />,
-      },
-      {
-        to: "/adminmanageuser",
-        label: "Manage Users",
-        icon: <Users className="w-5 h-5" />,
-      },
-      {
-        to: "/adminmaintenance",
-        label: "Maintenance & Updates",
-        icon: <Settings className="w-5 h-5" />,
-      },
+      { to: "/admininventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
+      { to: "/adminsalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
+      { to: "/adminmanageuser", label: "Manage Users", icon: <Users className="w-5 h-5" /> },
+      { to: "/adminmaintenance", label: "Maintenance & Updates", icon: <Settings className="w-5 h-5" /> },
+      { to: "/admininquiries", label: "Inquiries", icon: <FileText className="w-5 h-5" /> }, // New
     ],
     branch_manager: [
-      {
-        to: "/branchorder",
-        label: "Orders",
-        icon: <ShoppingCart className="w-5 h-5" />,
-      },
-      {
-        to: "/branchinventory",
-        label: "Products & Inventory",
-        icon: <Package className="w-5 h-5" />,
-      },
-      {
-        to: "/branchsalesreport",
-        label: "Sales Report",
-        icon: <FileText className="w-5 h-5" />,
-      },
-      {
-        to: "/branchretailer",
-        label: "Manage Retailers",
-        icon: <Users className="w-5 h-5" />,
-      },
+      { to: "/branchorder", label: "Orders", icon: <ShoppingCart className="w-5 h-5" /> },
+      { to: "/branchinventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
+      { to: "/branchsalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
+      { to: "/branchretailer", label: "Manage Retailers", icon: <Users className="w-5 h-5" /> },
+      { to: "/branchinquiries", label: "Inquiries", icon: <FileText className="w-5 h-5" /> }, // New
     ],
     retailer: [
-      {
-        to: "/retailerorder",
-        label: "Orders",
-        icon: <ShoppingCart className="w-5 h-5" />,
-      },
-      {
-        to: "/retailerinventory",
-        label: "Products & Inventory",
-        icon: <Package className="w-5 h-5" />,
-      },
-      {
-        to: "/retailersalesreport",
-        label: "Sales Report",
-        icon: <FileText className="w-5 h-5" />,
-      },
+      { to: "/retailerorder", label: "Orders", icon: <ShoppingCart className="w-5 h-5" /> },
+      { to: "/retailerinventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
+      { to: "/retailersalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
     ],
     guest: [],
   };
@@ -132,11 +89,7 @@ export default function Sidebar({ role }) {
       <aside className="bg-gray-900 text-white w-64 min-h-screen flex flex-col fixed left-0 top-0">
         {/* Logo */}
         <div className="flex items-center gap-3 p-6 border-b border-gray-700">
-          <img
-            src={LogoWhite}
-            alt="Gasflow Logo"
-            className="w-10 h-10 object-contain"
-          />
+          <img src={LogoWhite} alt="Gasflow Logo" className="w-10 h-10 object-contain" />
           <h1 className="text-xl font-bold">Gasflow</h1>
         </div>
 
@@ -145,9 +98,7 @@ export default function Sidebar({ role }) {
           <div className="w-12 h-12 bg-gray-800 rounded-full flex items-center justify-center">
             <User className="w-6 h-6 text-gray-400" />
           </div>
-          <p className="text-lg font-medium truncate max-w-[140px]">
-            {user?.name || "Guest"}
-          </p>
+          <p className="text-lg font-medium truncate max-w-[140px]">{user?.name || "Guest"}</p>
         </div>
 
         {/* Menu */}
@@ -158,9 +109,7 @@ export default function Sidebar({ role }) {
                 <li key={item.to}>
                   <Link
                     to={item.to}
-                    className={`flex items-center gap-3 p-3 rounded-lg transition ${isActive(item.to)
-                        ? "bg-gray-800"
-                        : "hover:bg-gray-800 hover:text-blue-400"
+                    className={`flex items-center gap-3 p-3 rounded-lg transition ${isActive(item.to) ? "bg-gray-800" : "hover:bg-gray-800 hover:text-blue-400"
                       }`}
                   >
                     {item.icon}
@@ -169,9 +118,7 @@ export default function Sidebar({ role }) {
                 </li>
               ))
             ) : (
-              <li className="text-gray-500 text-sm italic text-center mt-4">
-                No menu available
-              </li>
+              <li className="text-gray-500 text-sm italic text-center mt-4">No menu available</li>
             )}
           </ul>
         </nav>
