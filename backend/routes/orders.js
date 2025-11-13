@@ -593,15 +593,15 @@ router.get(
       let params = [];
 
       if (req.user.role === "admin") {
-        // Admin: show only orders where the product seller is branch_manager
-        query += " WHERE s.role = 'branch_manager'";
+        // Admin: show only delivered orders where the product seller is a branch manager
+        query += " WHERE o.status = 'delivered' AND s.role = 'branch_manager'";
       } else {
-        // Regular seller/branch_manager: show only their orders
-        query += " WHERE p.seller_id = ?";
+        // Regular seller/branch_manager: show only their delivered orders
+        query += " WHERE o.status = 'delivered' AND p.seller_id = ?";
         params.push(req.user.id);
       }
 
-      query += " ORDER BY o.ordered_at DESC";
+      query += " ORDER BY o.delivered_at DESC";
 
       const [rows] = await db.query(query, params);
 
@@ -609,7 +609,6 @@ router.get(
         return res.status(200).json({ success: true, orders: [] });
       }
 
-      // Group orders by order_id and attach items
       const grouped = rows.reduce((acc, row) => {
         let order = acc.find((o) => o.order_id === row.order_id);
         if (!order) {
@@ -639,7 +638,7 @@ router.get(
           image_url: formatImageUrl(row.image_url),
           quantity: row.quantity,
           price: row.price,
-          seller_name: row.seller_name, // always safe
+          seller_name: row.seller_name,
         });
 
         return acc;
@@ -654,6 +653,7 @@ router.get(
     }
   }
 );
+
 
 // Helper function to group orders
 function groupOrders(rows, mapItem) {

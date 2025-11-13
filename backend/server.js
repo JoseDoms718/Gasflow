@@ -17,6 +17,7 @@ const verifyOtpRoute = require("./routes/verifyotp");
 const sendOtpRoute = require("./routes/sendotp");
 const businessOwnerRoutes = require("./routes/businessOwnerSignup");
 const branchInfoRoutes = require("./routes/branchinfo"); // branch routes
+const bannersRoutes = require("./routes/banners");
 
 /* -----------------------------------------
    ✅ Initialize App
@@ -57,6 +58,7 @@ app.use("/verify-otp", verifyOtpRoute);
 app.use("/send-otp", sendOtpRoute);
 app.use("/business-owner", businessOwnerRoutes);
 app.use("/branchinfo", branchInfoRoutes);
+app.use("/banners", bannersRoutes);
 /* -------------------------------
    ✅ Mount Branch Info Routes
 --------------------------------- */

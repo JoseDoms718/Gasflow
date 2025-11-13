@@ -86,8 +86,96 @@ export default function Productslist() {
     }
   };
 
-  const showDiscountNav = filteredDiscounted.length > 3;
-  const showRegularNav = filteredRegular.length > 3;
+  const addPlaceholders = (list, min = 6) => {
+    const result = [...list];
+    while (result.length < min) {
+      result.push({ placeholder: true });
+    }
+    return result;
+  };
+
+  const displayDiscounted = addPlaceholders(filteredDiscounted);
+  const displayRegular = addPlaceholders(filteredRegular);
+
+  const showDiscountNav = displayDiscounted.length > 3;
+  const showRegularNav = displayRegular.length > 3;
+
+  const renderCard = (item) => (
+    <div className="bg-white rounded-lg shadow-md hover:shadow-xl transition duration-300 border border-gray-200 overflow-hidden flex flex-col h-[450px]">
+      <div className="w-full h-48 bg-gray-200 flex items-center justify-center flex-shrink-0">
+        {item.placeholder ? (
+          <Package className="w-12 h-12 text-gray-400" />
+        ) : item.image_url ? (
+          <img
+            src={item.image_url}
+            alt={item.product_name}
+            className="w-full h-48 object-cover"
+          />
+        ) : (
+          <Package className="w-12 h-12 text-gray-400" />
+        )}
+      </div>
+
+      <div className="p-4 flex flex-col flex-grow">
+        {item.placeholder ? (
+          <>
+            <h3 className="text-lg font-semibold text-gray-800 mb-1">
+              Coming Soon
+            </h3>
+            <p className="text-gray-600 text-sm mb-2 line-clamp-2 flex-grow">
+              Placeholder product description.
+            </p>
+            <div className="flex items-center justify-between mt-auto">
+              <p className="text-blue-600 font-bold text-lg">₱0.00</p>
+              <span className="text-sm font-medium px-2 py-1 rounded bg-gray-100 text-gray-400">
+                Out of stock
+              </span>
+            </div>
+            <button
+              disabled
+              className="mt-4 w-full py-2 rounded-lg bg-gray-400 text-gray-200 cursor-not-allowed"
+            >
+              Buy Now
+            </button>
+          </>
+        ) : (
+          <>
+            <h3 className="text-lg font-semibold text-gray-800 mb-1">
+              {item.product_name}
+            </h3>
+            <p className="text-gray-600">{item.branch}</p>
+            <p className="text-gray-500 text-sm mb-2">Stock: {item.stock}</p>
+
+            {item.discounted_price ? (
+              <>
+                <p className="line-through text-gray-500">
+                  ₱{formatPrice(item.price)}
+                </p>
+                <p className="text-green-600 font-bold text-lg">
+                  ₱{formatPrice(item.discounted_price)}
+                </p>
+              </>
+            ) : (
+              <p className="text-blue-600 font-bold text-lg">
+                ₱{formatPrice(item.price)}
+              </p>
+            )}
+
+            <button
+              onClick={() => handleBuyClick(item)}
+              disabled={item.stock === 0}
+              className={`mt-4 w-full py-2 rounded-lg transition ${item.stock === 0
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-blue-600 text-white hover:bg-blue-700"
+                }`}
+            >
+              {item.stock === 0 ? "Out of Stock" : "Buy Now"}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <section className="bg-gray-900 py-16 mt-8">
@@ -121,7 +209,7 @@ export default function Productslist() {
           </h3>
 
           <Swiper
-            key={filteredDiscounted.length}
+            key={displayDiscounted.length}
             modules={[Navigation]}
             navigation={
               showDiscountNav
@@ -137,70 +225,11 @@ export default function Productslist() {
               1024: { slidesPerView: 3 },
             }}
           >
-            {filteredDiscounted.length === 0 ? (
-              <SwiperSlide>
-                <div className="bg-white rounded-lg shadow-md p-8 text-center">
-                  <p className="text-gray-500">
-                    No discounted products available.
-                  </p>
-                </div>
-              </SwiperSlide>
-            ) : (
-              filteredDiscounted.map((item, index) => (
-                <SwiperSlide key={index}>
-                  <div className="bg-white rounded-lg shadow-md hover:shadow-xl transition duration-300 border border-gray-200 overflow-hidden">
-                    <div className="w-full h-48 bg-gray-200 flex items-center justify-center">
-                      {item.image_url ? (
-                        <img
-                          src={item.image_url}
-                          alt={item.product_name}
-                          className="w-full h-48 object-cover"
-                        />
-                      ) : (
-                        <Package className="w-12 h-12 text-gray-400" />
-                      )}
-                    </div>
-
-                    <div className="p-4">
-                      <h3 className="text-lg font-semibold text-gray-800">
-                        {item.product_name}
-                      </h3>
-                      <p className="text-gray-600">{item.branch}</p>
-                      <p className="text-gray-500 text-sm">Stock: {item.stock}</p>
-
-                      {item.discounted_price ? (
-                        <>
-                          <p className="line-through text-gray-500">
-                            ₱{formatPrice(item.price)}
-                          </p>
-                          <p className="text-green-600 font-bold text-lg">
-                            ₱{formatPrice(item.discounted_price)}
-                          </p>
-                        </>
-                      ) : (
-                        <p className="text-green-600 font-bold text-lg">
-                          ₱{formatPrice(item.price)}
-                        </p>
-                      )}
-
-                      <button
-                        onClick={() => handleBuyClick(item)}
-                        disabled={item.stock === 0}
-                        className={`mt-4 w-full py-2 rounded-lg transition ${item.stock === 0
-                            ? "bg-gray-400 cursor-not-allowed"
-                            : "bg-blue-600 text-white hover:bg-blue-700"
-                          }`}
-                      >
-                        {item.stock === 0 ? "Out of Stock" : "Buy Now"}
-                      </button>
-                    </div>
-                  </div>
-                </SwiperSlide>
-              ))
-            )}
+            {displayDiscounted.map((item, index) => (
+              <SwiperSlide key={index}>{renderCard(item)}</SwiperSlide>
+            ))}
           </Swiper>
 
-          {/* Navigation arrows */}
           {showDiscountNav && (
             <>
               <div className="discount-prev absolute -left-14 top-1/2 -translate-y-1/2 cursor-pointer z-0 bg-white shadow-md p-3 rounded-full hover:bg-gray-100">
@@ -215,12 +244,10 @@ export default function Productslist() {
 
         {/* Regular Products */}
         <div className="relative">
-          <h3 className="text-2xl font-bold text-white mb-6">
-            Regular Products
-          </h3>
+          <h3 className="text-2xl font-bold text-white mb-6">Regular Products</h3>
 
           <Swiper
-            key={filteredRegular.length}
+            key={displayRegular.length}
             modules={[Navigation]}
             navigation={
               showRegularNav
@@ -236,53 +263,9 @@ export default function Productslist() {
               1024: { slidesPerView: 3 },
             }}
           >
-            {filteredRegular.length === 0 ? (
-              <SwiperSlide>
-                <div className="bg-white rounded-lg shadow-md p-8 text-center">
-                  <p className="text-gray-500">No regular products found.</p>
-                </div>
-              </SwiperSlide>
-            ) : (
-              filteredRegular.map((product, index) => (
-                <SwiperSlide key={index}>
-                  <div className="bg-white rounded-lg shadow-md hover:shadow-xl transition duration-300 border border-gray-200 overflow-hidden">
-                    <div className="w-full h-48 bg-gray-200 flex items-center justify-center">
-                      {product.image_url ? (
-                        <img
-                          src={product.image_url}
-                          alt={product.product_name}
-                          className="w-full h-48 object-cover"
-                        />
-                      ) : (
-                        <Package className="w-12 h-12 text-gray-400" />
-                      )}
-                    </div>
-
-                    <div className="p-4">
-                      <h3 className="text-lg font-semibold text-gray-800">
-                        {product.product_name}
-                      </h3>
-                      <p className="text-gray-600">{product.branch}</p>
-                      <p className="text-gray-500 text-sm">Stock: {product.stock}</p>
-                      <p className="text-blue-600 font-bold text-lg">
-                        ₱{formatPrice(product.price)}
-                      </p>
-
-                      <button
-                        onClick={() => handleBuyClick(product)}
-                        disabled={product.stock === 0}
-                        className={`mt-4 w-full py-2 rounded-lg transition ${product.stock === 0
-                            ? "bg-gray-400 cursor-not-allowed"
-                            : "bg-blue-600 text-white hover:bg-blue-700"
-                          }`}
-                      >
-                        {product.stock === 0 ? "Out of Stock" : "Buy Now"}
-                      </button>
-                    </div>
-                  </div>
-                </SwiperSlide>
-              ))
-            )}
+            {displayRegular.map((item, index) => (
+              <SwiperSlide key={index}>{renderCard(item)}</SwiperSlide>
+            ))}
           </Swiper>
 
           {showRegularNav && (

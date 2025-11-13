@@ -11,6 +11,7 @@ export default function ReportsPage() {
   const [branch, setBranch] = useState("All");
   const [month, setMonth] = useState(String(new Date().getMonth() + 1).padStart(2, "0"));
   const [year, setYear] = useState(String(new Date().getFullYear()));
+  const [timeFilter, setTimeFilter] = useState("monthly"); // new: "daily" | "weekly" | "monthly"
   const [userRole, setUserRole] = useState(null);
   const [userMunicipality, setUserMunicipality] = useState("");
   const [showExpenseModal, setShowExpenseModal] = useState(false);
@@ -120,17 +121,67 @@ export default function ReportsPage() {
   };
 
   // Filters
+  // Filter data based on selected timeFilter
   const filteredTransactions = transactions.filter((t) => {
-    const [y, m] = t.date.split("-");
+    const date = new Date(t.date);
+    const tYear = date.getFullYear();
+    const tMonth = String(date.getMonth() + 1).padStart(2, "0");
+    const tDay = date.getDate();
     const branchMatch =
       userRole === "admin" ? branch === "All" || t.branch === branch : t.branch === userMunicipality;
-    return branchMatch && m === month && y === year;
+
+    if (!branchMatch) return false;
+
+    if (timeFilter === "daily") {
+      const today = new Date();
+      return (
+        tYear === today.getFullYear() &&
+        tMonth === String(today.getMonth() + 1).padStart(2, "0") &&
+        tDay === today.getDate()
+      );
+    }
+
+    if (timeFilter === "weekly") {
+      const today = new Date();
+      const startOfWeek = new Date(today.setDate(today.getDate() - today.getDay())); // Sunday
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6); // Saturday
+      return date >= startOfWeek && date <= endOfWeek;
+    }
+
+    // monthly (default)
+    return tMonth === month && tYear.toString() === year;
   });
+
   const filteredExpenses = expenses.filter((e) => {
-    const [y, m] = e.date.split("-");
+    const date = new Date(e.date);
+    const eYear = date.getFullYear();
+    const eMonth = String(date.getMonth() + 1).padStart(2, "0");
+    const eDay = date.getDate();
     const branchMatch =
       userRole === "admin" ? branch === "All" || e.branch === branch : e.branch === userMunicipality;
-    return branchMatch && m === month && y === year;
+
+    if (!branchMatch) return false;
+
+    if (timeFilter === "daily") {
+      const today = new Date();
+      return (
+        eYear === today.getFullYear() &&
+        eMonth === String(today.getMonth() + 1).padStart(2, "0") &&
+        eDay === today.getDate()
+      );
+    }
+
+    if (timeFilter === "weekly") {
+      const today = new Date();
+      const startOfWeek = new Date(today.setDate(today.getDate() - today.getDay()));
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      return date >= startOfWeek && date <= endOfWeek;
+    }
+
+    // monthly (default)
+    return eMonth === month && eYear.toString() === year;
   });
 
   const totalRevenue = filteredTransactions.reduce((sum, t) => sum + t.totalPrice, 0);
@@ -206,8 +257,8 @@ export default function ReportsPage() {
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`px-4 py-2 font-semibold ${activeTab === tab
-                  ? "border-b-4 border-blue-600 text-blue-600"
-                  : "text-gray-600 hover:text-blue-500"
+                ? "border-b-4 border-blue-600 text-blue-600"
+                : "text-gray-600 hover:text-blue-500"
                 }`}
             >
               {tab === "sales" ? "Sales Report" : "Expenses Report"}
@@ -267,6 +318,16 @@ export default function ReportsPage() {
               </option>
             ))}
           </select>
+          <select
+            value={timeFilter}
+            onChange={(e) => setTimeFilter(e.target.value)}
+            className="border border-gray-300 rounded p-2"
+          >
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+
         </div>
 
         <div className="flex gap-4">
