@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Package, ShoppingCart } from "lucide-react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
+
 export default function BranchMarketSection() {
   const [user, setUser] = useState(null);
   const [products, setProducts] = useState([]);
@@ -11,7 +12,6 @@ export default function BranchMarketSection() {
   const [buyQuantity, setBuyQuantity] = useState(1);
   const [isViewing, setIsViewing] = useState(false);
 
-  // Hardcoded Marinduque municipalities
   const marinduqueMunicipalities = [
     "All",
     "Boac",
@@ -22,7 +22,6 @@ export default function BranchMarketSection() {
     "Buenavista",
   ];
 
-  // Get user info
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
@@ -32,7 +31,6 @@ export default function BranchMarketSection() {
     }
   }, []);
 
-  // Fetch products from backend
   useEffect(() => {
     if (!user) return;
     const token = localStorage.getItem("token");
@@ -56,12 +54,10 @@ export default function BranchMarketSection() {
       .catch((err) => console.error("❌ Failed to fetch branch manager products:", err));
   }, [user]);
 
-  // Filter products based on selected municipality
   useEffect(() => {
     if (!products) return;
 
     if (selectedMunicipality === "All") {
-      // Show all, prioritize same municipality first
       const prioritized = [...products].sort((a, b) => {
         if (a.branch === user?.municipality && b.branch !== user?.municipality) return -1;
         if (a.branch !== user?.municipality && b.branch === user?.municipality) return 1;
@@ -112,7 +108,6 @@ export default function BranchMarketSection() {
           Browse and purchase products from nearby branches.
         </h2>
 
-        {/* Municipality Dropdown */}
         <select
           value={selectedMunicipality}
           onChange={(e) => setSelectedMunicipality(e.target.value)}
@@ -145,8 +140,7 @@ export default function BranchMarketSection() {
                 filteredProducts.map((p) => (
                   <tr
                     key={p.product_id}
-                    className={`hover:bg-gray-50 ${p.branch === user?.municipality ? "bg-green-50" : ""
-                      }`}
+                    className={`hover:bg-gray-50 ${p.branch === user?.municipality ? "bg-green-50" : ""}`}
                   >
                     <td className="px-4 py-3">
                       {p.image_url ? (
@@ -224,30 +218,57 @@ export default function BranchMarketSection() {
 
             <div className="flex-1 p-7 flex flex-col justify-between overflow-y-auto">
               <div>
-                <h2 className="text-3xl font-bold text-white mb-3">
-                  {selectedProduct.product_name}
-                </h2>
+                <h2 className="text-3xl font-bold text-white mb-3">{selectedProduct.product_name}</h2>
                 <hr className="border-gray-700 mb-5" />
                 <p className="text-gray-200 mb-2">
                   {selectedProduct.product_description || "No description."}
                 </p>
                 <p className="text-gray-200 mb-1">Available: {selectedProduct.stock}</p>
-                <p className="text-gray-200 font-semibold mb-3">
-                  Price: ₱{formatPrice(selectedProduct.discounted_price || selectedProduct.price)}
-                </p>
+                <p className="text-gray-200 mb-1">Seller: {selectedProduct.seller_name || "Unknown"}</p>
 
                 {!isViewing && (
-                  <div className="mb-3">
-                    <label className="block text-gray-400 mb-1">Quantity:</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max={selectedProduct.stock}
-                      value={buyQuantity}
-                      onChange={(e) => setBuyQuantity(Number(e.target.value))}
-                      className="w-24 px-2 py-1 rounded bg-gray-800 text-white"
-                    />
-                  </div>
+                  <>
+                    {/* Price above quantity */}
+                    <p className="text-gray-200 text-lg mb-3">
+                      Price per unit: <span className="font-semibold">₱{formatPrice(selectedProduct.discounted_price || selectedProduct.price)}</span>
+                    </p>
+
+                    <div className="mb-4">
+                      <label className="block text-gray-400 mb-1">Quantity:</label>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setBuyQuantity((prev) => Math.max(prev - 1, 1))}
+                          className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          min="1"
+                          max={selectedProduct.stock}
+                          value={buyQuantity}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            if (val > 0) setBuyQuantity(Math.min(val, selectedProduct.stock));
+                          }}
+                          className="w-20 px-2 py-1 rounded bg-gray-800 text-white text-center"
+                        />
+                        <button
+                          onClick={() =>
+                            setBuyQuantity((prev) => Math.min(prev + 1, selectedProduct.stock))
+                          }
+                          className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Total price emphasized */}
+                    <p className="text-yellow-400 text-2xl font-bold">
+                      Total: ₱{formatPrice((selectedProduct.discounted_price || selectedProduct.price) * buyQuantity)}
+                    </p>
+                  </>
                 )}
               </div>
 

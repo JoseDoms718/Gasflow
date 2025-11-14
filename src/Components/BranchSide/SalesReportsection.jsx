@@ -11,7 +11,7 @@ export default function ReportsPage() {
   const [branch, setBranch] = useState("All");
   const [month, setMonth] = useState(String(new Date().getMonth() + 1).padStart(2, "0"));
   const [year, setYear] = useState(String(new Date().getFullYear()));
-  const [timeFilter, setTimeFilter] = useState("monthly"); // new: "daily" | "weekly" | "monthly"
+  const [timeFilter, setTimeFilter] = useState("monthly"); // daily | weekly | monthly
   const [userRole, setUserRole] = useState(null);
   const [userMunicipality, setUserMunicipality] = useState("");
   const [showExpenseModal, setShowExpenseModal] = useState(false);
@@ -67,6 +67,7 @@ export default function ReportsPage() {
                 : new Date(order.ordered_at).toISOString().split("T")[0],
               branch: order.municipality || order.barangay || "Unknown",
               addedBy: item.seller_name || "N/A",
+              buyer: order.full_name || "N/A",  // ✅ new field
             }))
           );
           setTransactions(formattedTrans);
@@ -120,20 +121,21 @@ export default function ReportsPage() {
     }
   };
 
-  // Filters
-  // Filter data based on selected timeFilter
+  // Filtered Transactions
   const filteredTransactions = transactions.filter((t) => {
     const date = new Date(t.date);
     const tYear = date.getFullYear();
     const tMonth = String(date.getMonth() + 1).padStart(2, "0");
     const tDay = date.getDate();
+
+    // Branch match logic: admin filters by selected branch, others see all their own
     const branchMatch =
-      userRole === "admin" ? branch === "All" || t.branch === branch : t.branch === userMunicipality;
+      userRole === "admin" ? branch === "All" || t.branch === branch : true;
 
     if (!branchMatch) return false;
 
+    const today = new Date();
     if (timeFilter === "daily") {
-      const today = new Date();
       return (
         tYear === today.getFullYear() &&
         tMonth === String(today.getMonth() + 1).padStart(2, "0") &&
@@ -142,29 +144,30 @@ export default function ReportsPage() {
     }
 
     if (timeFilter === "weekly") {
-      const today = new Date();
-      const startOfWeek = new Date(today.setDate(today.getDate() - today.getDay())); // Sunday
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - today.getDay());
       const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(startOfWeek.getDate() + 6); // Saturday
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
       return date >= startOfWeek && date <= endOfWeek;
     }
 
-    // monthly (default)
     return tMonth === month && tYear.toString() === year;
   });
 
+  // Filtered Expenses
   const filteredExpenses = expenses.filter((e) => {
     const date = new Date(e.date);
     const eYear = date.getFullYear();
     const eMonth = String(date.getMonth() + 1).padStart(2, "0");
     const eDay = date.getDate();
+
     const branchMatch =
-      userRole === "admin" ? branch === "All" || e.branch === branch : e.branch === userMunicipality;
+      userRole === "admin" ? branch === "All" || e.branch === branch : true;
 
     if (!branchMatch) return false;
 
+    const today = new Date();
     if (timeFilter === "daily") {
-      const today = new Date();
       return (
         eYear === today.getFullYear() &&
         eMonth === String(today.getMonth() + 1).padStart(2, "0") &&
@@ -173,14 +176,13 @@ export default function ReportsPage() {
     }
 
     if (timeFilter === "weekly") {
-      const today = new Date();
-      const startOfWeek = new Date(today.setDate(today.getDate() - today.getDay()));
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - today.getDay());
       const endOfWeek = new Date(startOfWeek);
       endOfWeek.setDate(startOfWeek.getDate() + 6);
       return date >= startOfWeek && date <= endOfWeek;
     }
 
-    // monthly (default)
     return eMonth === month && eYear.toString() === year;
   });
 
@@ -192,14 +194,25 @@ export default function ReportsPage() {
   const handleExportExcel = () => {
     const data =
       activeTab === "sales"
-        ? filteredTransactions.map((t) => ({
-          "Added By": t.addedBy,
-          Municipality: t.branch,
-          Product: t.productName,
-          Quantity: t.quantity,
-          "Total Price (₱)": t.totalPrice,
-          "Delivery Date": t.date,
-        }))
+        ? filteredTransactions.map((t) =>
+          userRole === "admin"
+            ? {
+              "Added By": t.addedBy,
+              Municipality: t.branch,
+              Product: t.productName,
+              Quantity: t.quantity,
+              "Total Price (₱)": t.totalPrice,
+              "Delivery Date": t.date,
+            }
+            : {
+              Buyer: t.buyer,
+              Product: t.productName,
+              Quantity: t.quantity,
+              "Total Price (₱)": t.totalPrice,
+              "Delivery Date": t.date,
+              Municipality: t.branch,
+            }
+        )
         : filteredExpenses.map((e) => ({
           "Added By": e.addedBy,
           Municipality: e.branch,
@@ -223,13 +236,20 @@ export default function ReportsPage() {
     saveAs(new Blob([wbout], { type: "application/octet-stream" }), fileName);
   };
 
+
+
   // Charts
-  const productRevenueMap = filteredTransactions.reduce((acc, t) => {
-    acc[t.productName] = (acc[t.productName] || 0) + t.totalPrice;
+  const productQuantityMap = filteredTransactions.reduce((acc, t) => {
+    acc[t.productName] = (acc[t.productName] || 0) + t.quantity;
     return acc;
   }, {});
-  const pieOptions = { labels: Object.keys(productRevenueMap), legend: { position: "bottom" } };
-  const pieSeries = Object.values(productRevenueMap);
+
+  const pieOptions = {
+    labels: Object.keys(productQuantityMap),
+    legend: { position: "bottom" },
+    tooltip: { y: { formatter: (val) => `${val} pcs` } },
+  };
+  const pieSeries = Object.values(productQuantityMap);
 
   const dateRevenueMap = filteredTransactions.reduce((acc, t) => {
     acc[t.date] = (acc[t.date] || 0) + t.totalPrice;
@@ -266,7 +286,6 @@ export default function ReportsPage() {
           ))}
         </div>
 
-        {/* Revenue / Expenses / Net Summary */}
         <div className="text-lg font-semibold text-gray-800 flex gap-4">
           Revenue: <span className="text-green-600">₱{totalRevenue.toFixed(2)}</span> |{" "}
           Expenses: <span className="text-red-600">₱{totalExpenses.toFixed(2)}</span> |{" "}
@@ -318,6 +337,7 @@ export default function ReportsPage() {
               </option>
             ))}
           </select>
+
           <select
             value={timeFilter}
             onChange={(e) => setTimeFilter(e.target.value)}
@@ -327,7 +347,6 @@ export default function ReportsPage() {
             <option value="weekly">Weekly</option>
             <option value="monthly">Monthly</option>
           </select>
-
         </div>
 
         <div className="flex gap-4">
@@ -349,7 +368,7 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Main Content (Sales / Expenses) */}
+      {/* Main Content */}
       {activeTab === "sales" ? (
         <div className="flex flex-1 gap-6 overflow-hidden">
           {/* Sales Table */}
@@ -415,7 +434,6 @@ export default function ReportsPage() {
           </div>
         </div>
       ) : (
-        // Expenses Table
         <div className="flex-1 border border-gray-300 rounded-lg overflow-y-auto">
           {filteredExpenses.length === 0 ? (
             <div className="flex justify-center items-center h-full text-gray-500 py-20">
