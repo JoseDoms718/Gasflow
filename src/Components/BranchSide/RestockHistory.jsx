@@ -3,10 +3,10 @@ import { Package } from "lucide-react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 
-export default function RestockHistory({ refreshTrigger, onHistoryFetched }) {
+export default function RestockHistory({ refreshTrigger, onHistoryFetched, borderless = true }) {
     const [history, setHistory] = useState([]);
     const [userRole, setUserRole] = useState(null);
-    const fetchedOnce = useRef(false); // Prevent multiple toast calls
+    const fetchedOnce = useRef(false);
 
     const fetchHistory = async () => {
         try {
@@ -18,7 +18,6 @@ export default function RestockHistory({ refreshTrigger, onHistoryFetched }) {
                 return;
             }
 
-            // Fetch user role from backend
             const userRes = await axios.get("http://localhost:5000/auth/me", {
                 headers: { Authorization: `Bearer ${token}` },
             });
@@ -61,7 +60,6 @@ export default function RestockHistory({ refreshTrigger, onHistoryFetched }) {
             setHistory(formatted);
             if (onHistoryFetched) onHistoryFetched(formatted);
 
-            // Only show toast once per fetch
             if (!fetchedOnce.current) {
                 toast.success(`Fetched ${formatted.length} restock record(s).`);
                 fetchedOnce.current = true;
@@ -75,51 +73,76 @@ export default function RestockHistory({ refreshTrigger, onHistoryFetched }) {
     };
 
     useEffect(() => {
-        fetchedOnce.current = false; // reset when refreshTrigger changes
+        fetchedOnce.current = false;
         fetchHistory();
     }, [refreshTrigger]);
 
     const role = userRole || "seller";
 
     return (
-        <div className="flex-1 flex flex-col overflow-hidden rounded-xl shadow-md bg-white">
-            <div className="overflow-x-auto overflow-y-auto max-h-[500px]">
-                <table className="min-w-full text-gray-800 text-sm text-center">
-                    <thead className="bg-gray-900 text-white sticky top-0 z-10">
+        <div className="flex-1 border border-gray-200 rounded-lg overflow-hidden flex flex-col">
+            {/* HEADER */}
+            <div className="bg-gray-900 text-white sticky top-0 z-20 shadow-md">
+                <table className="min-w-full text-center text-sm">
+                    <thead>
                         <tr>
                             <th className="px-4 py-3 rounded-tl-lg">Product</th>
                             <th className="px-4 py-3">Quantity Restocked</th>
                             <th className="px-4 py-3">Last Restocked</th>
-                            {role === "admin" && <th className="px-4 py-3 rounded-tr-lg">Restocked By</th>}
+                            {role === "admin" && (
+                                <th className="px-4 py-3 rounded-tr-lg">Restocked By</th>
+                            )}
                         </tr>
                     </thead>
+                </table>
+            </div>
+
+            {/* SCROLLABLE BODY */}
+            <div className="flex-1 overflow-y-auto max-h-[70vh]">
+                <table className="min-w-full text-gray-800 text-sm text-center border-collapse">
                     <tbody>
                         {history.length === 0 ? (
                             <tr>
-                                <td colSpan={role === "admin" ? 4 : 3} className="p-6 text-center text-gray-500">
+                                <td
+                                    colSpan={role === "admin" ? 4 : 3}
+                                    className="p-6 text-center text-gray-500"
+                                >
                                     No restock history available.
                                 </td>
                             </tr>
                         ) : (
                             history.map((h) => (
-                                <tr key={h.restock_id || `${h.product_id}-${h.restocked_at}`} className="hover:bg-gray-50 border-b">
+                                <tr
+                                    key={h.restock_id || `${h.product_id}-${h.restocked_at}`}
+                                    className={`hover:bg-gray-50 ${borderless ? "" : "border-b"}`}
+                                >
                                     <td className="px-4 py-3 flex items-center gap-2 justify-center">
                                         {h.image_url ? (
-                                            <img src={h.image_url} alt={h.product_name} className="w-12 h-12 object-cover rounded-lg" />
+                                            <img
+                                                src={h.image_url}
+                                                alt={h.product_name}
+                                                className="w-12 h-12 object-cover rounded-lg"
+                                            />
                                         ) : (
                                             <div className="w-12 h-12 bg-gray-200 flex items-center justify-center rounded-lg text-gray-400">
                                                 <Package size={20} />
                                             </div>
                                         )}
-                                        <span className="font-semibold text-gray-900">{h.product_name}</span>
+                                        <span className="font-semibold text-gray-900">
+                                            {h.product_name}
+                                        </span>
                                     </td>
                                     <td className="px-4 py-3">{h.quantity}</td>
                                     <td className="px-4 py-3">
                                         {h.restocked_at
-                                            ? new Date(h.restocked_at).toLocaleString("en-PH", { timeZone: "Asia/Manila" })
+                                            ? new Date(h.restocked_at).toLocaleString("en-PH", {
+                                                timeZone: "Asia/Manila",
+                                            })
                                             : "N/A"}
                                     </td>
-                                    {role === "admin" && <td className="px-4 py-3">{h.restocked_by_name || "-"}</td>}
+                                    {role === "admin" && (
+                                        <td className="px-4 py-3">{h.restocked_by_name || "-"}</td>
+                                    )}
                                 </tr>
                             ))
                         )}

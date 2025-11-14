@@ -8,14 +8,14 @@ export default function ProductTable({
     userRole,
     selectedBranch,
     setSelectedProduct,
-    setProducts, // optional
-    onRestock,   // ✅ callback to notify parent after restock
+    setProducts,
+    onRestock,
+    borderless = false,
 }) {
     const [restockProduct, setRestockProduct] = useState(null);
     const [restockQuantity, setRestockQuantity] = useState("");
     const [localProducts, setLocalProducts] = useState(products);
 
-    // Keep localProducts in sync if products prop changes
     useEffect(() => {
         setLocalProducts(products);
     }, [products]);
@@ -48,14 +48,12 @@ export default function ProductTable({
 
             const newStock = res.data.newStock;
 
-            // Update localProducts immediately
             setLocalProducts((prev) =>
                 prev.map((p) =>
                     p.product_id === restockProduct.product_id ? { ...p, stock: newStock } : p
                 )
             );
 
-            // Also update parent state if setProducts exists
             if (setProducts) {
                 setProducts((prev) =>
                     prev.map((p) =>
@@ -64,7 +62,6 @@ export default function ProductTable({
                 );
             }
 
-            // ✅ Notify parent to trigger refresh (products & restock history)
             if (onRestock) onRestock();
 
             setRestockProduct(null);
@@ -77,9 +74,12 @@ export default function ProductTable({
     };
 
     return (
-        <div className="flex-1 flex flex-col overflow-hidden rounded-lg">
-            <div className="overflow-y-auto max-h-[70vh] rounded-xl shadow-md relative">
-                <table className="min-w-full text-gray-800 text-center text-sm relative z-0">
+        <div className="flex-1 flex flex-col overflow-hidden rounded-lg relative">
+            {/* Scrollable table */}
+            <div className="overflow-y-auto flex-1 rounded-lg border border-gray-200">
+                <table
+                    className={`min-w-full text-gray-800 text-center text-sm relative z-0 ${borderless ? "" : "table-auto"}`}
+                >
                     <thead className="bg-gray-900 text-white sticky top-0 z-10 text-sm">
                         <tr>
                             <th className="px-4 py-2">Image</th>
@@ -92,12 +92,11 @@ export default function ProductTable({
                         </tr>
                     </thead>
 
-                    <tbody className="bg-white">
+                    <tbody>
                         {localProducts.map((p, i) => (
                             <tr
                                 key={i}
-                                className={`hover:bg-gray-50 ${userRole === "admin" && p.branch === selectedBranch ? "bg-green-50" : ""
-                                    }`}
+                                className={`hover:bg-gray-50 ${!borderless ? "border-b" : ""} ${userRole === "admin" && p.branch === selectedBranch ? "bg-green-50" : ""}`}
                             >
                                 <td className="px-4 py-3">
                                     {p.image_url ? (
@@ -149,7 +148,7 @@ export default function ProductTable({
                 </table>
             </div>
 
-            {/* ----------------- Restock Modal ----------------- */}
+            {/* Fixed/floating Restock modal */}
             {restockProduct && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                     <div className="bg-gray-900 text-white p-6 rounded-lg shadow-lg w-full max-w-sm">

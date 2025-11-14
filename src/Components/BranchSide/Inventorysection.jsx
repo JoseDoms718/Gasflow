@@ -14,23 +14,14 @@ export default function Inventory() {
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [products, setProducts] = useState([]);
-  const [restockHistory, setRestockHistory] = useState([]); // RECEIVES RESTOCK HISTORY FROM COMPONENT
+  const [restockHistory, setRestockHistory] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedBranch, setSelectedBranch] = useState("All");
   const [restockCounter, setRestockCounter] = useState(0);
 
-  const branches = [
-    "All",
-    "Boac",
-    "Mogpog",
-    "Gasan",
-    "Buenavista",
-    "Torrijos",
-    "Santa Cruz",
-  ];
+  const branches = ["All", "Boac", "Mogpog", "Gasan", "Buenavista", "Torrijos", "Santa Cruz"];
 
-  /* Load user */
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
@@ -40,7 +31,6 @@ export default function Inventory() {
     }
   }, []);
 
-  /* Fetch products */
   useEffect(() => {
     const fetchProducts = async () => {
       try {
@@ -74,14 +64,10 @@ export default function Inventory() {
     if (user && userRole) fetchProducts();
   }, [user, userRole, selectedBranch, restockCounter]);
 
-  /* Trigger restock refresh */
   const handleRestockUpdate = () => {
     setRestockCounter((prev) => prev + 1);
   };
 
-  /* ---------------------------
-     EXCEL EXPORT (INVENTORY + HISTORY)
-  ---------------------------- */
   const handleExportExcel = () => {
     if (!products.length && !restockHistory.length)
       return toast.error("No data to export.");
@@ -94,7 +80,6 @@ export default function Inventory() {
 
     const wb = XLSX.utils.book_new();
 
-    /* ---- SHEET 1: INVENTORY ---- */
     const productData = products.map((p) => ({
       "Product Name": p.product_name || "N/A",
       "Price (₱)": p.price ? Number(p.price).toFixed(2) : "0.00",
@@ -105,7 +90,6 @@ export default function Inventory() {
     const ws1 = XLSX.utils.json_to_sheet(productData);
     XLSX.utils.book_append_sheet(wb, ws1, "Inventory");
 
-    /* ---- SHEET 2: RESTOCK HISTORY ---- */
     const historyData = restockHistory.map((h) => ({
       "Product Name": h.product_name,
       Quantity: h.quantity,
@@ -118,101 +102,92 @@ export default function Inventory() {
     const ws2 = XLSX.utils.json_to_sheet(historyData);
     XLSX.utils.book_append_sheet(wb, ws2, "Restock History");
 
-    /* ---- EXPORT FILE ---- */
     const fileName = `Inventory_and_Restock_${selectedBranch}_${formattedTimestamp}.xlsx`;
-
     const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
     saveAs(new Blob([wbout], { type: "application/octet-stream" }), fileName);
   };
 
   return (
     <div className="p-4 w-full flex flex-col gap-3 relative">
-
       {/* HEADER */}
       <div className="flex flex-col gap-2">
         {userRole !== "retailer" && (
           <h2 className="text-2xl font-bold text-gray-900">Products & Inventory</h2>
         )}
 
-        {(userRole === "admin" ||
-          userRole === "branch_manager" ||
-          userRole === "retailer") && (
-            <div className="flex flex-col sm:flex-row items-center gap-3 w-full">
-
-              {/* LEFT SIDE */}
-              <div className="flex-1 w-full">
-                {userRole === "admin" ? (
-                  <select
-                    value={selectedBranch}
-                    onChange={(e) => setSelectedBranch(e.target.value)}
-                    className="w-full sm:w-auto px-3 py-2 rounded bg-white border text-gray-900 shadow-sm hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {branches.map((b) => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
-                  </select>
-                ) : userRole === "retailer" ? (
-                  <h2 className="text-lg font-semibold text-gray-800 text-center sm:text-left">
-                    Browse and purchase products from nearby branches.
-                  </h2>
-                ) : null}
-              </div>
-
-              {/* RIGHT BUTTONS */}
-              <div className="flex gap-3 ml-auto">
-                <button
-                  onClick={handleExportExcel}
-                  className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow"
+        {(userRole === "admin" || userRole === "branch_manager" || userRole === "retailer") && (
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full">
+            <div className="flex-1 w-full">
+              {userRole === "admin" ? (
+                <select
+                  value={selectedBranch}
+                  onChange={(e) => setSelectedBranch(e.target.value)}
+                  className="w-full sm:w-auto px-3 py-2 rounded bg-white border text-gray-900 shadow-sm hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <Download className="w-5 h-5" /> Export Excel
-                </button>
-
-                {(userRole === "branch_manager" || userRole === "retailer") && (
-                  <button
-                    onClick={() => setShowForm(true)}
-                    className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow"
-                  >
-                    <PlusCircle className="w-5 h-5" /> Add Product
-                  </button>
-                )}
-              </div>
+                  {branches.map((b) => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+              ) : userRole === "retailer" ? (
+                <h2 className="text-lg font-semibold text-gray-800 text-center sm:text-left">
+                  Browse and purchase products from nearby branches.
+                </h2>
+              ) : null}
             </div>
-          )}
+
+            <div className="flex gap-3 ml-auto">
+              <button
+                onClick={handleExportExcel}
+                className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow"
+              >
+                <Download className="w-5 h-5" /> Export Excel
+              </button>
+
+              {(userRole === "branch_manager" || userRole === "retailer") && (
+                <button
+                  onClick={() => setShowForm(true)}
+                  className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow"
+                >
+                  <PlusCircle className="w-5 h-5" /> Add Product
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* MAIN CONTENT: 2 COLUMNS */}
+      {/* MAIN CONTENT */}
       <div className="flex gap-4 w-full h-[calc(100vh-180px)]">
-
         {/* LEFT: PRODUCT TABLE */}
-        <div className="flex-1 overflow-y-auto rounded-xl shadow-md">
-          <ProductTable
-            products={products}
-            userRole={userRole}
-            selectedBranch={selectedBranch}
-            setSelectedProduct={setSelectedProduct}
-            setProducts={setProducts}
-            onRestock={handleRestockUpdate}
-          />
+        <div className="flex-1 overflow-hidden">
+          <div className="overflow-y-auto h-full">
+            <ProductTable
+              products={products}
+              userRole={userRole}
+              selectedBranch={selectedBranch}
+              setSelectedProduct={setSelectedProduct}
+              setProducts={setProducts}
+              onRestock={handleRestockUpdate}
+              borderless
+            />
+          </div>
         </div>
 
         {/* RIGHT: RESTOCK HISTORY */}
-        <div className="w-[380px] overflow-y-auto rounded-xl shadow-md">
-          <RestockHistory
-            selectedBranch={selectedBranch}
-            refreshTrigger={restockCounter}
-            onHistoryFetched={setRestockHistory}  // 🔥 Get history data here
-          />
+        <div className="w-[380px] overflow-hidden">
+          <div className="overflow-y-auto h-full">
+            <RestockHistory
+              selectedBranch={selectedBranch}
+              refreshTrigger={restockCounter}
+              onHistoryFetched={setRestockHistory}
+              borderless
+            />
+          </div>
         </div>
       </div>
 
       {/* MODALS */}
-      {showForm && (
-        <AddProductModal
-          setShowForm={setShowForm}
-          setProducts={setProducts}
-        />
-      )}
-
+      {showForm && <AddProductModal setShowForm={setShowForm} setProducts={setProducts} />}
       {selectedProduct && (
         <EditProductModal
           selectedProduct={selectedProduct}
