@@ -2,12 +2,14 @@ import React, { useState, useEffect } from "react";
 import { Package } from "lucide-react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
+
 export default function ProductTable({
     products,
     userRole,
     selectedBranch,
     setSelectedProduct,
     setProducts, // optional
+    onRestock,   // ✅ callback to notify parent after restock
 }) {
     const [restockProduct, setRestockProduct] = useState(null);
     const [restockQuantity, setRestockQuantity] = useState("");
@@ -61,6 +63,9 @@ export default function ProductTable({
                     )
                 );
             }
+
+            // ✅ Notify parent to trigger refresh (products & restock history)
+            if (onRestock) onRestock();
 
             setRestockProduct(null);
             setRestockQuantity("");

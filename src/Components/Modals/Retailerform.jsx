@@ -103,21 +103,26 @@ export default function Retailerform() {
 
         try {
             const data = new FormData();
-            Object.keys(formData).forEach((key) => {
-                if (key === "permits") {
-                    Object.keys(formData.permits).forEach((permitKey) => {
-                        if (formData.permits[permitKey]) data.append(permitKey, formData.permits[permitKey]);
-                    });
-                } else {
-                    data.append(key, formData[key]);
-                }
+            data.append("name", formData.name);
+            data.append("email", formData.email);
+            data.append("password", formData.password);
+            data.append("contact_number", formData.contact_number);
+            data.append("municipality", formData.municipality);
+            data.append("barangay", formData.barangay);
+            data.append("role", formData.role);
+
+            // append files dynamically
+            Object.keys(formData.permits).forEach((key) => {
+                if (formData.permits[key]) data.append(key, formData.permits[key]);
             });
 
-            const res = await axios.post("http://localhost:5000/retailers", data, {
+            // ✅ send to backend endpoint
+            const res = await axios.post("http://localhost:5000/retailerSignup", data, {
                 headers: { "Content-Type": "multipart/form-data" },
             });
 
-            toast.success(res.data.message || "✅ Registration successful!");
+            toast.success(res.data.message || "✅ Registration info submitted successfully!");
+
             setFormData({
                 name: "",
                 municipality: "",
@@ -180,17 +185,17 @@ export default function Retailerform() {
                         onChange={handleChange}
                         required
                         disabled={!formData.municipality}
-                        className="w-full p-4 rounded-full bg-gray-100 text-gray-900 focus:outline-none"
                     >
                         <option value="" disabled>
                             {formData.municipality ? "Select Barangay" : "Select Municipality first"}
                         </option>
                         {barangays.map((b) => (
-                            <option key={b.id} value={b.name}>
+                            <option key={b.id} value={b.id}>
                                 {b.name}
                             </option>
                         ))}
                     </select>
+
 
                     {/* Contact Number */}
                     <input
@@ -276,7 +281,7 @@ export default function Retailerform() {
                                         <input
                                             type="file"
                                             name={permit.key}
-                                            accept=".jpg,.jpeg,.png,.heic,.heif"
+                                            accept="image/*,.jpg,.jpeg,.png,.webp,.heic,.heif"
                                             onChange={handleChange}
                                             className="w-full text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#2d5ee0] file:text-white hover:file:bg-[#244bb5]"
                                         />

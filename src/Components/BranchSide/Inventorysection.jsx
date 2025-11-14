@@ -8,14 +8,17 @@ import { toast } from "react-hot-toast";
 import ProductTable from "./ProductTable";
 import AddProductModal from "./AddProductModal";
 import EditProductModal from "./EditProductModal";
+import RestockHistory from "./RestockHistory";
 
 export default function Inventory() {
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [products, setProducts] = useState([]);
-  const [selectedBranch, setSelectedBranch] = useState("All");
+  const [restockHistory, setRestockHistory] = useState([]); // RECEIVES RESTOCK HISTORY FROM COMPONENT
   const [showForm, setShowForm] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedBranch, setSelectedBranch] = useState("All");
+  const [restockCounter, setRestockCounter] = useState(0);
 
   const branches = [
     "All",
@@ -27,7 +30,7 @@ export default function Inventory() {
     "Santa Cruz",
   ];
 
-  /* ----------------------------- Load user info ----------------------------- */
+  /* Load user */
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
@@ -37,19 +40,17 @@ export default function Inventory() {
     }
   }, []);
 
-  /* ----------------------------- Fetch products ----------------------------- */
+  /* Fetch products */
   useEffect(() => {
     const fetchProducts = async () => {
       try {
         const token = localStorage.getItem("token");
         if (!token) return;
 
-        let endpoint = "";
-        if (userRole === "admin") {
-          endpoint = `http://localhost:5000/products/admin/all-products?branch=${selectedBranch}`;
-        } else {
-          endpoint = "http://localhost:5000/products/my-products";
-        }
+        const endpoint =
+          userRole === "admin"
+            ? `http://localhost:5000/products/admin/all-products?branch=${selectedBranch}`
+            : "http://localhost:5000/products/my-products";
 
         const res = await axios.get(endpoint, {
           headers: { Authorization: `Bearer ${token}` },
@@ -71,11 +72,19 @@ export default function Inventory() {
     };
 
     if (user && userRole) fetchProducts();
-  }, [user, userRole, selectedBranch]);
+  }, [user, userRole, selectedBranch, restockCounter]);
 
-  /* ----------------------------- Export to Excel ----------------------------- */
+  /* Trigger restock refresh */
+  const handleRestockUpdate = () => {
+    setRestockCounter((prev) => prev + 1);
+  };
+
+  /* ---------------------------
+     EXCEL EXPORT (INVENTORY + HISTORY)
+  ---------------------------- */
   const handleExportExcel = () => {
-    if (!products.length) return toast.error("No product data to export.");
+    if (!products.length && !restockHistory.length)
+      return toast.error("No data to export.");
 
     const timestamp = new Date();
     const formattedTimestamp = timestamp
@@ -83,35 +92,34 @@ export default function Inventory() {
       .replace(/[/:,]/g, "-")
       .replace(/\s+/g, "_");
 
-    const data = products.map((p) => ({
+    const wb = XLSX.utils.book_new();
+
+    /* ---- SHEET 1: INVENTORY ---- */
+    const productData = products.map((p) => ({
       "Product Name": p.product_name || "N/A",
       "Price (₱)": p.price ? Number(p.price).toFixed(2) : "0.00",
       Stock: p.stock || 0,
       Branch: p.branch || "N/A",
     }));
 
-    const ws = XLSX.utils.json_to_sheet([]);
+    const ws1 = XLSX.utils.json_to_sheet(productData);
+    XLSX.utils.book_append_sheet(wb, ws1, "Inventory");
 
-    // Add export timestamp on top
-    XLSX.utils.sheet_add_aoa(
-      ws,
-      [["Exported on:", timestamp.toLocaleString("en-PH", { timeZone: "Asia/Manila" })]],
-      { origin: "A1" }
-    );
-    XLSX.utils.sheet_add_aoa(ws, [[]], { origin: "A2" }); // blank line
-    XLSX.utils.sheet_add_json(ws, data, { origin: "A3", skipHeader: false });
-
-    // Auto column width
-    const colWidths = Object.keys(data[0]).map((key) => ({
-      wch: Math.max(key.length + 2, ...data.map((r) => String(r[key]).length + 2)),
+    /* ---- SHEET 2: RESTOCK HISTORY ---- */
+    const historyData = restockHistory.map((h) => ({
+      "Product Name": h.product_name,
+      Quantity: h.quantity,
+      "Previous Stock": h.previous_stock,
+      "New Stock": h.new_stock,
+      "Restocked By": h.restocked_by_name || h.restocked_by || "-",
+      Date: new Date(h.restocked_at || h.date).toLocaleString("en-PH"),
     }));
-    ws["!cols"] = colWidths;
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Inventory");
+    const ws2 = XLSX.utils.json_to_sheet(historyData);
+    XLSX.utils.book_append_sheet(wb, ws2, "Restock History");
 
-    const fileName = `Inventory_${selectedBranch === "All" ? "AllBranches" : selectedBranch
-      }_${formattedTimestamp}.xlsx`;
+    /* ---- EXPORT FILE ---- */
+    const fileName = `Inventory_and_Restock_${selectedBranch}_${formattedTimestamp}.xlsx`;
 
     const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
     saveAs(new Blob([wbout], { type: "application/octet-stream" }), fileName);
@@ -119,41 +127,39 @@ export default function Inventory() {
 
   return (
     <div className="p-4 w-full flex flex-col gap-3 relative">
-      {/* ---------------- Header ---------------- */}
+
+      {/* HEADER */}
       <div className="flex flex-col gap-2">
-        {/* Only show main title for non-retailers */}
         {userRole !== "retailer" && (
           <h2 className="text-2xl font-bold text-gray-900">Products & Inventory</h2>
         )}
 
-        {/* Filter and Export Row */}
         {(userRole === "admin" ||
           userRole === "branch_manager" ||
           userRole === "retailer") && (
-            <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
-              {/* Left side: Branch Filter for Admin, or Retailer Description */}
-              {userRole === "admin" ? (
-                <select
-                  value={selectedBranch}
-                  onChange={(e) => setSelectedBranch(e.target.value)}
-                  className="w-full sm:w-auto px-3 py-2 rounded bg-white border text-gray-900 shadow-sm hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {branches.map((b) => (
-                    <option key={b} value={b}>
-                      {b}
-                    </option>
-                  ))}
-                </select>
-              ) : userRole === "retailer" ? (
-                <h2 className="text-lg font-semibold text-gray-800 text-center sm:text-left">
-                  Browse and purchase products from nearby branches.
-                </h2>
-              ) : (
-                <div></div>
-              )}
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full">
 
-              {/* Right side: Buttons */}
-              <div className="flex flex-wrap gap-3 justify-end w-full sm:w-auto">
+              {/* LEFT SIDE */}
+              <div className="flex-1 w-full">
+                {userRole === "admin" ? (
+                  <select
+                    value={selectedBranch}
+                    onChange={(e) => setSelectedBranch(e.target.value)}
+                    className="w-full sm:w-auto px-3 py-2 rounded bg-white border text-gray-900 shadow-sm hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {branches.map((b) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                ) : userRole === "retailer" ? (
+                  <h2 className="text-lg font-semibold text-gray-800 text-center sm:text-left">
+                    Browse and purchase products from nearby branches.
+                  </h2>
+                ) : null}
+              </div>
+
+              {/* RIGHT BUTTONS */}
+              <div className="flex gap-3 ml-auto">
                 <button
                   onClick={handleExportExcel}
                   className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow"
@@ -161,7 +167,6 @@ export default function Inventory() {
                   <Download className="w-5 h-5" /> Export Excel
                 </button>
 
-                {/* Allow retailer and branch manager to add product */}
                 {(userRole === "branch_manager" || userRole === "retailer") && (
                   <button
                     onClick={() => setShowForm(true)}
@@ -175,19 +180,39 @@ export default function Inventory() {
           )}
       </div>
 
-      {/* ---------------- Product Table ---------------- */}
-      <ProductTable
-        products={products}
-        userRole={userRole}
-        selectedBranch={selectedBranch}
-        setSelectedProduct={setSelectedProduct}
-        setProducts={setProducts}
-      />
+      {/* MAIN CONTENT: 2 COLUMNS */}
+      <div className="flex gap-4 w-full h-[calc(100vh-180px)]">
 
-      {/* ---------------- Add / Edit Modals ---------------- */}
+        {/* LEFT: PRODUCT TABLE */}
+        <div className="flex-1 overflow-y-auto rounded-xl shadow-md">
+          <ProductTable
+            products={products}
+            userRole={userRole}
+            selectedBranch={selectedBranch}
+            setSelectedProduct={setSelectedProduct}
+            setProducts={setProducts}
+            onRestock={handleRestockUpdate}
+          />
+        </div>
+
+        {/* RIGHT: RESTOCK HISTORY */}
+        <div className="w-[380px] overflow-y-auto rounded-xl shadow-md">
+          <RestockHistory
+            selectedBranch={selectedBranch}
+            refreshTrigger={restockCounter}
+            onHistoryFetched={setRestockHistory}  // 🔥 Get history data here
+          />
+        </div>
+      </div>
+
+      {/* MODALS */}
       {showForm && (
-        <AddProductModal setShowForm={setShowForm} setProducts={setProducts} />
+        <AddProductModal
+          setShowForm={setShowForm}
+          setProducts={setProducts}
+        />
       )}
+
       {selectedProduct && (
         <EditProductModal
           selectedProduct={selectedProduct}
