@@ -280,8 +280,8 @@ export default function ReportsPage() {
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`px-4 py-2 font-semibold ${activeTab === tab
-                  ? "border-b-4 border-blue-600 text-blue-600"
-                  : "text-gray-600 hover:text-blue-500"
+                ? "border-b-4 border-blue-600 text-blue-600"
+                : "text-gray-600 hover:text-blue-500"
                 }`}
             >
               {tab === "sales" ? "Sales Report" : "Expenses Report"}
@@ -353,8 +353,9 @@ export default function ReportsPage() {
         </div>
 
         {/* Buttons */}
+        {/* Buttons */}
         <div className="flex gap-4">
-          {activeTab === "expenses" && (
+          {activeTab === "expenses" && userRole !== "admin" && ( // only show for non-admin
             <button
               onClick={() => setShowExpenseModal(true)}
               className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow"
@@ -387,7 +388,6 @@ export default function ReportsPage() {
                   <tr>
                     {userRole === "admin" && (
                       <>
-                        <th className="px-4 py-3 border-b border-gray-700">Added By</th>
                         <th className="px-4 py-3 border-b border-gray-700">Municipality</th>
                       </>
                     )}
@@ -402,7 +402,6 @@ export default function ReportsPage() {
                     <tr key={t.id} className="hover:bg-gray-50 border-t border-gray-300">
                       {userRole === "admin" && (
                         <>
-                          <td className="px-4 py-3">{t.addedBy}</td>
                           <td className="px-4 py-3">{t.branch}</td>
                         </>
                       )}

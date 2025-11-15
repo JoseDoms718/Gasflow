@@ -2,6 +2,8 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 const path = require("path");
+const http = require("http");
+const { Server } = require("socket.io");
 
 /* -----------------------------------------
    ✅ Import Routes
@@ -19,14 +21,47 @@ const businessOwnerRoutes = require("./routes/businessOwnerSignup");
 const branchInfoRoutes = require("./routes/branchinfo"); // branch routes
 const bannersRoutes = require("./routes/banners");
 const retailerRoutes = require("./routes/retailerSignup");
+const damagedProductsRoute = require("./routes/damagedProducts");
+const chatRoutes = require("./routes/chat"); // your chat route
+
 /* -----------------------------------------
-   ✅ Initialize App
+   ✅ Initialize App & Server
 ----------------------------------------- */
 const app = express();
+const server = http.createServer(app);
 
+/* -----------------------------------------
+   ✅ Socket.IO Setup
+----------------------------------------- */
+const io = new Server(server, {
+  cors: {
+    origin: "http://localhost:5173", // frontend URL
+    methods: ["GET", "POST"],
+  },
+});
+
+// Make io accessible in routes
+app.set("io", io);
+
+io.on("connection", (socket) => {
+  console.log("⚡ New client connected:", socket.id);
+
+  socket.on("joinRoom", (conversationId) => {
+    socket.join(`room_${conversationId}`);
+    console.log(`Socket ${socket.id} joined room_${conversationId}`);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("Client disconnected:", socket.id);
+  });
+});
+
+/* -----------------------------------------
+   ✅ Middleware
+----------------------------------------- */
 app.use(
   cors({
-    origin: "http://localhost:5173", // adjust for your frontend URL
+    origin: "http://localhost:5173",
     credentials: true,
   })
 );
@@ -35,13 +70,10 @@ app.use(express.json());
 /* -----------------------------------------
    ✅ Serve Static Images
 ----------------------------------------- */
-// Product images
 app.use(
   "/products/images",
   express.static(path.join(__dirname, "../src/assets/products"))
 );
-
-// Uploaded files (like branch pictures)
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 /* -----------------------------------------
@@ -60,23 +92,24 @@ app.use("/business-owner", businessOwnerRoutes);
 app.use("/branchinfo", branchInfoRoutes);
 app.use("/banners", bannersRoutes);
 app.use("/retailerSignup", retailerRoutes);
-/* -------------------------------
-   ✅ Mount Branch Info Routes
---------------------------------- */
-// Public endpoints (all branches)
-app.use("/api/branches", branchInfoRoutes); // now frontend can use /api/branches/all
+app.use("/damaged-products", damagedProductsRoute);
+
+/* -----------------------------------------
+   ✅ Chat Routes
+----------------------------------------- */
+app.use("/api/chat", chatRoutes);
 
 /* -----------------------------------------
    ✅ Test Route (Optional)
 ----------------------------------------- */
 app.get("/", (req, res) => {
-  res.send("✅ Solane LPG backend is running...");
+  res.send("✅ Solane LPG backend is running with Socket.IO...");
 });
 
 /* -----------------------------------------
    ✅ Start Server
 ----------------------------------------- */
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
 });

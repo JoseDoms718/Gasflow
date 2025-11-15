@@ -20,10 +20,18 @@ export default function ManageUsersection() {
 
   const roles = ["users", "business_owner", "branch_manager", "retailer", "admin"];
 
+  // Role label mapping (UI names)
+  const roleLabels = {
+    users: "User",
+    business_owner: "Business Owner",
+    branch_manager: "Branch Manager",
+    retailer: "Retailer",
+    admin: "Admin",
+  };
+
   const [users, setUsers] = useState([]);
   const [roleFilter, setRoleFilter] = useState("All");
   const [municipalityFilter, setMunicipalityFilter] = useState("All");
-  const [barangays, setBarangays] = useState([]);
 
   // View / Edit State
   const [viewUser, setViewUser] = useState(null);
@@ -37,7 +45,6 @@ export default function ManageUsersection() {
 
   const [formData, setFormData] = useState({
     name: "",
-    barangay_id: "",
     municipality: municipalities[0],
     email: "",
     contact_number: "+63",
@@ -57,25 +64,6 @@ export default function ManageUsersection() {
       toast.error("❌ Failed to load users.");
     }
   };
-
-  // Fetch barangays when municipality changes
-  useEffect(() => {
-    const fetchBarangays = async () => {
-      if (!formData.municipality) {
-        setBarangays([]);
-        return;
-      }
-      try {
-        const res = await axios.get("http://localhost:5000/barangays", {
-          params: { municipality: formData.municipality },
-        });
-        setBarangays(res.data);
-      } catch (err) {
-        console.error("Error fetching barangays:", err);
-      }
-    };
-    fetchBarangays();
-  }, [formData.municipality]);
 
   useEffect(() => {
     fetchUsers();
@@ -115,7 +103,8 @@ export default function ManageUsersection() {
         password: formData.password,
         role: formData.role,
         type: formData.type,
-        barangay_id: formData.barangay_id || null,
+        municipality: formData.municipality, // send municipality string
+        barangay_id: formData.barangay_id,   // send barangay ID
       };
 
       const res = await axios.post("http://localhost:5000/users", newUser);
@@ -124,14 +113,12 @@ export default function ManageUsersection() {
         toast.success("✅ User added successfully!");
         setShowModal(false);
 
-        // REFRESH users to include correct barangay_name
-        await fetchUsers();
+        await fetchUsers(); // refresh table
 
-        // Reset form
         setFormData({
           name: "",
+          municipality: "",
           barangay_id: "",
-          municipality: municipalities[0],
           email: "",
           contact_number: "+63",
           role: roles[0],
@@ -146,6 +133,8 @@ export default function ManageUsersection() {
       toast.error(msg);
     }
   };
+
+
 
   // Filtered list
   const filteredUsers = users.filter((user) => {
@@ -171,7 +160,7 @@ export default function ManageUsersection() {
           <option value="All">All Roles</option>
           {roles.map((role, index) => (
             <option key={index} value={role}>
-              {role}
+              {roleLabels[role]}
             </option>
           ))}
         </select>
@@ -210,12 +199,11 @@ export default function ManageUsersection() {
       {/* Table */}
       <div className="flex-1 border border-gray-300 rounded-lg shadow-md overflow-hidden bg-white relative">
         <div className="max-h-[70vh] overflow-y-auto">
-          <table className="min-w-[950px] w-full border-collapse text-center relative">
+          <table className="min-w-[850px] w-full border-collapse text-center relative">
             <thead className="bg-gray-900 text-white sticky top-0 z-20 shadow-[0_4px_6px_rgba(0,0,0,0.4)]">
               <tr>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Role</th>
-                <th className="px-4 py-3">Barangay</th>
                 <th className="px-4 py-3">Municipality</th>
                 <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">Type</th>
@@ -226,7 +214,7 @@ export default function ManageUsersection() {
             <tbody>
               {filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="py-6 text-gray-500 italic">
+                  <td colSpan="6" className="py-6 text-gray-500 italic">
                     No users found.
                   </td>
                 </tr>
@@ -234,31 +222,33 @@ export default function ManageUsersection() {
                 filteredUsers.map((user, index) => (
                   <tr key={user.user_id || index} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-semibold">{user.name}</td>
-                    <td className="px-4 py-3">{user.role}</td>
-                    <td className="px-4 py-3">{user.barangay_name}</td>
+
+                    {/* ROLE WITH FRIENDLY LABEL */}
+                    <td className="px-4 py-3">{roleLabels[user.role]}</td>
+
                     <td className="px-4 py-3">{user.municipality}</td>
                     <td className="px-4 py-3">{user.email}</td>
+
                     <td className="px-4 py-3">
                       <span
                         className={`px-2 py-1 rounded text-sm ${user.type === "active"
-                            ? "bg-green-100 text-green-700"
-                            : user.type === "inactive"
-                              ? "bg-red-100 text-red-700"
-                              : "bg-gray-200 text-gray-700"
+                          ? "bg-green-100 text-green-700"
+                          : user.type === "inactive"
+                            ? "bg-red-100 text-red-700"
+                            : "bg-gray-200 text-gray-700"
                           }`}
                       >
                         {user.type}
                       </span>
                     </td>
 
-                    <td className="px-4 py-3 flex gap-2 justify-center">
+                    <td className="px-4 py-3 flex items-center justify-center gap-2">
                       <button
                         className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
                         onClick={() => {
                           setViewUser(user);
                           setEditFields({
                             municipality: user.municipality,
-                            barangay_id: user.barangay_id,
                           });
                           setEditMode({});
                           setEditPassword("");
@@ -270,8 +260,8 @@ export default function ManageUsersection() {
 
                       <button
                         className={`px-3 py-1 rounded text-white ${user.type === "inactive"
-                            ? "bg-gray-600 hover:bg-gray-700 cursor-pointer"
-                            : "bg-gray-300 cursor-not-allowed"
+                          ? "bg-gray-600 hover:bg-gray-700 cursor-pointer"
+                          : "bg-gray-300 cursor-not-allowed"
                           }`}
                         disabled={user.type !== "inactive"}
                         onClick={async () => {
@@ -306,7 +296,6 @@ export default function ManageUsersection() {
         setShowModal={setShowModal}
         municipalities={municipalities}
         roles={roles}
-        barangays={barangays}
         formData={formData}
         handleChange={handleChange}
         handleSubmit={handleSubmit}

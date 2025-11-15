@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { User, MessageSquare, Send, X } from "lucide-react";
 import { toast } from "react-hot-toast";
 
-export default function InquiriesSection() {
+export default function InquiriesSection({ role = "user" }) {
     const [inquiries, setInquiries] = useState([
         { id: 1, name: "John Doe", lastMessage: "Hello, I need help!", unread: 2 },
         { id: 2, name: "Jane Smith", lastMessage: "Can I change my order?", unread: 0 },
@@ -14,6 +14,22 @@ export default function InquiriesSection() {
     const [selectedInquiry, setSelectedInquiry] = useState(null);
     const [chatMessages, setChatMessages] = useState([]);
     const [newMessage, setNewMessage] = useState("");
+
+    // Determine dark mode based on role
+    const isDarkMode = role === "user" || role === "business_owner";
+
+    // Dynamic classes
+    const bgContainer = isDarkMode ? "bg-gray-900" : "bg-gray-100";
+    const bgCard = isDarkMode ? "bg-gray-800" : "bg-white";
+    const textColor = isDarkMode ? "text-gray-100" : "text-gray-900";
+    const subTextColor = isDarkMode ? "text-gray-300" : "text-gray-500";
+    const inputBg = isDarkMode
+        ? "bg-gray-700 text-gray-100 placeholder-gray-400"
+        : "bg-white text-gray-900 placeholder-gray-500";
+    const hoverBg = isDarkMode ? "hover:bg-gray-700" : "hover:bg-gray-200";
+    const selectedBg = isDarkMode ? "bg-gray-700" : "bg-gray-200";
+    const borderColor = isDarkMode ? "border-gray-700" : "border-gray-300";
+    const topMargin = isDarkMode ? "mt-20" : "mt-0";
 
     useEffect(() => {
         if (!selectedInquiry) return;
@@ -27,24 +43,24 @@ export default function InquiriesSection() {
     const handleSendMessage = () => {
         if (!newMessage.trim()) return;
 
-        const message = { sender: "admin", text: newMessage.trim(), timestamp: new Date().toLocaleTimeString() };
+        const message = {
+            sender: "admin",
+            text: newMessage.trim(),
+            timestamp: new Date().toLocaleTimeString(),
+        };
         setChatMessages((prev) => [...prev, message]);
         setNewMessage("");
-
         toast.success("Message sent!");
-        // TODO: Send message to backend
     };
 
     return (
-        <section className="h-[90vh] p-4 bg-gray-100 flex flex-col">
-            <h1 className="text-2xl font-bold mb-4">Customer Inquiries</h1>
-
+        <section className={`h-[90vh] p-4 flex flex-col ${bgContainer} ${topMargin}`}>
             <div className="flex flex-1 gap-4 overflow-hidden">
                 {/* Inquiry List */}
-                <div className="bg-white rounded-2xl shadow p-4 w-1/3 flex flex-col">
+                <div className={`rounded-2xl shadow p-4 w-1/3 flex flex-col ${bgCard}`}>
                     <div className="flex items-center gap-2 mb-3">
-                        <MessageSquare className="w-6 h-6 text-gray-700" />
-                        <h2 className="text-lg font-semibold">Live Inquiries</h2>
+                        <MessageSquare className={`w-6 h-6 ${textColor}`} />
+                        <h2 className={`text-lg font-semibold ${textColor}`}>Live Inquiries</h2>
                     </div>
 
                     <div className="flex-1 overflow-y-auto max-h-[60vh]">
@@ -52,16 +68,18 @@ export default function InquiriesSection() {
                             <div
                                 key={inq.id}
                                 onClick={() => setSelectedInquiry(inq)}
-                                className={`flex items-center justify-between p-2 rounded-lg mb-1 cursor-pointer hover:bg-gray-100 ${selectedInquiry?.id === inq.id ? "bg-gray-100" : ""
+                                className={`flex items-center justify-between p-2 rounded-lg mb-1 cursor-pointer ${selectedInquiry?.id === inq.id ? selectedBg : hoverBg
                                     }`}
                             >
                                 <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-                                        <User className="w-5 h-5 text-gray-500" />
+                                    <div className="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center">
+                                        <User className="w-5 h-5 text-gray-300" />
                                     </div>
                                     <div>
-                                        <p className="font-medium text-sm">{inq.name}</p>
-                                        <p className="text-xs text-gray-500 truncate max-w-[100px]">{inq.lastMessage}</p>
+                                        <p className={`font-medium text-sm ${textColor}`}>{inq.name}</p>
+                                        <p className={`text-xs truncate max-w-[100px] ${subTextColor}`}>
+                                            {inq.lastMessage}
+                                        </p>
                                     </div>
                                 </div>
                                 {inq.unread > 0 && (
@@ -75,30 +93,37 @@ export default function InquiriesSection() {
                 </div>
 
                 {/* Chat Box */}
-                <div className="bg-white rounded-2xl shadow p-4 flex-1 flex flex-col">
+                <div className={`rounded-2xl shadow p-4 flex-1 flex flex-col ${bgCard}`}>
                     {selectedInquiry ? (
                         <>
-                            <div className="flex items-center justify-between mb-3 border-b border-gray-200 pb-2">
-                                <h2 className="text-lg font-semibold">{selectedInquiry.name}</h2>
+                            <div className={`flex items-center justify-between mb-3 border-b ${borderColor} pb-2`}>
+                                <h2 className={`text-lg font-semibold ${textColor}`}>{selectedInquiry.name}</h2>
                                 <button onClick={() => setSelectedInquiry(null)}>
-                                    <X className="w-5 h-5 text-gray-500 hover:text-gray-700" />
+                                    <X className={`w-5 h-5 ${textColor} hover:text-white`} />
                                 </button>
                             </div>
 
-                            <div className="flex-1 overflow-y-auto mb-3 p-2 border rounded-lg bg-gray-50 max-h-[60vh]">
+                            <div
+                                className={`flex-1 overflow-y-auto mb-3 p-2 border rounded-lg max-h-[60vh] ${bgContainer}`}
+                            >
                                 {chatMessages.map((msg, index) => (
                                     <div
                                         key={index}
-                                        className={`mb-1 flex ${msg.sender === "admin" ? "justify-end" : "justify-start"}`}
+                                        className={`mb-1 flex ${msg.sender === "admin" ? "justify-end" : "justify-start"
+                                            }`}
                                     >
                                         <div
                                             className={`p-2 rounded-lg max-w-xs text-sm ${msg.sender === "admin"
-                                                    ? "bg-blue-600 text-white"
-                                                    : "bg-gray-200 text-gray-700"
+                                                    ? isDarkMode
+                                                        ? "bg-blue-600 text-white"
+                                                        : "bg-blue-400 text-white"
+                                                    : isDarkMode
+                                                        ? "bg-gray-700 text-gray-100"
+                                                        : "bg-gray-200 text-gray-900"
                                                 }`}
                                         >
                                             <p>{msg.text}</p>
-                                            <span className="text-[10px] text-gray-400">{msg.timestamp}</span>
+                                            <span className="text-[10px] text-gray-300">{msg.timestamp}</span>
                                         </div>
                                     </div>
                                 ))}
@@ -110,7 +135,7 @@ export default function InquiriesSection() {
                                     value={newMessage}
                                     onChange={(e) => setNewMessage(e.target.value)}
                                     placeholder="Type a message..."
-                                    className="flex-1 border rounded-lg p-2 text-sm"
+                                    className={`flex-1 border rounded-lg p-2 text-sm ${inputBg} border-${borderColor}`}
                                     onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
                                 />
                                 <button
@@ -122,7 +147,7 @@ export default function InquiriesSection() {
                             </div>
                         </>
                     ) : (
-                        <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+                        <div className={`flex-1 flex items-center justify-center ${subTextColor} text-sm`}>
                             Select a user to start chatting
                         </div>
                     )}

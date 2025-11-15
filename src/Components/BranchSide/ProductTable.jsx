@@ -16,9 +16,7 @@ export default function ProductTable({
     const [restockQuantity, setRestockQuantity] = useState("");
     const [localProducts, setLocalProducts] = useState(products);
 
-    useEffect(() => {
-        setLocalProducts(products);
-    }, [products]);
+    useEffect(() => setLocalProducts(products), [products]);
 
     const formatPrice = (value) => {
         const num = Number(value);
@@ -50,14 +48,18 @@ export default function ProductTable({
 
             setLocalProducts((prev) =>
                 prev.map((p) =>
-                    p.product_id === restockProduct.product_id ? { ...p, stock: newStock } : p
+                    p.product_id === restockProduct.product_id
+                        ? { ...p, stock: newStock }
+                        : p
                 )
             );
 
             if (setProducts) {
                 setProducts((prev) =>
                     prev.map((p) =>
-                        p.product_id === restockProduct.product_id ? { ...p, stock: newStock } : p
+                        p.product_id === restockProduct.product_id
+                            ? { ...p, stock: newStock }
+                            : p
                     )
                 );
             }
@@ -74,85 +76,107 @@ export default function ProductTable({
     };
 
     return (
-        <div className="flex-1 flex flex-col overflow-hidden rounded-lg relative">
-            {/* Scrollable table */}
-            <div className="overflow-y-auto flex-1 rounded-lg border border-gray-200">
-                <table
-                    className={`min-w-full text-gray-800 text-center text-sm relative z-0 ${borderless ? "" : "table-auto"}`}
-                >
-                    <thead className="bg-gray-900 text-white sticky top-0 z-10 text-sm">
+        <div className="flex-1 border border-gray-200 rounded-lg overflow-hidden flex flex-col">
+
+            {/* HEADER (sticky like RestockHistory) */}
+            <div className="bg-gray-900 text-white sticky top-0 z-20 shadow-md">
+                <table className="min-w-full text-center text-sm">
+                    <thead>
                         <tr>
-                            <th className="px-4 py-2">Image</th>
-                            <th className="px-4 py-2">Name</th>
-                            {userRole === "admin" && <th className="px-4 py-3">Branch</th>}
+                            <th className="px-4 py-3 rounded-tl-lg">Image</th>
+                            <th className="px-4 py-3">Name</th>
                             <th className="px-4 py-3">Stock</th>
                             <th className="px-4 py-3">Price</th>
-                            <th className="px-4 py-3">Type</th>
-                            <th className="px-4 py-3">Action</th>
+                            <th className="px-4 py-3 rounded-tr-lg">Action</th>
                         </tr>
                     </thead>
+                </table>
+            </div>
 
+            {/* SCROLLABLE BODY (matches your RestockHistory behavior) */}
+            <div className="flex-1 overflow-y-auto max-h-[70vh]">
+                <table className="min-w-full text-gray-800 text-center text-sm border-collapse">
                     <tbody>
-                        {localProducts.map((p, i) => (
-                            <tr
-                                key={i}
-                                className={`hover:bg-gray-50 ${!borderless ? "border-b" : ""} ${userRole === "admin" && p.branch === selectedBranch ? "bg-green-50" : ""}`}
-                            >
-                                <td className="px-4 py-3">
-                                    {p.image_url ? (
-                                        <img
-                                            src={p.image_url}
-                                            alt={p.product_name}
-                                            className="w-12 h-12 object-cover rounded-lg mx-auto"
-                                        />
-                                    ) : (
-                                        <div className="w-12 h-12 bg-gray-200 flex items-center justify-center rounded-lg">
-                                            <Package size={28} className="text-gray-500" />
-                                        </div>
-                                    )}
-                                </td>
-                                <td className="px-4 py-3 font-semibold">{p.product_name}</td>
-                                {userRole === "admin" && <td className="px-4 py-3">{p.branch || "—"}</td>}
-                                <td className="px-4 py-3">
-                                    <span
-                                        className={`inline-block px-3 py-1 text-sm font-semibold rounded-lg shadow-sm ${p.stock <= p.stock_threshold
-                                            ? "bg-red-600 text-white"
-                                            : p.stock <= p.stock_threshold + 5
-                                                ? "bg-yellow-400 text-gray-800"
-                                                : "bg-green-600 text-white"
-                                            }`}
-                                        title={`Stock: ${p.stock} | Threshold: ${p.stock_threshold}`}
-                                    >
-                                        {p.stock}
-                                    </span>
-                                </td>
-                                <td className="px-4 py-3">₱{formatPrice(p.discounted_price || p.price)}</td>
-                                <td className="px-4 py-3 capitalize">{p.product_type}</td>
-                                <td className="px-4 py-3 flex justify-center gap-2">
-                                    <button
-                                        onClick={() => setSelectedProduct(p)}
-                                        className="px-4 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-                                    >
-                                        View
-                                    </button>
-                                    <button
-                                        onClick={() => setRestockProduct(p)}
-                                        className="px-4 py-1 bg-yellow-500 text-white font-semibold rounded hover:bg-yellow-400"
-                                    >
-                                        Restock
-                                    </button>
+                        {localProducts.length === 0 ? (
+                            <tr>
+                                <td className="p-6 text-gray-500" colSpan={5}>
+                                    No products available.
                                 </td>
                             </tr>
-                        ))}
+                        ) : (
+                            localProducts.map((p, i) => (
+                                <tr
+                                    key={i}
+                                    className={`hover:bg-gray-50 ${borderless ? "" : "border-b"
+                                        }`}
+                                >
+                                    <td className="px-4 py-3">
+                                        {p.image_url ? (
+                                            <img
+                                                src={p.image_url}
+                                                alt={p.product_name}
+                                                className="w-12 h-12 object-cover rounded-lg mx-auto"
+                                            />
+                                        ) : (
+                                            <div className="w-12 h-12 bg-gray-200 flex items-center justify-center rounded-lg">
+                                                <Package size={28} className="text-gray-500" />
+                                            </div>
+                                        )}
+                                    </td>
+
+                                    <td className="px-4 py-3 font-semibold">
+                                        {p.product_name}
+                                    </td>
+
+                                    <td className="px-4 py-3">
+                                        <span
+                                            className={`inline-block px-3 py-1 text-sm font-semibold rounded-lg shadow-sm ${p.stock <= p.stock_threshold
+                                                    ? "bg-red-600 text-white"
+                                                    : p.stock <= p.stock_threshold + 5
+                                                        ? "bg-yellow-400 text-gray-800"
+                                                        : "bg-green-600 text-white"
+                                                }`}
+                                        >
+                                            {p.stock}
+                                        </span>
+                                    </td>
+
+                                    <td className="px-4 py-3">
+                                        ₱{formatPrice(p.discounted_price || p.price)}
+                                    </td>
+
+                                    <td className="px-4 py-3 flex justify-center gap-2">
+                                        <button
+                                            onClick={() => setSelectedProduct(p)}
+                                            className="px-4 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                        >
+                                            View
+                                        </button>
+
+                                        {/* Hide Restock for admin */}
+                                        {userRole !== "admin" && (
+                                            <button
+                                                onClick={() => setRestockProduct(p)}
+                                                className="px-4 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-400"
+                                            >
+                                                Restock
+                                            </button>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))
+                        )}
                     </tbody>
                 </table>
             </div>
 
-            {/* Fixed/floating Restock modal */}
-            {restockProduct && (
+            {/* MODAL (only if non-admin) */}
+            {restockProduct && userRole !== "admin" && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                     <div className="bg-gray-900 text-white p-6 rounded-lg shadow-lg w-full max-w-sm">
-                        <h3 className="text-xl font-bold mb-4">Restock: {restockProduct.product_name}</h3>
+                        <h3 className="text-xl font-bold mb-4">
+                            Restock: {restockProduct.product_name}
+                        </h3>
                         <input
                             type="number"
                             min="1"

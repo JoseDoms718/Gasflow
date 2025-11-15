@@ -10,13 +10,13 @@ function Homepage() {
 
   return (
     <>
-    <NavBar/>  
-    <HeroSection/>
-    <Offersection/>
-    <Productsection/>
-    <Servicesection/>
-    <Aboutsection/>
-    <Footer/>
+      <NavBar />
+      <HeroSection />
+      <Offersection />
+      <Productsection />
+      <Servicesection />
+      <Aboutsection />
+      <Footer />
     </>
   )
 }

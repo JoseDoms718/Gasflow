@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ChevronDown, ChevronUp, ShoppingCart } from "lucide-react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
+
 export default function IncomingOrderSection() {
   const [activeTab, setActiveTab] = useState("pending");
   const [orders, setOrders] = useState([]);
@@ -10,7 +11,15 @@ export default function IncomingOrderSection() {
   const [expanded, setExpanded] = useState([]);
   const navigate = useNavigate();
 
-  // ✅ Fetch retailer's incoming orders
+  // Mapping internal status to user-friendly labels
+  const statusLabels = {
+    pending: "Pending",
+    preparing: "Preparing",
+    on_delivery: "On Delivery",
+    delivered: "Delivered",
+  };
+
+  // Fetch retailer's incoming orders
   const fetchOrders = async () => {
     try {
       const token = localStorage.getItem("token");
@@ -37,10 +46,10 @@ export default function IncomingOrderSection() {
     fetchOrders();
   }, []);
 
-  // ✅ Filter orders by active status
+  // Filter orders by active status
   const filteredOrders = orders.filter((order) => order.status === activeTab);
 
-  // ✅ Determine next status
+  // Determine next status
   const getNextStatus = (current) => {
     switch (current) {
       case "pending":
@@ -54,8 +63,7 @@ export default function IncomingOrderSection() {
     }
   };
 
-  // ✅ Update order status
-  // ✅ Update order status with toast feedback
+  // Update order status
   const updateOrderStatus = async (order_id, newStatus) => {
     try {
       const token = localStorage.getItem("token");
@@ -64,7 +72,7 @@ export default function IncomingOrderSection() {
       const actionText =
         newStatus === "cancelled"
           ? "Cancelling order..."
-          : `Updating status to "${newStatus.replace("_", " ")}"...`;
+          : `Updating status to "${statusLabels[newStatus] || newStatus}"...`;
 
       const loadingToast = toast.loading(actionText);
 
@@ -77,12 +85,11 @@ export default function IncomingOrderSection() {
       toast.dismiss(loadingToast);
 
       if (res.data.success) {
-        if (newStatus === "cancelled") {
-          toast.success("Order has been cancelled.");
-        } else {
-          toast.success(`Order marked as ${newStatus.replace("_", " ")}!`);
-        }
-
+        toast.success(
+          newStatus === "cancelled"
+            ? "Order has been cancelled."
+            : `Order marked as ${statusLabels[newStatus] || newStatus}!`
+        );
         fetchOrders();
       } else {
         toast.error(res.data.error || "Failed to update order.");
@@ -92,7 +99,6 @@ export default function IncomingOrderSection() {
       toast.error("Failed to update order.");
     }
   };
-
 
   const toggleExpand = (order_id) => {
     setExpanded((prev) =>
@@ -120,24 +126,19 @@ export default function IncomingOrderSection() {
       {/* Tabs & Walk-in Button Row */}
       <div className="flex justify-between items-center border-b mb-3 pb-1">
         <div className="flex space-x-2">
-          {[
-            { key: "pending", label: "Pending Orders" },
-            { key: "preparing", label: "Preparing" },
-            { key: "on_delivery", label: "On Delivery" },
-            { key: "delivered", label: "Completed" },
-          ].map((tab) => (
+          {["pending", "preparing", "on_delivery", "delivered"].map((key) => (
             <button
-              key={tab.key}
+              key={key}
               onClick={() => {
-                setActiveTab(tab.key);
+                setActiveTab(key);
                 setExpanded([]);
               }}
-              className={`px-4 py-2 font-semibold transition border-b-2 ${activeTab === tab.key
+              className={`px-4 py-2 font-semibold transition border-b-2 ${activeTab === key
                 ? "border-gray-900 text-gray-900"
                 : "border-transparent text-gray-500 hover:text-gray-800"
                 }`}
             >
-              {tab.label}
+              {statusLabels[key]}
             </button>
           ))}
         </div>
@@ -151,11 +152,11 @@ export default function IncomingOrderSection() {
         </button>
       </div>
 
-      {/* 🧾 Orders Container */}
+      {/* Orders Container */}
       <div className="rounded-xl p-4 overflow-y-auto shadow-inner bg-gray-100 border border-gray-300 h-[560px]">
         {filteredOrders.length === 0 ? (
           <p className="text-center py-10 text-gray-600 italic">
-            No orders available for "{activeTab === "delivered" ? "completed" : activeTab}".
+            No orders available for "{statusLabels[activeTab]}".
           </p>
         ) : (
           filteredOrders.map((order) => {
@@ -175,7 +176,9 @@ export default function IncomingOrderSection() {
                 {/* Collapsible Header */}
                 <div
                   onClick={() => toggleExpand(order.order_id)}
-                  className={`flex justify-between items-center px-5 py-3 cursor-pointer transition-colors ${isOpen ? "bg-gray-200" : "bg-gray-100 hover:bg-gray-200"
+                  className={`flex justify-between items-center px-5 py-3 cursor-pointer transition-colors ${isOpen
+                    ? "bg-gray-200"
+                    : "bg-gray-100 hover:bg-gray-200"
                     }`}
                 >
                   <div>
@@ -217,8 +220,7 @@ export default function IncomingOrderSection() {
                               {item.product_name}
                             </p>
                             <p className="text-sm text-gray-700">
-                              Qty: {item.quantity} × ₱
-                              {item.price.toLocaleString()}
+                              Qty: {item.quantity} × ₱{item.price.toLocaleString()}
                             </p>
                           </div>
                         ))}
@@ -253,14 +255,16 @@ export default function IncomingOrderSection() {
                       </div>
                     </div>
 
-                    {/* ⚙️ Action Buttons */}
+                    {/* Action Buttons */}
                     <div className="flex flex-wrap gap-2 justify-end mt-4">
                       {nextStatus && (
                         <button
-                          onClick={() => updateOrderStatus(order.order_id, nextStatus)}
+                          onClick={() =>
+                            updateOrderStatus(order.order_id, nextStatus)
+                          }
                           className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 shadow-md transition"
                         >
-                          Mark as {nextStatus.replace("_", " ")}
+                          Mark as {statusLabels[nextStatus] || nextStatus}
                         </button>
                       )}
                       {order.status !== "delivered" && (

@@ -19,7 +19,7 @@ export default function Contactsection() {
   useEffect(() => {
     const fetchBranches = async () => {
       try {
-        const res = await axios.get("http://localhost:5000/api/branches/all");
+        const res = await axios.get("http://localhost:5000/branchinfo/all");
         const branchList = res.data.branches || [];
         setBranches(branchList);
         if (branchList.length > 0) setSelectedRecipient(branchList[0].branch_name);

@@ -185,17 +185,19 @@ export default function Retailerform() {
                         onChange={handleChange}
                         required
                         disabled={!formData.municipality}
+                        className={`w-full p-4 rounded-full bg-gray-100 text-gray-900 focus:outline-none ${!formData.municipality ? "opacity-60 cursor-not-allowed" : ""
+                            }`}
                     >
                         <option value="" disabled>
                             {formData.municipality ? "Select Barangay" : "Select Municipality first"}
                         </option>
+
                         {barangays.map((b) => (
                             <option key={b.id} value={b.id}>
                                 {b.name}
                             </option>
                         ))}
                     </select>
-
 
                     {/* Contact Number */}
                     <input

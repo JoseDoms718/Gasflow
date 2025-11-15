@@ -13,6 +13,15 @@ export default function AddUserModal({
     const [municipalities, setMunicipalities] = useState([]);
     const [barangays, setBarangays] = useState([]);
 
+    // Role display mapping
+    const roleNames = {
+        users: "Users",
+        business_owner: "Business Owner",
+        branch_manager: "Branch Manager",
+        retailer: "Retailer",
+        admin: "Admin",
+    };
+
     // Load all unique municipalities from the barangays table
     useEffect(() => {
         const fetchMunicipalities = async () => {
@@ -80,7 +89,6 @@ export default function AddUserModal({
                         value={formData.municipality}
                         onChange={(e) => {
                             handleChange(e);
-                            // Reset barangay_id when municipality changes
                             handleChange({ target: { name: "barangay_id", value: "" } });
                         }}
                         required
@@ -133,7 +141,7 @@ export default function AddUserModal({
                         className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
                     />
 
-                    {/* Role Dropdown */}
+                    {/* Role Dropdown with display names */}
                     <select
                         name="role"
                         value={formData.role}
@@ -144,7 +152,7 @@ export default function AddUserModal({
                         <option value="">Select Role</option>
                         {roles.map((r, i) => (
                             <option key={i} value={r}>
-                                {r}
+                                {roleNames[r]}
                             </option>
                         ))}
                     </select>

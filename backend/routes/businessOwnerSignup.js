@@ -34,7 +34,7 @@ router.post("/", upload.array("picture"), async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    const [existing] = await db.query("SELECT * FROM email_otps WHERE email = ?", [email]);
+    const [existing] = await db.query("SELECT * FROM pending_accounts WHERE email = ?", [email]);
     if (existing.length > 0) {
       return res.status(400).json({ error: "This email is already registered or pending verification." });
     }
@@ -42,20 +42,20 @@ router.post("/", upload.array("picture"), async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const [result] = await db.query(
-      `INSERT INTO email_otps 
-        (email, name, barangay_id, contact_number, password, role) 
-        VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO pending_accounts 
+        (email, name, barangay_id, contact_number, password, role, created_at, updated_at) 
+        VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`,
       [email, name, barangay, contact_number, hashedPassword, "business_owner"]
     );
 
-    const otpId = result.insertId;
+    const pendingId = result.insertId;
 
     if (req.files && req.files.length > 0) {
       for (let file of req.files) {
         const relativePath = path.relative(path.join(__dirname, "../"), file.path).replace(/\\/g, "/");
         await db.query(
           "INSERT INTO otp_images (otp_id, type, image_url) VALUES (?, ?, ?)",
-          [otpId, "establishmentPhoto", relativePath]
+          [pendingId, "establishmentPhoto", relativePath]
         );
       }
     }
@@ -76,27 +76,27 @@ router.post("/", upload.array("picture"), async (req, res) => {
 /* -----------------------------------------
    ✅ Approve Business Owner Route
 ----------------------------------------- */
-router.post("/approve/:otpId", authenticateToken, async (req, res) => {
+router.post("/approve/:pendingId", authenticateToken, async (req, res) => {
   try {
     if (req.user.role.toLowerCase() !== "admin") {
       return res.status(403).json({ error: "Forbidden: Admins only." });
     }
 
-    const { otpId } = req.params;
-    const [otpRecords] = await db.query("SELECT * FROM email_otps WHERE id = ?", [otpId]);
-    if (otpRecords.length === 0) return res.status(404).json({ error: "Pending registration not found." });
+    const { pendingId } = req.params;
+    const [records] = await db.query("SELECT * FROM pending_accounts WHERE id = ?", [pendingId]);
+    if (records.length === 0) return res.status(404).json({ error: "Pending registration not found." });
 
-    const otpData = otpRecords[0];
+    const data = records[0];
 
     await db.query(
       `INSERT INTO users 
         (name, email, contact_number, barangay_id, password, role, type) 
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [otpData.name, otpData.email, otpData.contact_number, otpData.barangay_id, otpData.password, otpData.role, "active"]
+      [data.name, data.email, data.contact_number, data.barangay_id, data.password, data.role, "active"]
     );
 
-    // Delete the OTP record but keep images
-    await db.query("DELETE FROM email_otps WHERE id = ?", [otpId]);
+    // Delete the pending account but keep images
+    await db.query("DELETE FROM pending_accounts WHERE id = ?", [pendingId]);
 
     res.json({ success: true, message: "✅ Business owner approved successfully." });
   } catch (err) {
@@ -105,36 +105,29 @@ router.post("/approve/:otpId", authenticateToken, async (req, res) => {
   }
 });
 
-router.post("/reject/:otpId", authenticateToken, async (req, res) => {
+/* -----------------------------------------
+   ✅ Reject Business Owner Route
+----------------------------------------- */
+router.post("/reject/:pendingId", authenticateToken, async (req, res) => {
   try {
     if (req.user.role.toLowerCase() !== "admin") {
       return res.status(403).json({ error: "Forbidden: Admins only." });
     }
 
-    const { otpId } = req.params;
+    const { pendingId } = req.params;
 
-    // Fetch the OTP record first
-    const [otpRecords] = await db.query("SELECT * FROM email_otps WHERE id = ?", [otpId]);
-    if (otpRecords.length === 0) {
-      return res.status(404).json({ error: "Pending registration not found." });
-    }
+    const [records] = await db.query("SELECT * FROM pending_accounts WHERE id = ?", [pendingId]);
+    if (records.length === 0) return res.status(404).json({ error: "Pending registration not found." });
 
-    // Fetch images associated with this OTP (to delete files from disk)
-    const [images] = await db.query("SELECT * FROM otp_images WHERE otp_id = ?", [otpId]);
+    const [images] = await db.query("SELECT * FROM otp_images WHERE otp_id = ?", [pendingId]);
 
-    // Delete image files from disk
     for (let img of images) {
-      const filePath = path.join(__dirname, "../", img.image_url); // ensure path is correct
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
+      const filePath = path.join(__dirname, "../", img.image_url);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
 
-    // Delete images from DB
-    await db.query("DELETE FROM otp_images WHERE otp_id = ?", [otpId]);
-
-    // Delete the OTP record
-    await db.query("DELETE FROM email_otps WHERE id = ?", [otpId]);
+    await db.query("DELETE FROM otp_images WHERE otp_id = ?", [pendingId]);
+    await db.query("DELETE FROM pending_accounts WHERE id = ?", [pendingId]);
 
     res.json({ success: true, message: "❌ Business owner registration rejected successfully." });
   } catch (err) {
@@ -155,8 +148,8 @@ router.get("/pending-registrations", authenticateToken, async (req, res) => {
     const { role } = req.query; // optional role filter
     let query = `
       SELECT e.id, e.name, e.email, e.contact_number, e.role,
-             b.barangay_name AS barangay, b.municipality
-      FROM email_otps e
+             b.barangay_name AS barangay, b.municipality, e.created_at, e.updated_at
+      FROM pending_accounts e
       LEFT JOIN barangays b ON e.barangay_id = b.barangay_id
     `;
     const params = [];
@@ -166,14 +159,14 @@ router.get("/pending-registrations", authenticateToken, async (req, res) => {
       params.push(role.toLowerCase());
     }
 
-    const [otpRecords] = await db.query(query, params);
+    const [records] = await db.query(query, params);
 
-    for (let record of otpRecords) {
+    for (let record of records) {
       const [images] = await db.query("SELECT * FROM otp_images WHERE otp_id = ?", [record.id]);
       record.images = images;
     }
 
-    res.json({ success: true, data: otpRecords });
+    res.json({ success: true, data: records });
   } catch (err) {
     console.error("❌ Fetch pending registrations error:", err);
     res.status(500).json({ error: "Server error" });

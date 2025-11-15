@@ -7,10 +7,10 @@ const path = require("path");
 const fs = require("fs");
 const authenticateToken = require("../middleware/authtoken");
 
-// Build the upload path
+// Upload path
 const uploadPath = path.join(__dirname, "../uploads/retailer/requiredDocs");
 
-// Setup multer for dynamic file fields
+// Multer setup
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath, { recursive: true });
@@ -34,29 +34,31 @@ router.post("/", upload.any(), async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    const [existing] = await db.query("SELECT * FROM email_otps WHERE email = ?", [email]);
-    if (existing.length > 0) {
+    // Check if already pending or exists in users
+    const [existingPending] = await db.query("SELECT * FROM pending_accounts WHERE email = ?", [email]);
+    const [existingUser] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
+    if (existingPending.length > 0 || existingUser.length > 0) {
       return res.status(400).json({ error: "This email is already registered or pending verification." });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const [result] = await db.query(
-      `INSERT INTO email_otps 
-        (email, name, barangay_id, contact_number, password, role) 
-        VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO pending_accounts 
+        (email, name, barangay_id, contact_number, password, role, created_at, updated_at) 
+        VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`,
       [email, name, barangay, contact_number, hashedPassword, "retailer"]
     );
 
-    const otpId = result.insertId;
+    const pendingId = result.insertId;
 
-    // Save uploaded documents dynamically
+    // Save uploaded documents
     if (req.files && req.files.length > 0) {
       for (let file of req.files) {
         const relativePath = path.relative(path.join(__dirname, "../"), file.path).replace(/\\/g, "/");
         await db.query(
           "INSERT INTO otp_images (otp_id, type, image_url) VALUES (?, ?, ?)",
-          [otpId, file.fieldname, relativePath] // fieldname matches your permit keys
+          [pendingId, file.fieldname, relativePath]
         );
       }
     }
@@ -77,26 +79,26 @@ router.post("/", upload.any(), async (req, res) => {
 // -----------------------------
 // ✅ Approve Retailer
 // -----------------------------
-router.post("/approve/:otpId", authenticateToken, async (req, res) => {
+router.post("/approve/:pendingId", authenticateToken, async (req, res) => {
   try {
     if (req.user.role.toLowerCase() !== "admin") {
       return res.status(403).json({ error: "Forbidden: Admins only." });
     }
 
-    const { otpId } = req.params;
-    const [otpRecords] = await db.query("SELECT * FROM email_otps WHERE id = ?", [otpId]);
-    if (otpRecords.length === 0) return res.status(404).json({ error: "Pending registration not found." });
+    const { pendingId } = req.params;
+    const [pendingRecords] = await db.query("SELECT * FROM pending_accounts WHERE id = ?", [pendingId]);
+    if (pendingRecords.length === 0) return res.status(404).json({ error: "Pending registration not found." });
 
-    const otpData = otpRecords[0];
+    const pendingData = pendingRecords[0];
 
     await db.query(
       `INSERT INTO users 
         (name, email, contact_number, barangay_id, password, role, type) 
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [otpData.name, otpData.email, otpData.contact_number, otpData.barangay_id, otpData.password, otpData.role, "active"]
+      [pendingData.name, pendingData.email, pendingData.contact_number, pendingData.barangay_id, pendingData.password, pendingData.role, "active"]
     );
 
-    await db.query("DELETE FROM email_otps WHERE id = ?", [otpId]);
+    await db.query("DELETE FROM pending_accounts WHERE id = ?", [pendingId]);
 
     res.json({ success: true, message: "✅ Retailer approved successfully." });
   } catch (err) {
@@ -108,26 +110,26 @@ router.post("/approve/:otpId", authenticateToken, async (req, res) => {
 // -----------------------------
 // ✅ Reject Retailer
 // -----------------------------
-router.post("/reject/:otpId", authenticateToken, async (req, res) => {
+router.post("/reject/:pendingId", authenticateToken, async (req, res) => {
   try {
     if (req.user.role.toLowerCase() !== "admin") {
       return res.status(403).json({ error: "Forbidden: Admins only." });
     }
 
-    const { otpId } = req.params;
+    const { pendingId } = req.params;
 
-    const [otpRecords] = await db.query("SELECT * FROM email_otps WHERE id = ?", [otpId]);
-    if (otpRecords.length === 0) return res.status(404).json({ error: "Pending registration not found." });
+    const [pendingRecords] = await db.query("SELECT * FROM pending_accounts WHERE id = ?", [pendingId]);
+    if (pendingRecords.length === 0) return res.status(404).json({ error: "Pending registration not found." });
 
-    const [images] = await db.query("SELECT * FROM otp_images WHERE otp_id = ?", [otpId]);
+    const [images] = await db.query("SELECT * FROM otp_images WHERE otp_id = ?", [pendingId]);
 
     for (let img of images) {
       const filePath = path.join(__dirname, "../", img.image_url);
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
 
-    await db.query("DELETE FROM otp_images WHERE otp_id = ?", [otpId]);
-    await db.query("DELETE FROM email_otps WHERE id = ?", [otpId]);
+    await db.query("DELETE FROM otp_images WHERE otp_id = ?", [pendingId]);
+    await db.query("DELETE FROM pending_accounts WHERE id = ?", [pendingId]);
 
     res.json({ success: true, message: "❌ Retailer registration rejected successfully." });
   } catch (err) {
@@ -145,20 +147,20 @@ router.get("/pending-registrations", authenticateToken, async (req, res) => {
       return res.status(403).json({ success: false, error: "Access denied. Admins only." });
     }
 
-    const [otpRecords] = await db.query(`
-      SELECT e.id, e.name, e.email, e.contact_number, e.role,
+    const [pendingRecords] = await db.query(`
+      SELECT p.id, p.name, p.email, p.contact_number, p.role,
              b.barangay_name AS barangay, b.municipality
-      FROM email_otps e
-      LEFT JOIN barangays b ON e.barangay_id = b.barangay_id
-      WHERE LOWER(e.role) = 'retailer'
+      FROM pending_accounts p
+      LEFT JOIN barangays b ON p.barangay_id = b.barangay_id
+      WHERE LOWER(p.role) = 'retailer'
     `);
 
-    for (let record of otpRecords) {
+    for (let record of pendingRecords) {
       const [images] = await db.query("SELECT * FROM otp_images WHERE otp_id = ?", [record.id]);
       record.images = images;
     }
 
-    res.json({ success: true, data: otpRecords });
+    res.json({ success: true, data: pendingRecords });
   } catch (err) {
     console.error("❌ Fetch pending retailers error:", err);
     res.status(500).json({ error: "Server error" });

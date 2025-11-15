@@ -29,7 +29,7 @@ async function sendEmail(to, subject, text) {
 
     // ✅ Send the email
     const info = await transporter.sendMail({
-      from: `"Solane LPG" <${process.env.EMAIL_USER}>`,
+      from: `"Gasflow" <${process.env.EMAIL_USER}>`,
       to,
       subject,
       text,

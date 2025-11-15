@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { X, Pencil, Check } from "lucide-react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
+
 export default function ViewUserModal({
     viewUser,
     setViewUser,
@@ -11,15 +12,10 @@ export default function ViewUserModal({
     setEditMode,
     editFields,
     setEditFields,
-    editPassword,
-    setEditPassword,
-    currentPassword,
-    setCurrentPassword,
     fetchUsers
 }) {
     const [barangays, setBarangays] = useState([]);
 
-    // Load barangays on open + municipality change
     useEffect(() => {
         if (!viewUser) return;
 
@@ -37,8 +33,6 @@ export default function ViewUserModal({
         setViewUser(null);
         setEditFields({});
         setEditMode({});
-        setEditPassword("");
-        setCurrentPassword("");
         setBarangays([]);
     };
 
@@ -51,18 +45,8 @@ export default function ViewUserModal({
             }
         });
 
-        // Ensure barangay_id is saved properly
-        if (
-            editFields.barangay_id &&
-            editFields.barangay_id !== viewUser.barangay_id
-        ) {
+        if (editFields.barangay_id && editFields.barangay_id !== viewUser.barangay_id) {
             updates.barangay_id = editFields.barangay_id;
-        }
-
-        if (editPassword || currentPassword) {
-            if (editPassword !== currentPassword)
-                return toast.error("Passwords do not match");
-            updates.password = editPassword;
         }
 
         if (Object.keys(updates).length > 0) {
@@ -77,11 +61,14 @@ export default function ViewUserModal({
     const getValue = (field) =>
         editFields[field] !== undefined ? editFields[field] : viewUser[field];
 
-    const field = (label, key, input) => (
+    const field = (label, key, input, noEdit = false) => (
         <div className="flex items-center gap-2 relative">
             <span className="font-semibold">{label}:</span>
 
-            {editMode[key] ? (
+            {/* If field is non-editable and always interactive (like slider), show input directly */}
+            {noEdit ? (
+                <div>{input}</div>
+            ) : editMode[key] ? (
                 <div className="flex items-center gap-2">
                     {input}
                     <button
@@ -95,7 +82,8 @@ export default function ViewUserModal({
                 <span className="ml-1 text-gray-200">{getValue(key)}</span>
             )}
 
-            {!editMode[key] && (
+            {/* SHOW PENCIL ONLY WHEN editable and not in edit mode */}
+            {!noEdit && !editMode[key] && (
                 <button
                     className="ml-2 text-gray-400 hover:text-blue-400"
                     onClick={() => setEditMode(m => ({ ...m, [key]: true }))}
@@ -135,7 +123,6 @@ export default function ViewUserModal({
                         </select>
                     ))}
 
-                    {/* Municipality */}
                     {field("Municipality", "municipality", (
                         <select
                             className="bg-gray-800 px-2 py-1 rounded border border-gray-600"
@@ -144,7 +131,7 @@ export default function ViewUserModal({
                                 setEditFields(f => ({
                                     ...f,
                                     municipality: e.target.value,
-                                    barangay_id: "" // reset barangay ID
+                                    barangay_id: ""
                                 }));
                             }}
                         >
@@ -153,7 +140,6 @@ export default function ViewUserModal({
                         </select>
                     ))}
 
-                    {/* Barangay */}
                     {field("Barangay", "barangay_id", (
                         <select
                             className="bg-gray-800 px-2 py-1 rounded border border-gray-600"
@@ -175,25 +161,27 @@ export default function ViewUserModal({
                         />
                     ))}
 
-                    {/* ✅ Type toggle below Email */}
+                    {/* ACCOUNT STATUS — ALWAYS INTERACTIVE, NO PENCIL, NO CHECK */}
                     {field("Account Status", "type", (
-                        <div className="flex items-center gap-2">
-                            <button
-                                className={`px-3 py-1 rounded text-sm ${getValue("type") === "active"
-                                    ? "bg-green-600 text-white"
-                                    : "bg-red-600 text-white"
-                                    }`}
-                                onClick={() => {
+                        <label className="relative inline-flex cursor-pointer items-center h-full">
+                            <input
+                                type="checkbox"
+                                className="peer sr-only"
+                                checked={getValue("type") === "active"}
+                                onChange={() =>
                                     setEditFields(f => ({
                                         ...f,
                                         type: getValue("type") === "active" ? "inactive" : "active"
-                                    }));
-                                }}
-                            >
-                                {getValue("type") === "active" ? "Active" : "Inactive"}
-                            </button>
-                        </div>
-                    ))}
+                                    }))
+                                }
+                            />
+                            <div className="peer h-6 w-12 rounded-full bg-red-600 flex items-center
+            after:absolute after:top-0.5 after:left-[2px]
+            after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all
+            peer-checked:bg-green-600 peer-checked:after:translate-x-6">
+                            </div>
+                        </label>
+                    ), true)}
 
                     {field("Contact", "contact_number", (
                         <input
@@ -203,26 +191,6 @@ export default function ViewUserModal({
                         />
                     ))}
 
-                </div>
-
-                <div className="flex flex-col gap-2 bg-gray-800 p-4 rounded-lg mt-6">
-                    <span className="font-semibold">Change Password:</span>
-
-                    <input
-                        type="password"
-                        className="bg-gray-900 border border-gray-600 rounded px-3 py-2"
-                        placeholder="New Password"
-                        value={editPassword}
-                        onChange={(e) => setEditPassword(e.target.value)}
-                    />
-
-                    <input
-                        type="password"
-                        className="bg-gray-900 border border-gray-600 rounded px-3 py-2"
-                        placeholder="Confirm Password"
-                        value={currentPassword}
-                        onChange={(e) => setCurrentPassword(e.target.value)}
-                    />
                 </div>
 
                 <div className="flex justify-end gap-4 mt-4">

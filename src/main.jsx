@@ -17,6 +17,7 @@ import Contactpage from "./Pages/User/Contactpage";
 import Servicespage from "./Pages/User/Servicespage";
 import Loginpage from "./Pages/Loginpage";
 import Buypage from "./Pages/User/Buypage";
+import Inquirypage from "./Pages/User/Inquirypage";
 
 // Branch Manager
 import BranchOrderpage from "./Pages/BranchManager/BranchOrderPage";
@@ -60,6 +61,7 @@ createRoot(document.getElementById("root")).render(
         <Route path="/orders" element={<Orderspage />} />
         <Route path="/contact" element={<Contactpage />} />
         <Route path="/services" element={<Servicespage />} />
+        <Route path="/inquiry" element={<Inquirypage />} />
 
         {/* BRANCH MANAGER */}
         <Route path="/branchorder" element={<BranchOrderpage />} />
