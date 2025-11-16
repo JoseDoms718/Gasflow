@@ -1030,7 +1030,7 @@ router.put(
           console.log("⏳ Deducting inventory for order:", id);
 
           const [items] = await connection.query(
-            "SELECT product_id, quantity FROM order_items WHERE order_id = ?",
+            "SELECT product_id, quantity, type FROM order_items WHERE order_id = ?",
             [id]
           );
 
@@ -1041,37 +1041,45 @@ router.put(
             return res.status(404).json({ success: false, error: "No items found for this order." });
           }
 
-          const productIds = items.map((it) => it.product_id);
-          const placeholders = productIds.map(() => "?").join(",");
-          const [inventoryRows] = await connection.query(
-            `SELECT product_id, stock FROM inventory WHERE product_id IN (${placeholders})`,
-            productIds
-          );
+          // Only consider non-refill items for stock deduction
+          const stockItems = items.filter((i) => i.type !== "refill");
 
-          const inventoryMap = {};
-          for (const r of inventoryRows) inventoryMap[r.product_id] = Number(r.stock);
+          const productIds = stockItems.map((it) => it.product_id);
+          if (productIds.length) {
+            const placeholders = productIds.map(() => "?").join(",");
+            const [inventoryRows] = await connection.query(
+              `SELECT product_id, stock FROM inventory WHERE product_id IN (${placeholders})`,
+              productIds
+            );
 
-          for (const item of items) {
-            const avail = inventoryMap[item.product_id] ?? 0;
-            if (avail < Number(item.quantity)) {
-              console.error("❌ Insufficient stock for product:", item.product_id);
-              await connection.rollback();
-              connection.release();
-              return res.status(400).json({
-                success: false,
-                error: `Insufficient stock for product_id ${item.product_id}. Only ${avail} left.`,
-              });
+            const inventoryMap = {};
+            for (const r of inventoryRows) inventoryMap[r.product_id] = Number(r.stock);
+
+            for (const item of stockItems) {
+              const avail = inventoryMap[item.product_id] ?? 0;
+              if (avail < Number(item.quantity)) {
+                console.error("❌ Insufficient stock for product:", item.product_id);
+                await connection.rollback();
+                connection.release();
+                return res.status(400).json({
+                  success: false,
+                  error: `Insufficient stock for product_id ${item.product_id}. Only ${avail} left.`,
+                });
+              }
             }
-          }
 
-          for (const item of items) {
-            console.log("➖ Deducting", item.quantity, "from product", item.product_id);
-            await adjustInventory(item.product_id, -Number(item.quantity), connection);
-          }
+            for (const item of stockItems) {
+              console.log("➖ Deducting", item.quantity, "from product", item.product_id);
+              await adjustInventory(item.product_id, -Number(item.quantity), connection);
+            }
 
-          await connection.query("UPDATE orders SET inventory_deducted = 1 WHERE order_id = ?", [id]);
-          console.log("✅ Inventory deducted for order:", id);
+            await connection.query("UPDATE orders SET inventory_deducted = 1 WHERE order_id = ?", [id]);
+            console.log("✅ Inventory deducted for order:", id);
+          } else {
+            console.log("ℹ️ No non-refill items to deduct for this order");
+          }
         }
+
 
         // Transition TO cancelled from 'preparing' => restore stock
         if (status === "cancelled" && currentStatus === "preparing" && inventoryDeducted) {
