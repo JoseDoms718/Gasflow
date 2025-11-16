@@ -737,11 +737,17 @@ router.get(
         [seller_id]
       );
 
-      const grouped = groupOrders(rows, (row) => ({
+      // ALWAYS format image URLs before grouping
+      const rowsWithImages = rows.map((row) => ({
+        ...row,
+        image_url: row.image_url ? formatImageUrl(row.image_url) : null,
+      }));
+
+      const grouped = groupOrders(rowsWithImages, (row) => ({
         product_id: row.product_id,
         product_name: row.product_name,
         product_description: row.product_description,
-        image_url: formatImageUrl(row.image_url),
+        image_url: row.image_url, // already formatted
         quantity: row.quantity,
         price: row.price,
         buyer_name: row.buyer_name,

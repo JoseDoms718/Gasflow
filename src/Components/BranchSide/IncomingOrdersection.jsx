@@ -1,3 +1,5 @@
+// ---- FULL COMPONENT START ----
+
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronDown, ChevronUp, ShoppingCart } from "lucide-react";
@@ -7,13 +9,6 @@ import { io } from "socket.io-client";
 
 const SOCKET_URL = "http://localhost:5000";
 const API_BASE = "http://localhost:5000";
-
-// helper to ensure proper absolute path
-const normalizeImageUrl = (url) => {
-  if (!url) return null;
-  if (url.startsWith("http")) return url;
-  return `${API_BASE}/${url.replace(/^\/+/, "")}`;
-};
 
 export default function IncomingOrderSection() {
   const [activeTab, setActiveTab] = useState("pending");
@@ -30,258 +25,300 @@ export default function IncomingOrderSection() {
     delivered: "Delivered",
   };
 
-  // build cachedImage for each item when fetching
   const fetchOrders = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      if (!token) {
-        toast.error("Please log in to view incoming orders.");
-        setOrders([]);
-        setLoading(false);
-        return;
-      }
+      if (!token) throw new Error("Not logged in");
 
       const res = await axios.get(`${API_BASE}/orders/retailer-orders`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       if (res.data.success && Array.isArray(res.data.orders)) {
-        const mapped = res.data.orders.map((o) => ({
-          ...o,
-          items: (o.items || []).map((it, idx) => ({
-            ...it,
-            // cachedImage includes timestamp so first load is fresh
-            cachedImage: it.image_url ? `${normalizeImageUrl(it.image_url)}?v=${Date.now()}-${idx}` : null,
-            image_url: it.image_url ? normalizeImageUrl(it.image_url) : null,
-          })),
-        }));
-
-        setOrders(mapped);
+        setOrders(res.data.orders);
       } else {
         toast.error("Failed to fetch orders.");
       }
     } catch (err) {
-      console.error("❌ Error fetching retailer orders:", err);
-      toast.error("Error loading orders.");
+      console.error(err);
+      toast.error(err.message || "Error fetching orders.");
     } finally {
       setLoading(false);
     }
   };
 
-  // merges existing order and updatedOrder; preserves cachedImage unless server image_url changed
-  const mergeOrders = (existing, updated) => {
-    const merged = { ...existing, ...updated };
-    // merge items by product_id (or index fallback)
-    const existingItems = existing.items || [];
-    const updatedItems = updated.items || [];
-
-    const itemsMap = existingItems.reduce((acc, it) => {
-      const key = it.product_id ?? `${it.product_name}-${Math.random()}`;
-      acc[key] = { ...it };
-      return acc;
-    }, {});
-
-    updatedItems.forEach((it, idx) => {
-      const key = it.product_id ?? `${it.product_name}-${idx}`;
-      const normalizedUrl = it.image_url ? normalizeImageUrl(it.image_url) : null;
-      if (itemsMap[key]) {
-        // if server sent a new image_url and it differs, update cachedImage with new timestamp to force reload
-        if (normalizedUrl && normalizedUrl !== itemsMap[key].image_url) {
-          itemsMap[key] = {
-            ...itemsMap[key],
-            ...it,
-            image_url: normalizedUrl,
-            cachedImage: `${normalizedUrl}?v=${Date.now()}`, // force reload
-          };
-        } else {
-          // preserve cachedImage if present, otherwise set normalized url + timestamp
-          itemsMap[key] = {
-            ...itemsMap[key],
-            ...it,
-            image_url: itemsMap[key].image_url || normalizedUrl,
-            cachedImage: itemsMap[key].cachedImage || (normalizedUrl ? `${normalizedUrl}?v=${Date.now()}` : null),
-          };
-        }
-      } else {
-        // new item — set cachedImage
-        itemsMap[key] = {
-          ...it,
-          image_url: normalizedUrl,
-          cachedImage: normalizedUrl ? `${normalizedUrl}?v=${Date.now()}` : null,
-        };
-      }
-    });
-
-    merged.items = Object.values(itemsMap);
-    return merged;
-  };
+  const mergeOrders = (existing, updated) => ({
+    ...existing,
+    ...updated,
+  });
 
   useEffect(() => {
-    fetchOrders();
-
     const token = localStorage.getItem("token");
     socketRef.current = io(SOCKET_URL, { auth: { token }, transports: ["websocket"] });
 
-    socketRef.current.on("connect", () => console.log("Socket connected", socketRef.current.id));
-    socketRef.current.on("connect_error", (err) => console.warn("Socket connect_error", err?.message || err));
-
     socketRef.current.on("order-updated", (updatedOrder) => {
-      console.info("socket order-updated:", updatedOrder); // <-- check in console what the server sends
       setOrders((prev) => {
         const idx = prev.findIndex((o) => o.order_id === updatedOrder.order_id);
         if (idx >= 0) {
-          const existing = prev[idx];
-          const merged = mergeOrders(existing, updatedOrder);
+          const merged = mergeOrders(prev[idx], updatedOrder);
           const copy = [...prev];
           copy[idx] = merged;
           return copy;
         }
-        // new order: ensure items have cachedImage
-        const prepared = {
-          ...updatedOrder,
-          items: (updatedOrder.items || []).map((it, i) => ({
-            ...it,
-            image_url: it.image_url ? normalizeImageUrl(it.image_url) : null,
-            cachedImage: it.image_url ? `${normalizeImageUrl(it.image_url)}?v=${Date.now()}-${i}` : null,
-          })),
-        };
-        return [prepared, ...prev];
+        return [updatedOrder, ...prev];
       });
     });
 
-    // you may also listen to "newOrder" event if backend emits that:
     socketRef.current.on("newOrder", (order) => {
-      console.info("socket newOrder:", order);
       toast.success(`New Order #${order.order_id} received!`);
-
       fetchOrders();
     });
 
-
-    return () => {
-      socketRef.current?.off("order-updated");
-      socketRef.current?.off("newOrder");
-      socketRef.current?.disconnect();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => socketRef.current?.disconnect();
   }, []);
 
-  const getNextStatus = (current) => {
-    switch (current) {
-      case "pending": return "preparing";
-      case "preparing": return "on_delivery";
-      case "on_delivery": return "delivered";
-      default: return null;
-    }
-  };
+  useEffect(() => {
+    fetchOrders();
+  }, [activeTab]);
+
+  const getNextStatus = (current) =>
+  ({
+    pending: "preparing",
+    preparing: "on_delivery",
+    on_delivery: "delivered",
+  }[current] || null);
 
   const updateOrderStatus = async (order_id, newStatus) => {
+    const token = localStorage.getItem("token");
+    if (!token) return toast.error("Please log in first.");
+
+    const loadingToast = toast.loading(`Updating to ${statusLabels[newStatus]}...`);
+
+    const snapshot = [...orders];
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.order_id === order_id ? { ...o, status: newStatus } : o
+      )
+    );
+
     try {
-      const token = localStorage.getItem("token");
-      if (!token) return toast.error("Please log in first.");
-
-      const loadingToast = toast.loading(newStatus === "cancelled" ? "Cancelling..." : `Updating to ${statusLabels[newStatus]}...`);
-      const snapshot = [...orders];
-      setOrders((prev) => prev.map((o) => (o.order_id === order_id ? { ...o, status: newStatus } : o)));
-
-      const res = await axios.put(`${API_BASE}/orders/retailer/update-status/${order_id}`,
+      const res = await axios.put(
+        `${API_BASE}/orders/retailer/update-status/${order_id}`,
         { status: newStatus },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
       toast.dismiss(loadingToast);
+
       if (!res.data?.success) {
-        setOrders(snapshot); // revert
+        setOrders(snapshot);
         toast.error(res.data?.error || "Failed to update order");
         return;
       }
+
       toast.success("Order updated");
-      // backend will emit socket event — merge handler will run
     } catch (err) {
-      console.error("updateOrderStatus error", err);
+      console.error(err);
+      setOrders(snapshot);
+      toast.dismiss(loadingToast);
       toast.error("Failed to update order");
     }
   };
 
-  const toggleExpand = (order_id) => {
-    setExpanded((prev) => (prev.includes(order_id) ? prev.filter((x) => x !== order_id) : [...prev, order_id]));
-  };
+  const toggleExpand = (order_id) =>
+    setExpanded((prev) =>
+      prev.includes(order_id)
+        ? prev.filter((x) => x !== order_id)
+        : [...prev, order_id]
+    );
 
   const filteredOrders = orders.filter((o) => o.status === activeTab);
 
-  if (loading) return <div className="p-6 w-full h-[600px] flex items-center justify-center"><p className="text-gray-500">Loading orders...</p></div>;
+  if (loading)
+    return (
+      <div className="p-6 w-full h-[600px] flex items-center justify-center">
+        <p className="text-gray-500">Loading orders...</p>
+      </div>
+    );
 
   return (
     <div className="p-6 w-full flex flex-col min-h-[80vh]">
+
+      {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Order Management</h2>
       </div>
 
+      {/* Tabs */}
       <div className="flex justify-between items-center border-b mb-3 pb-1">
         <div className="flex space-x-2">
           {["pending", "preparing", "on_delivery", "delivered"].map((k) => (
-            <button key={k} onClick={() => { setActiveTab(k); setExpanded([]); }}
-              className={`px-4 py-2 font-semibold transition border-b-2 ${activeTab === k ? "border-gray-900 text-gray-900" : "border-transparent text-gray-500 hover:text-gray-800"}`}>
+            <button
+              key={k}
+              onClick={() => {
+                setActiveTab(k);
+                setExpanded([]);
+              }}
+              className={`px-4 py-2 font-semibold border-b-2 transition ${activeTab === k
+                ? "border-gray-900 text-gray-900"
+                : "border-transparent text-gray-500 hover:text-gray-800"
+                }`}
+            >
               {statusLabels[k]}
             </button>
           ))}
         </div>
-        <button onClick={() => navigate("/walkinorder")} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center gap-2 shadow-md">
+
+        <button
+          onClick={() => navigate("/walkinorder")}
+          className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center gap-2 shadow-md"
+        >
           <ShoppingCart size={20} /> Walk-in Order
         </button>
       </div>
 
+      {/* ORDER LIST */}
       <div className="rounded-xl p-4 overflow-y-auto shadow-inner bg-gray-100 border border-gray-300 h-[560px]">
         {filteredOrders.length === 0 ? (
-          <p className="text-center py-10 text-gray-600 italic">No "{statusLabels[activeTab]}" orders.</p>
+          <p className="text-center py-10 text-gray-600 italic">
+            No "{statusLabels[activeTab]}" orders.
+          </p>
         ) : (
           filteredOrders.map((order) => {
             const open = expanded.includes(order.order_id);
             const nextStatus = getNextStatus(order.status);
-            const first = order.items?.[0]?.product_name || "Order";
 
             return (
-              <div key={order.order_id} className={`rounded-xl overflow-hidden mb-4 border border-gray-300 bg-white ${open ? "shadow-2xl" : "shadow-md hover:shadow-xl"}`}>
-                <div onClick={() => toggleExpand(order.order_id)} className={`flex justify-between items-center px-5 py-3 cursor-pointer ${open ? "bg-gray-200" : "bg-gray-100 hover:bg-gray-200"}`}>
+              <div
+                key={order.order_id}
+                className={`rounded-xl overflow-hidden mb-4 border bg-white ${open ? "shadow-2xl" : "shadow-md hover:shadow-xl"
+                  }`}
+              >
+                {/* COLLAPSE HEADER */}
+                <div
+                  onClick={() => toggleExpand(order.order_id)}
+                  className={`flex justify-between items-center px-5 py-3 cursor-pointer ${open ? "bg-gray-200" : "bg-gray-100 hover:bg-gray-200"
+                    }`}
+                >
                   <div>
-                    <p className="font-bold text-gray-900">{first}</p>
-                    <p className="text-sm text-gray-700">Buyer: <span className="font-bold">{order.buyer_name}</span></p>
+                    <p className="font-bold text-gray-900">
+                      {order.items?.[0]?.product_name || "Order"}
+                    </p>
+                    <p className="text-sm text-gray-700">
+                      Buyer: <span className="font-bold">{order.buyer_name}</span>
+                    </p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <p className="text-blue-600 font-extrabold">₱{order.total_price?.toLocaleString()}</p>
+                    <p className="text-blue-600 font-extrabold">
+                      ₱{order.total_price?.toLocaleString()}
+                    </p>
                     {open ? <ChevronUp /> : <ChevronDown />}
                   </div>
                 </div>
 
+                {/* EXPANDED CONTENT */}
                 {open && (
                   <div className="p-5 border-t border-gray-200 bg-gray-50">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="flex flex-col items-center border rounded-lg p-3 bg-white shadow-sm">
-                        {order.items?.map((it, idx) => (
-                          <div key={`${order.order_id}-${it.product_id ?? idx}`} className="flex flex-col items-center mb-2">
-                            {it.cachedImage ? (
-                              <img src={it.cachedImage} className="w-24 h-24 object-cover rounded mb-2 shadow" alt={it.product_name} />
-                            ) : it.image_url ? (
-                              <img src={it.image_url} className="w-24 h-24 object-cover rounded mb-2 shadow" alt={it.product_name} />
-                            ) : null}
-                            <p className="font-semibold text-center">{it.product_name}</p>
-                            <p className="text-sm text-gray-700">Qty: {it.quantity} × ₱{Number(it.price).toLocaleString()}</p>
+
+
+                      {/* LEFT SIDE — FIXED LAYOUT */}
+                      <div className="w-full h-[350px] overflow-y-auto rounded-xl bg-white shadow-md p-4 scroll-smooth snap-y snap-mandatory space-y-4">
+                        {order.items?.map((item, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-start gap-4 p-4 snap-start min-h-[150px] bg-gray-50 rounded-lg shadow-sm"
+                          >
+                            {/* PRODUCT IMAGE */}
+                            <img
+                              src={item.image_url}
+                              alt={item.product_name}
+                              className="w-32 h-32 object-cover rounded-lg flex-shrink-0"
+                            />
+
+                            {/* TEXT INFO */}
+                            <div className="flex flex-col justify-between">
+                              <h3 className="text-lg font-semibold text-gray-900">{item.product_name}</h3>
+
+                              <p className="text-sm text-gray-700 mt-1">
+                                Qty: <span className="font-bold">{item.quantity}</span> × ₱{item.price.toLocaleString()}
+                              </p>
+
+                              <p className="text-blue-600 font-semibold mt-1">
+                                Subtotal: ₱{(item.quantity * item.price).toLocaleString()}
+                              </p>
+                            </div>
                           </div>
                         ))}
                       </div>
 
-                      <div className="text-sm text-gray-800 space-y-2">
-                        <p><span className="font-semibold">Address:</span> {order.barangay}, {order.municipality}</p>
-                        <p><span className="font-semibold">Email:</span> {order.buyer_email}</p>
-                        <p><span className="font-semibold">Contact:</span> {order.contact_number}</p>
-                        <p><span className="font-semibold">Ordered At:</span> {order.ordered_at ? new Date(order.ordered_at).toLocaleString() : "—"}</p>
+                      {/* RIGHT SIDE — ORDER DETAILS */}
+                      <div className="bg-white rounded-xl shadow-md border p-6 text-sm text-gray-800 space-y-4">
+                        <div>
+                          <p className="font-semibold text-gray-900">
+                            Delivery Address
+                          </p>
+                          <p className="text-gray-700">
+                            {order.barangay}, {order.municipality}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="font-semibold text-gray-900">Email</p>
+                          <p className="text-gray-700">{order.buyer_email}</p>
+                        </div>
+
+                        <div>
+                          <p className="font-semibold text-gray-900">
+                            Contact Number
+                          </p>
+                          <p className="text-gray-700">{order.contact_number}</p>
+                        </div>
+
+                        <div>
+                          <p className="font-semibold text-gray-900">
+                            Ordered At
+                          </p>
+                          <p className="text-gray-700">
+                            {order.ordered_at
+                              ? new Date(order.ordered_at).toLocaleString()
+                              : "—"}
+                          </p>
+                        </div>
+
+                        <hr className="border-gray-300" />
+
+                        <div>
+                          <p className="font-semibold text-gray-900">
+                            Total Amount
+                          </p>
+                          <p className="text-xl font-bold text-blue-700">
+                            ₱{order.total_price?.toLocaleString()}
+                          </p>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex justify-end gap-2 mt-4">
-                      {nextStatus && <button onClick={() => updateOrderStatus(order.order_id, nextStatus)} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Mark as {statusLabels[nextStatus]}</button>}
-                      {order.status !== "delivered" && <button onClick={() => updateOrderStatus(order.order_id, "cancelled")} className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">Cancel</button>}
+                    {/* ACTION BUTTONS */}
+                    <div className="flex justify-end gap-2 mt-5">
+                      {nextStatus && (
+                        <button
+                          onClick={() => updateOrderStatus(order.order_id, nextStatus)}
+                          className="px-5 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 shadow-sm transition"
+                        >
+                          Mark as {statusLabels[nextStatus]}
+                        </button>
+                      )}
+
+                      {order.status !== "delivered" && (
+                        <button
+                          onClick={() => updateOrderStatus(order.order_id, "cancelled")}
+                          className="px-5 py-2 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 shadow-sm transition"
+                        >
+                          Cancel
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -293,3 +330,5 @@ export default function IncomingOrderSection() {
     </div>
   );
 }
+
+// ---- FULL COMPONENT END ----

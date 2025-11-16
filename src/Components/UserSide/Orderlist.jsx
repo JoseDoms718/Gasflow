@@ -105,31 +105,23 @@ export default function Orderlist({ role: propRole }) {
   }, [fetchOrders]);
 
   // 🔹 Setup Socket.IO for real-time updates
+  // 🔹 Setup Socket.IO for real-time updates (clean + safe)
   useEffect(() => {
     const socket = io(SOCKET_URL);
 
     socket.on("newOrder", (order) => {
-      if (!user?.id) return;
-
-      if (isRetailer && order.seller_id !== user.id) return;
-
-      setOrders((prev) => {
-        if (prev.some((o) => o.order_id === order.order_id)) return prev;
-        return [order, ...prev];
-      });
-
-      toast.success(`📦 New order #${order.order_id} received!`);
+      toast.success(`📦 New Order #${order.order_id} received!`);
+      fetchOrders();   // reload from backend
     });
 
     socket.on("order-updated", (order) => {
-      setOrders((prev) =>
-        prev.map((o) => (o.order_id === order.order_id ? order : o))
-      );
       toast.success(`Order #${order.order_id} updated!`);
+      fetchOrders();   // reload from backend
     });
 
     return () => socket.disconnect();
-  }, [user, isRetailer]);
+  }, [fetchOrders]);
+
 
   const toggleOrder = (id) => setExpandedOrder(expandedOrder === id ? null : id);
 

@@ -1,6 +1,6 @@
 import { FaUserCircle } from "react-icons/fa";
 import { useState, useRef, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { io } from "socket.io-client";
 import LogoBlue from "../../assets/Design/LogoBlue.png";
@@ -10,6 +10,7 @@ const SOCKET_URL = "http://localhost:5000"; // adjust if needed
 
 export default function NavBar() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem("user");
     return savedUser ? JSON.parse(savedUser) : null;
@@ -65,21 +66,26 @@ export default function NavBar() {
     });
 
     socketRef.current.on("order-updated", (updatedOrder) => {
-      // Optionally filter by user.id if needed
-      setNewOrderNotification(true);
+      // Only trigger notification if not on /orders
+      if (location.pathname !== "/orders") {
+        setNewOrderNotification(true);
+      }
     });
 
     return () => socketRef.current.disconnect();
-  }, [user]);
+  }, [user, location.pathname]);
+
+  /* Clear notification if navigating to Orders */
+  useEffect(() => {
+    if (location.pathname === "/orders") {
+      setNewOrderNotification(false);
+    }
+  }, [location.pathname]);
 
   const handleNav = (e, path) => {
     if (!user && path !== "/" && path !== "/login") {
       e.preventDefault();
       navigate("/login");
-    }
-    // Clear notification if going to Orders page
-    if (path === "/orders") {
-      setNewOrderNotification(false);
     }
   };
 

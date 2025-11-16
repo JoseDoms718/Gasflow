@@ -70,45 +70,54 @@ export default function Sidebar({ role }) {
 
     // Listen for new orders
     socket.on("newOrder", (order) => {
-      if (order.status === "pending") setNewOrdersCount((prev) => prev + 1);
+      // Only increment badge if user is not on their orders page
+      const ordersPath = userRole === "admin"
+        ? "/adminorders"
+        : userRole === "branch_manager"
+          ? "/branchorder"
+          : userRole === "retailer"
+            ? "/retailerorder"
+            : "";
+      if (location.pathname !== ordersPath && order.status === "pending") {
+        setNewOrdersCount((prev) => prev + 1);
+      }
     });
 
-
     return () => socket.disconnect();
-  }, [token]);
+  }, [token, location.pathname, userRole]);
+
+  // Clear badge automatically if user navigates to orders page
+  useEffect(() => {
+    const ordersPath = userRole === "admin"
+      ? "/adminorders"
+      : userRole === "branch_manager"
+        ? "/branchorder"
+        : userRole === "retailer"
+          ? "/retailerorder"
+          : "";
+    if (location.pathname === ordersPath) {
+      setNewOrdersCount(0);
+    }
+  }, [location.pathname, userRole]);
 
   // Role-based menus
   const roleMenus = {
     admin: [
-      {
-        to: "/admininventory",
-        label: "Products & Inventory",
-        icon: <Package className="w-5 h-5" />,
-      },
+      { to: "/admininventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
       { to: "/adminsalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
       { to: "/adminmanageuser", label: "Manage Users", icon: <Users className="w-5 h-5" /> },
       { to: "/adminmaintenance", label: "Maintenance & Updates", icon: <Settings className="w-5 h-5" /> },
       { to: "/admininquiries", label: "Inquiries", icon: <FileText className="w-5 h-5" /> },
     ],
     branch_manager: [
-      {
-        to: "/branchorder",
-        label: "Orders",
-        icon: <ShoppingCart className="w-5 h-5" />,
-        showBadge: true,
-      },
+      { to: "/branchorder", label: "Orders", icon: <ShoppingCart className="w-5 h-5" />, showBadge: true },
       { to: "/branchinventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
       { to: "/branchsalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
       { to: "/branchretailer", label: "Manage Retailers", icon: <Users className="w-5 h-5" /> },
       { to: "/branchinquiries", label: "Inquiries", icon: <FileText className="w-5 h-5" /> },
     ],
     retailer: [
-      {
-        to: "/retailerorder",
-        label: "Orders",
-        icon: <ShoppingCart className="w-5 h-5" />,
-        showBadge: true,
-      },
+      { to: "/retailerorder", label: "Orders", icon: <ShoppingCart className="w-5 h-5" />, showBadge: true },
       { to: "/retailerinventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
       { to: "/retailersalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
     ],
@@ -139,8 +148,7 @@ export default function Sidebar({ role }) {
                 <li key={item.to} className="relative">
                   <Link
                     to={item.to}
-                    className={`flex items-center gap-3 p-3 rounded-lg transition ${isActive(item.to) ? "bg-gray-800" : "hover:bg-gray-800 hover:text-blue-400"
-                      }`}
+                    className={`flex items-center gap-3 p-3 rounded-lg transition ${isActive(item.to) ? "bg-gray-800" : "hover:bg-gray-800 hover:text-blue-400"}`}
                   >
                     {item.icon}
                     {item.label}
