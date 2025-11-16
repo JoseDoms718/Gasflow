@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Package, ShoppingCart } from "lucide-react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
+import BranchMarketBuy from "../Modals/BranchMarketBuy";
 
 export default function BranchMarketSection() {
   const [user, setUser] = useState(null);
@@ -9,8 +10,6 @@ export default function BranchMarketSection() {
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [selectedMunicipality, setSelectedMunicipality] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [buyQuantity, setBuyQuantity] = useState(1);
-  const [isViewing, setIsViewing] = useState(false);
 
   const marinduqueMunicipalities = [
     "All",
@@ -69,30 +68,6 @@ export default function BranchMarketSection() {
       setFilteredProducts(filtered);
     }
   }, [selectedMunicipality, products, user]);
-
-  const handleBuyProduct = () => {
-    if (!selectedProduct || buyQuantity <= 0) return toast.error("⚠️ Invalid quantity");
-    const token = localStorage.getItem("token");
-    if (!token) return toast.error("You must be logged in to buy.");
-
-    axios
-      .post(
-        "http://localhost:5000/orders/create",
-        { product_id: selectedProduct.product_id, quantity: buyQuantity },
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
-      .then((res) => {
-        if (res.status === 200) {
-          toast.success(`✅ Successfully bought ${buyQuantity}x ${selectedProduct.product_name}!`);
-          setSelectedProduct(null);
-          setBuyQuantity(1);
-        }
-      })
-      .catch((err) => {
-        console.error("❌ Purchase failed:", err);
-        toast.error("Failed to complete purchase.");
-      });
-  };
 
   const formatPrice = (value) => {
     const num = Number(value);
@@ -161,19 +136,7 @@ export default function BranchMarketSection() {
                     <td className="px-4 py-3">₱{formatPrice(p.discounted_price || p.price)}</td>
                     <td className="px-4 py-3 flex justify-center gap-2">
                       <button
-                        onClick={() => {
-                          setSelectedProduct(p);
-                          setIsViewing(true);
-                        }}
-                        className="px-4 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-                      >
-                        View
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedProduct(p);
-                          setIsViewing(false);
-                        }}
+                        onClick={() => setSelectedProduct(p)}
                         className="px-4 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600"
                       >
                         Buy
@@ -193,104 +156,12 @@ export default function BranchMarketSection() {
         </div>
       </div>
 
-      {/* Modal for View/Buy */}
+      {/* BranchMarketBuy Modal */}
       {selectedProduct && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-[#0f172a] text-gray-100 rounded-2xl shadow-2xl w-full max-w-4xl h-[520px] overflow-hidden flex flex-col md:flex-row transition-all duration-300">
-            <button
-              onClick={() => setSelectedProduct(null)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl"
-            >
-              ✕
-            </button>
-
-            <div className="flex-shrink-0 w-full md:w-1/2 h-full bg-gray-900 relative flex items-center justify-center">
-              {selectedProduct.image_url ? (
-                <img
-                  src={selectedProduct.image_url}
-                  alt={selectedProduct.product_name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <Package size={90} className="text-gray-500" />
-              )}
-            </div>
-
-            <div className="flex-1 p-7 flex flex-col justify-between overflow-y-auto">
-              <div>
-                <h2 className="text-3xl font-bold text-white mb-3">{selectedProduct.product_name}</h2>
-                <hr className="border-gray-700 mb-5" />
-                <p className="text-gray-200 mb-2">
-                  {selectedProduct.product_description || "No description."}
-                </p>
-                <p className="text-gray-200 mb-1">Available: {selectedProduct.stock}</p>
-                <p className="text-gray-200 mb-1">Seller: {selectedProduct.seller_name || "Unknown"}</p>
-
-                {!isViewing && (
-                  <>
-                    {/* Price above quantity */}
-                    <p className="text-gray-200 text-lg mb-3">
-                      Price per unit: <span className="font-semibold">₱{formatPrice(selectedProduct.discounted_price || selectedProduct.price)}</span>
-                    </p>
-
-                    <div className="mb-4">
-                      <label className="block text-gray-400 mb-1">Quantity:</label>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setBuyQuantity((prev) => Math.max(prev - 1, 1))}
-                          className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600"
-                        >
-                          -
-                        </button>
-                        <input
-                          type="number"
-                          min="1"
-                          max={selectedProduct.stock}
-                          value={buyQuantity}
-                          onChange={(e) => {
-                            const val = Number(e.target.value);
-                            if (val > 0) setBuyQuantity(Math.min(val, selectedProduct.stock));
-                          }}
-                          className="w-20 px-2 py-1 rounded bg-gray-800 text-white text-center"
-                        />
-                        <button
-                          onClick={() =>
-                            setBuyQuantity((prev) => Math.min(prev + 1, selectedProduct.stock))
-                          }
-                          className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Total price emphasized */}
-                    <p className="text-yellow-400 text-2xl font-bold">
-                      Total: ₱{formatPrice((selectedProduct.discounted_price || selectedProduct.price) * buyQuantity)}
-                    </p>
-                  </>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-2 mt-4">
-                <button
-                  onClick={() => setSelectedProduct(null)}
-                  className="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600"
-                >
-                  Close
-                </button>
-                {!isViewing && (
-                  <button
-                    onClick={handleBuyProduct}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded flex items-center gap-2"
-                  >
-                    <ShoppingCart size={18} /> Buy Now
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        <BranchMarketBuy
+          product={selectedProduct}
+          onClose={() => setSelectedProduct(null)}
+        />
       )}
     </div>
   );
