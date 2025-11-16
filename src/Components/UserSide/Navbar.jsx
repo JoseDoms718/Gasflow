@@ -1,9 +1,12 @@
 import { FaUserCircle } from "react-icons/fa";
 import { useState, useRef, useEffect } from "react";
-import LogoBlue from "../../assets/Design/LogoBlue.png";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
+import { io } from "socket.io-client";
+import LogoBlue from "../../assets/Design/LogoBlue.png";
 import EditProfileModal from "../Modals/EditProfileModal";
+
+const SOCKET_URL = "http://localhost:5000"; // adjust if needed
 
 export default function NavBar() {
   const navigate = useNavigate();
@@ -13,7 +16,9 @@ export default function NavBar() {
   });
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [newOrderNotification, setNewOrderNotification] = useState(false);
   const dropdownRef = useRef(null);
+  const socketRef = useRef(null);
 
   /* Fetch latest user silently */
   useEffect(() => {
@@ -52,10 +57,29 @@ export default function NavBar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [dropdownOpen]);
 
+  /* Socket.IO for order notifications */
+  useEffect(() => {
+    if (!user) return;
+    socketRef.current = io(SOCKET_URL, {
+      auth: { token: localStorage.getItem("token") },
+    });
+
+    socketRef.current.on("order-updated", (updatedOrder) => {
+      // Optionally filter by user.id if needed
+      setNewOrderNotification(true);
+    });
+
+    return () => socketRef.current.disconnect();
+  }, [user]);
+
   const handleNav = (e, path) => {
     if (!user && path !== "/" && path !== "/login") {
       e.preventDefault();
       navigate("/login");
+    }
+    // Clear notification if going to Orders page
+    if (path === "/orders") {
+      setNewOrderNotification(false);
     }
   };
 
@@ -78,6 +102,9 @@ export default function NavBar() {
                 className="relative group hover:text-blue-500 transition"
               >
                 {item}
+                {item === "Orders" && newOrderNotification && (
+                  <span className="absolute -top-2 -right-2 w-3 h-3 rounded-full bg-red-600 animate-pulse"></span>
+                )}
                 <span className="absolute left-0 bottom-0 w-0 h-[2px] bg-blue-500 transition-all duration-300 group-hover:w-full"></span>
               </Link>
             ))}

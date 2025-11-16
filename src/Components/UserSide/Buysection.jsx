@@ -3,8 +3,10 @@ import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import { X, ShoppingCart, CreditCard } from "lucide-react";
+import { io } from "socket.io-client";
 
 const BASE_URL = "http://localhost:5000";
+const SOCKET_URL = "http://localhost:5000"; // adjust if different
 
 // 🔹 Helper to normalize image URLs
 const getFullImageUrl = (url) => {
@@ -12,6 +14,7 @@ const getFullImageUrl = (url) => {
   return url.startsWith("http") ? url : `${BASE_URL}/products/images/${url.replace(/^\/+/, "")}`;
 };
 
+// 🔹 Get cart key based on logged-in user
 const getUserCartKey = () => {
   const token = localStorage.getItem("token");
   return token ? `cart_${token}` : "cart_guest";
@@ -33,7 +36,33 @@ export default function Buysection() {
 
   const municipalities = ["Boac", "Mogpog", "Gasan", "Buenavista", "Torrijos", "Santa Cruz"];
 
-  // 🛍️ Fetch product info
+  // ───────── SOCKET SETUP ─────────
+  useEffect(() => {
+    const socket = io(SOCKET_URL);
+
+    // Stock updates
+    socket.on("stock-updated", (data) => {
+      if (data.product_id === id) {
+        setProduct((prev) => prev ? { ...prev, stock: data.stock } : prev);
+        toast.info(`⚠️ Stock updated: ${data.stock} units available`);
+      }
+    });
+
+    // Cart updates
+    socket.on("cart-updated", (data) => {
+      const cartKey = getUserCartKey();
+      const cart = JSON.parse(localStorage.getItem(cartKey)) || [];
+      const updatedCart = cart.map((item) =>
+        item.product_id === data.product_id ? { ...item, quantity: data.quantity } : item
+      );
+      localStorage.setItem(cartKey, JSON.stringify(updatedCart));
+      window.dispatchEvent(new Event("storage"));
+    });
+
+    return () => socket.disconnect();
+  }, [id]);
+
+  // ───────── FETCH PRODUCT ─────────
   useEffect(() => {
     const fetchProduct = async () => {
       try {
@@ -41,7 +70,7 @@ export default function Buysection() {
         const res = await axios.get(`${BASE_URL}/products/${id}`);
         setProduct(res.data);
       } catch (err) {
-        console.error("Error fetching product:", err);
+        console.error(err);
         toast.error("Failed to load product information.");
       } finally {
         setLoading(false);
@@ -50,8 +79,7 @@ export default function Buysection() {
     fetchProduct();
   }, [id]);
 
-  // 👤 Fetch logged-in user info and autofill
-  // 👤 Fetch logged-in user info and auto-fill municipality + barangay
+  // ───────── FETCH USER ─────────
   useEffect(() => {
     const fetchUser = async () => {
       try {
@@ -64,39 +92,32 @@ export default function Buysection() {
         const user = res.data?.user;
         if (!user) return;
 
-        // Set name, phone, municipality
         setName(user.name || "");
         setPhone(user.contact_number || "+63");
         setMunicipality(user.municipality || "");
 
-        // If user has a municipality, fetch its barangays
-        // If user has a municipality, fetch its barangays
         if (user.municipality) {
           const barangayRes = await axios.get(
             `${BASE_URL}/barangays?municipality=${user.municipality}`
           );
-          const barangayList = barangayRes.data || [];
-          setBarangays(barangayList);
+          const list = barangayRes.data || [];
+          setBarangays(list);
 
-          const matched = barangayList.find(
+          const matched = list.find(
             (b) =>
               String(b.id) === String(user.barangay_id) ||
               b.name.toLowerCase() === user.barangay?.toLowerCase()
           );
           if (matched) setSelectedBarangayId(matched.id);
         }
-
       } catch (err) {
-        console.error("Error fetching user info:", err);
+        console.error(err);
       }
     };
-
     fetchUser();
   }, []);
 
-
-  // 🏘️ Fetch barangays when municipality changes
-  // 🏘️ Fetch barangays when municipality changes
+  // ───────── FETCH BARANGAYS ─────────
   useEffect(() => {
     if (!municipality) {
       setBarangays([]);
@@ -110,21 +131,15 @@ export default function Buysection() {
         const list = res.data || [];
         setBarangays(list);
 
-        // Only reset selectedBarangayId if it is not in the new list
-        setSelectedBarangayId((prevId) => {
-          const exists = list.some((b) => String(b.id) === String(prevId));
-          return exists ? prevId : "";
-        });
+        setSelectedBarangayId((prevId) => list.some((b) => String(b.id) === String(prevId)) ? prevId : "");
       } catch (err) {
-        console.error("Error fetching barangays:", err);
+        console.error(err);
       }
     };
-
     fetchBarangays();
   }, [municipality]);
 
-
-  // Quantity input
+  // ───────── INPUT HANDLERS ─────────
   const handleQuantityChange = (e) => {
     let value = parseInt(e.target.value) || 1;
     if (product?.stock && value > product.stock) value = product.stock;
@@ -132,25 +147,20 @@ export default function Buysection() {
     setQuantity(value);
   };
 
-  // Name input
   const handleNameChange = (e) => {
     const value = e.target.value;
     if (/^[A-Za-z\s]*$/.test(value)) setName(value);
   };
 
-  // Phone input
   const handlePhoneChange = (e) => {
     let value = e.target.value;
-    if (!value.startsWith("+63")) {
-      value = "+63" + value.replace(/\D/g, "");
-    } else {
-      value = "+63" + value.replace("+63", "").replace(/\D/g, "");
-    }
+    if (!value.startsWith("+63")) value = "+63" + value.replace(/\D/g, "");
+    else value = "+63" + value.replace("+63", "").replace(/\D/g, "");
     if (value.length > 13) value = value.slice(0, 13);
     setPhone(value);
   };
 
-  // Add to Cart
+  // ───────── CART HANDLERS ─────────
   const handleAddToCart = () => {
     if (!product) return;
 
@@ -178,18 +188,15 @@ export default function Buysection() {
     toast.success(`🛒 Added ${quantity} × ${product.product_name} to cart!`);
   };
 
-  // Checkout
   const handleCheckout = async () => {
     if (!name || !phone || !municipality || !selectedBarangayId) {
       toast.error("Please fill out all fields.");
       return;
     }
-
     if (!/^\+639\d{9}$/.test(phone)) {
       toast.error("Please enter a valid Philippine phone number (+639XXXXXXXXX).");
       return;
     }
-
     if (quantity > product.stock) {
       toast.error(`Only ${product.stock} items available in stock.`);
       return;
@@ -220,7 +227,7 @@ export default function Buysection() {
       toast.success(res.data.message || "Order placed successfully!");
       navigate("/orders");
     } catch (err) {
-      console.error("Error creating order:", err);
+      console.error(err);
       toast.error(err.response?.data?.error || "Failed to place order.");
     } finally {
       setIsPlacingOrder(false);

@@ -338,6 +338,8 @@ router.post("/walk-in", authenticateToken, async (req, res) => {
 router.post("/buy", authenticateToken, async (req, res) => {
   const connection = await db.getConnection();
   try {
+    const io = req.app.get("io"); // ✅ get Socket.IO instance
+
     let { items, product_id, quantity, full_name, contact_number, barangay_id } = req.body;
     const buyer_id = req.user.id;
 
@@ -455,7 +457,7 @@ router.post("/buy", authenticateToken, async (req, res) => {
         );
       }
 
-      createdOrders.push({
+      const orderObj = {
         order_id,
         seller_id,
         total_price: totalSellerPrice,
@@ -469,7 +471,12 @@ router.post("/buy", authenticateToken, async (req, res) => {
           price,
           subtotal,
         })),
-      });
+      };
+
+      createdOrders.push(orderObj);
+
+      // ✅ Emit real-time order event to frontend
+      io.emit("newOrder", orderObj); // emits to all connected clients
     }
 
     await connection.commit();
@@ -486,7 +493,6 @@ router.post("/buy", authenticateToken, async (req, res) => {
     return res.status(500).json({ success: false, error: "Failed to process order." });
   }
 });
-
 
 
 // routes/orders.js
@@ -691,59 +697,67 @@ function groupOrders(rows, mapItem) {
    - Joins barangays for barangay_name and municipality
    - Includes buyer info
 ------------------------------------------------------------------- */
-router.get("/retailer-orders", authenticateToken, requireRole("retailer", "branch_manager"), async (req, res) => {
-  try {
-    const seller_id = req.user.id;
+router.get(
+  "/retailer-orders",
+  authenticateToken,
+  requireRole("retailer", "branch_manager"),
+  async (req, res) => {
+    try {
+      const seller_id = req.user.id;
 
-    const [rows] = await db.query(
-      `
-      SELECT
-      o.order_id,
-      o.full_name,
-      o.contact_number,
-      o.status,
-      o.total_price,
-      o.ordered_at,
-      o.delivered_at,
-      o.inventory_deducted,
-      b.barangay_name AS barangay,
-      b.municipality AS municipality,
-      oi.quantity,
-      oi.price,
-      p.product_id,
-      p.product_name,
-      p.product_description,
-      p.image_url AS image_url,
-      COALESCE(u.name, o.full_name) AS buyer_name,
-      u.email AS buyer_email
-    FROM orders o
-    JOIN order_items oi ON o.order_id = oi.order_id
-    JOIN products p ON oi.product_id = p.product_id
-    LEFT JOIN users u ON o.buyer_id = u.user_id
-    LEFT JOIN barangays b ON o.barangay_id = b.barangay_id
-    WHERE p.seller_id = ?
-    ORDER BY o.ordered_at DESC
+      const [rows] = await db.query(
+        `
+        SELECT
+          o.order_id,
+          o.full_name,
+          o.contact_number,
+          o.status,
+          o.total_price,
+          o.ordered_at,
+          o.delivered_at,
+          o.inventory_deducted,
+          b.barangay_name AS barangay,
+          b.municipality AS municipality,
+          oi.quantity,
+          oi.price,
+          p.product_id,
+          p.product_name,
+          p.product_description,
+          p.image_url AS image_url,
+          COALESCE(u.name, o.full_name) AS buyer_name,
+          u.email AS buyer_email
+        FROM orders o
+        JOIN order_items oi ON o.order_id = oi.order_id
+        JOIN products p ON oi.product_id = p.product_id
+        LEFT JOIN users u ON o.buyer_id = u.user_id
+        LEFT JOIN barangays b ON o.barangay_id = b.barangay_id
+        WHERE p.seller_id = ?
+        ORDER BY o.ordered_at DESC
       `,
-      [seller_id]
-    );
+        [seller_id]
+      );
 
-    const grouped = groupOrders(rows, (row) => ({
-      product_id: row.product_id,
-      product_name: row.product_name,
-      product_description: row.product_description,
-      image_url: formatImageUrl(row.image_url),
-      quantity: row.quantity,
-      price: row.price,
-      buyer_name: row.buyer_name,
-      buyer_email: row.buyer_email,
-    }));
+      const grouped = groupOrders(rows, (row) => ({
+        product_id: row.product_id,
+        product_name: row.product_name,
+        product_description: row.product_description,
+        image_url: formatImageUrl(row.image_url),
+        quantity: row.quantity,
+        price: row.price,
+        buyer_name: row.buyer_name,
+        buyer_email: row.buyer_email,
+      }));
 
-    return res.status(200).json({ success: true, orders: grouped });
-  } catch (err) {
-    console.error("❌ Error fetching retailer-orders:", err);
-    return res.status(500).json({ success: false, error: "Failed to fetch retailer orders." });
+      return res.status(200).json({ success: true, orders: grouped });
+    } catch (err) {
+      console.error("❌ Error fetching retailer-orders:", err);
+      return res
+        .status(500)
+        .json({ success: false, error: "Failed to fetch retailer orders." });
+    }
   }
-});
+);
+
 
 /* -------------------------------------------------------------------
    ADMIN / HEAD OFFICE VIEW: /all
@@ -809,69 +823,116 @@ router.get("/all", authenticateToken, requireRole("admin"), async (req, res) => 
    - Only buyer can cancel their own order.
    - Restores inventory ONLY if inventory_deducted was true.
 ------------------------------------------------------------------- */
-router.put("/update-status/:id", authenticateToken, requireRole("users", "business_owner", "retailer"), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
-    const user_id = req.user.id;
+router.put(
+  "/update-status/:id",
+  authenticateToken,
+  requireRole("users", "business_owner", "retailer"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      const user_id = req.user.id;
 
-    if (!ALLOWED_BUYER_STATUSES.includes(status)) {
-      return res.status(400).json({ success: false, error: "Invalid status update." });
-    }
+      if (!ALLOWED_BUYER_STATUSES.includes(status)) {
+        return res.status(400).json({ success: false, error: "Invalid status update." });
+      }
 
-    const [rows] = await db.query(
-      "SELECT status, inventory_deducted FROM orders WHERE order_id = ? AND buyer_id = ?",
-      [id, user_id]
-    );
+      const [rows] = await db.query(
+        "SELECT status, inventory_deducted FROM orders WHERE order_id = ? AND buyer_id = ?",
+        [id, user_id]
+      );
 
-    if (!rows.length) {
-      return res.status(403).json({ success: false, error: "Unauthorized or order not found." });
-    }
+      if (!rows.length) {
+        return res.status(403).json({ success: false, error: "Unauthorized or order not found." });
+      }
 
-    const currentStatus = rows[0].status;
-    const inventoryDeducted = rows[0].inventory_deducted ?? 0;
+      const currentStatus = rows[0].status;
+      const inventoryDeducted = rows[0].inventory_deducted ?? 0;
 
-    if (currentStatus === status) {
-      return res.json({ success: false, message: `Order is already marked as ${status}.` });
-    }
-
-    // If cancelling and inventory was deducted, restore stock
-    if (status === "cancelled" && inventoryDeducted) {
-      const [items] = await db.query("SELECT product_id, quantity FROM order_items WHERE order_id = ?", [id]);
-      if (!items.length) {
-        return res.status(404).json({ success: false, error: "No items found for this order." });
+      if (currentStatus === status) {
+        return res.json({ success: false, message: `Order is already marked as ${status}.` });
       }
 
       const connection = await db.getConnection();
       try {
         await connection.beginTransaction();
-        for (const item of items) {
-          await adjustInventory(item.product_id, Number(item.quantity), connection);
+
+        // If cancelling and inventory was deducted, restore stock
+        if (status === "cancelled" && inventoryDeducted) {
+          const [items] = await connection.query(
+            "SELECT product_id, quantity FROM order_items WHERE order_id = ?",
+            [id]
+          );
+          if (!items.length) {
+            await connection.rollback();
+            connection.release();
+            return res.status(404).json({ success: false, error: "No items found for this order." });
+          }
+
+          for (const item of items) {
+            await adjustInventory(item.product_id, Number(item.quantity), connection);
+          }
+
+          await connection.query("UPDATE orders SET inventory_deducted = 0 WHERE order_id = ?", [id]);
         }
-        await connection.query("UPDATE orders SET inventory_deducted = 0 WHERE order_id = ?", [id]);
+
+        // Update order status
+        await updateOrderStatus(id, status, connection);
+
         await connection.commit();
         connection.release();
+
+        // ───────── Emit Socket.IO event ─────────
+        const io = req.app.get("io");
+
+        // Build JSON array manually using GROUP_CONCAT
+        const [updatedOrderRows] = await db.query(
+          `
+          SELECT 
+            o.*,
+            CONCAT('[', GROUP_CONCAT(
+              CONCAT(
+                '{"product_id":', oi.product_id,
+                ',"product_name":"', REPLACE(p.product_name, '"', '\\"'), '"',
+                ',"quantity":', oi.quantity,
+                ',"price":', oi.price,
+                ',"image_url":"', REPLACE(p.image_url, '"', '\\"'), '"}'
+              )
+            ), ']') AS items
+          FROM orders o
+          JOIN order_items oi ON o.order_id = oi.order_id
+          JOIN products p ON oi.product_id = p.product_id
+          WHERE o.order_id = ?
+          GROUP BY o.order_id
+          `,
+          [id]
+        );
+
+        let updatedOrder = updatedOrderRows[0];
+        updatedOrder.items = updatedOrder.items ? JSON.parse(updatedOrder.items) : [];
+
+        io.emit("order-updated", updatedOrder);
+
+        return res.json({
+          success: true,
+          message:
+            status === "cancelled"
+              ? "✅ Order cancelled and stock restored (if previously deducted)."
+              : "✅ Order status updated successfully.",
+        });
       } catch (errTx) {
         await connection.rollback();
         connection.release();
-        console.error("Transaction error (restore inventory buyer):", errTx);
-        return res.status(500).json({ success: false, error: "Failed to restore inventory." });
+        console.error("Transaction error (update-status buyer):", errTx);
+        return res.status(500).json({ success: false, error: "Failed to update order." });
       }
+    } catch (err) {
+      console.error("Server error (update-status):", err);
+      return res.status(500).json({ success: false, error: "Failed to update order status." });
     }
-
-    await updateOrderStatus(id, status);
-    return res.json({
-      success: true,
-      message:
-        status === "cancelled"
-          ? "✅ Order cancelled and stock restored (if previously deducted)."
-          : "✅ Order status updated successfully.",
-    });
-  } catch (err) {
-    console.error("Server error (update-status):", err);
-    return res.status(500).json({ success: false, error: "Failed to update order status." });
   }
-});
+);
+
 
 /* -------------------------------------------------------------------
    SELLER: UPDATE ORDER STATUS
@@ -892,7 +953,10 @@ router.put(
       const { status } = req.body;
       const { id: user_id } = req.user;
 
+      console.log("📝 Incoming update request:", { order_id: id, status, user_id });
+
       if (!ALLOWED_SELLER_STATUSES.includes(status)) {
+        console.warn("⚠️ Invalid status:", status);
         return res.status(400).json({ success: false, error: "Invalid status value." });
       }
 
@@ -909,7 +973,10 @@ router.put(
         [id, user_id]
       );
 
+      console.log("Ownership check result:", ownershipCheck);
+
       if (!ownershipCheck.length) {
+        console.warn("🚫 Unauthorized access attempt to order:", id);
         return res
           .status(403)
           .json({ success: false, error: "Unauthorized: You do not own this order." });
@@ -918,24 +985,20 @@ router.put(
       const currentStatus = ownershipCheck[0].current_status;
       const inventoryDeducted = ownershipCheck[0].inventory_deducted ?? 0;
 
+      console.log("Current status:", currentStatus, "Inventory deducted:", inventoryDeducted);
+
       if (currentStatus === status) {
+        console.info("ℹ️ Order already in target status:", status);
         return res.json({ success: false, message: `Order is already marked as ${status}.` });
       }
 
-      // Strict status flow check
       const statusOrder = ["pending", "preparing", "on_delivery", "delivered"];
       const curIndex = statusOrder.indexOf(currentStatus);
       const newIndex = statusOrder.indexOf(status);
 
-      // Allow cancel from any status (handled below)
       if (status !== "cancelled") {
-        if (curIndex === -1) {
-          return res.status(400).json({
-            success: false,
-            error: `Cannot change status from "${currentStatus}" to "${status}".`,
-          });
-        }
-        if (newIndex !== curIndex + 1) {
+        if (curIndex === -1 || newIndex !== curIndex + 1) {
+          console.warn("⚠️ Invalid status transition attempted:", { currentStatus, status });
           return res.status(400).json({
             success: false,
             error: `Invalid status transition. Must follow: pending -> preparing -> on_delivery -> delivered`,
@@ -943,151 +1006,142 @@ router.put(
         }
       }
 
-      // Transition TO 'preparing' => attempt to deduct inventory (if not already)
-      if (status === "preparing") {
-        if (inventoryDeducted) {
-          // Already deducted
-          await updateOrderStatus(id, status);
-          return res.json({
-            success: true,
-            message: `✅ Order marked as "${status}" successfully. (Inventory was already deducted)`,
-          });
-        }
+      const connection = await db.getConnection();
 
-        // Get items
-        const [items] = await db.query("SELECT product_id, quantity FROM order_items WHERE order_id = ?", [id]);
-        if (!items.length) {
-          return res.status(404).json({ success: false, error: "No items found for this order." });
-        }
+      try {
+        await connection.beginTransaction();
 
-        // Check availability for all items first using inventory table
-        const productIds = items.map((it) => it.product_id);
-        const placeholders = productIds.map(() => "?").join(",");
-        const [inventoryRows] = await db.query(
-          `SELECT product_id, stock FROM inventory WHERE product_id IN (${placeholders})`,
-          productIds
-        );
+        console.log("🔄 Transaction started for order:", id);
 
-        const inventoryMap = {};
-        for (const r of inventoryRows) inventoryMap[r.product_id] = Number(r.stock);
+        // Transition TO 'preparing' => deduct inventory
+        if (status === "preparing" && !inventoryDeducted) {
+          console.log("⏳ Deducting inventory for order:", id);
 
-        for (const item of items) {
-          const avail = inventoryMap[item.product_id] ?? 0;
-          if (avail < Number(item.quantity)) {
-            return res.status(400).json({
-              success: false,
-              error: `Insufficient stock for product_id ${item.product_id}. Only ${avail} left.`,
-            });
+          const [items] = await connection.query(
+            "SELECT product_id, quantity FROM order_items WHERE order_id = ?",
+            [id]
+          );
+
+          if (!items.length) {
+            console.error("❌ No items found for order:", id);
+            await connection.rollback();
+            connection.release();
+            return res.status(404).json({ success: false, error: "No items found for this order." });
           }
-        }
 
-        // Deduct all in a transaction and mark inventory_deducted = 1
-        const connection = await db.getConnection();
-        try {
-          await connection.beginTransaction();
+          const productIds = items.map((it) => it.product_id);
+          const placeholders = productIds.map(() => "?").join(",");
+          const [inventoryRows] = await connection.query(
+            `SELECT product_id, stock FROM inventory WHERE product_id IN (${placeholders})`,
+            productIds
+          );
+
+          const inventoryMap = {};
+          for (const r of inventoryRows) inventoryMap[r.product_id] = Number(r.stock);
+
           for (const item of items) {
+            const avail = inventoryMap[item.product_id] ?? 0;
+            if (avail < Number(item.quantity)) {
+              console.error("❌ Insufficient stock for product:", item.product_id);
+              await connection.rollback();
+              connection.release();
+              return res.status(400).json({
+                success: false,
+                error: `Insufficient stock for product_id ${item.product_id}. Only ${avail} left.`,
+              });
+            }
+          }
+
+          for (const item of items) {
+            console.log("➖ Deducting", item.quantity, "from product", item.product_id);
             await adjustInventory(item.product_id, -Number(item.quantity), connection);
           }
+
           await connection.query("UPDATE orders SET inventory_deducted = 1 WHERE order_id = ?", [id]);
-          await connection.commit();
-          connection.release();
-
-          await updateOrderStatus(id, status);
-          return res.json({ success: true, message: `✅ Order marked as "${status}" and stock deducted.` });
-        } catch (errTx) {
-          await connection.rollback();
-          connection.release();
-          console.error("Transaction error (deduct inventory preparing):", errTx);
-          if (
-            errTx.message &&
-            errTx.message.includes("Inventory row not found for product and cannot decrement stock")
-          ) {
-            return res.status(400).json({
-              success: false,
-              error: "Insufficient stock or inventory record missing for one or more products.",
-            });
-          }
-          return res.status(500).json({ success: false, error: "Failed to deduct inventory." });
-        }
-      }
-
-      // Transition TO cancelled when current was 'preparing' AND inventory_deducted => restore stock
-      if (status === "cancelled" && currentStatus === "preparing" && inventoryDeducted) {
-        const [items] = await db.query("SELECT product_id, quantity FROM order_items WHERE order_id = ?", [id]);
-        if (!items.length) {
-          return res.status(404).json({ success: false, error: "No items found for this order." });
+          console.log("✅ Inventory deducted for order:", id);
         }
 
-        const connection = await db.getConnection();
-        try {
-          await connection.beginTransaction();
+        // Transition TO cancelled from 'preparing' => restore stock
+        if (status === "cancelled" && currentStatus === "preparing" && inventoryDeducted) {
+          console.log("🔄 Restoring inventory for cancelled order:", id);
+
+          const [items] = await connection.query(
+            "SELECT product_id, quantity FROM order_items WHERE order_id = ?",
+            [id]
+          );
+
           for (const item of items) {
+            console.log("➕ Restoring", item.quantity, "to product", item.product_id);
             await adjustInventory(item.product_id, Number(item.quantity), connection);
           }
+
           await connection.query("UPDATE orders SET inventory_deducted = 0 WHERE order_id = ?", [id]);
-          await connection.commit();
-          connection.release();
-
-          await updateOrderStatus(id, status);
-          return res.json({
-            success: true,
-            message: `✅ Order cancelled and stock restored successfully.`,
-          });
-        } catch (errTx) {
-          await connection.rollback();
-          connection.release();
-          console.error("Transaction error (restore inventory seller cancel):", errTx);
-          return res.status(500).json({ success: false, error: "Failed to restore inventory." });
+          console.log("✅ Inventory restored for order:", id);
         }
-      }
 
-      // Otherwise, simply update status
-      await updateOrderStatus(id, status);
-      return res.json({
-        success: true,
-        message: `✅ Order marked as "${status}" successfully.`,
-      });
+        // Update order status
+        console.log("🔄 Updating order status in DB:", status);
+        await updateOrderStatus(id, status, connection);
+
+        await connection.commit();
+        connection.release();
+        console.log("✅ Transaction committed for order:", id);
+
+        // Emit Socket.IO event
+        const io = req.app.get("io");
+
+        const [updatedOrderRows] = await db.query(
+          `SELECT o.*,
+            CONCAT('[', GROUP_CONCAT(
+              CONCAT(
+                '{"product_id":', oi.product_id,
+                ',"product_name":"', REPLACE(p.product_name, '"', '\\"'),
+                '","quantity":', oi.quantity,
+                ',"price":', oi.price,
+                ',"image_url":"', REPLACE(p.image_url, '"', '\\"'),
+                '"}'
+              )
+            ), ']') AS items
+          FROM orders o
+          JOIN order_items oi ON o.order_id = oi.order_id
+          JOIN products p ON oi.product_id = p.product_id
+          WHERE o.order_id = ?
+          GROUP BY o.order_id`,
+          [id]
+        );
+
+        const updatedOrder = updatedOrderRows[0];
+
+        try {
+          updatedOrder.items = JSON.parse(updatedOrder.items || "[]");
+        } catch (err) {
+          console.error("❌ Failed to parse items JSON:", updatedOrder.items, err);
+          updatedOrder.items = [];
+        }
+
+        if (io) {
+          io.emit("order-updated", updatedOrder);
+          console.log("📡 Socket.IO event emitted for order:", id);
+        } else {
+          console.warn("⚠️ Socket.IO not available to emit event.");
+        }
+
+        return res.json({
+          success: true,
+          message: `✅ Order marked as "${status}" successfully.`,
+        });
+      } catch (errTx) {
+        await connection.rollback();
+        connection.release();
+        console.error("❌ Transaction error (update order status):", errTx);
+        return res.status(500).json({ success: false, error: "Failed to update order." });
+      }
     } catch (err) {
-      console.error("Server error (retailer update-status):", err);
+      console.error("❌ Server error (retailer update-status):", err);
       return res.status(500).json({ success: false, error: "Failed to update order status." });
     }
   }
 );
-
-/* -------------------------------------------------------------------
-   SOFT DELETE / RESTORE endpoints (admin only)
-   - Soft delete: sets is_active = 0
-   - Restore: sets is_active = 1
-------------------------------------------------------------------- */
-router.delete("/delete/:id", authenticateToken, requireRole("admin"), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const [result] = await db.query("UPDATE orders SET is_active = 0 WHERE order_id = ?", [id]);
-
-    if (result.affectedRows === 0)
-      return res.status(404).json({ success: false, error: "Order not found." });
-
-    return res.json({ success: true, message: "🗑️ Order soft-deleted successfully." });
-  } catch (err) {
-    console.error("Error soft-deleting order:", err);
-    return res.status(500).json({ success: false, error: "Failed to soft-delete order." });
-  }
-});
-
-router.put("/restore/:id", authenticateToken, requireRole("admin"), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const [result] = await db.query("UPDATE orders SET is_active = 1 WHERE order_id = ?", [id]);
-
-    if (result.affectedRows === 0)
-      return res.status(404).json({ success: false, error: "Order not found." });
-
-    return res.json({ success: true, message: "✅ Order restored successfully." });
-  } catch (err) {
-    console.error("Error restoring order:", err);
-    return res.status(500).json({ success: false, error: "Failed to restore order." });
-  }
-});
 
 /* -------------------------------------------------------------------
    UTILITY FUNCTIONS
@@ -1122,16 +1176,15 @@ async function adjustInventory(productId, delta, connection) {
 }
 
 /* Helper: update order status and timestamp if delivered */
-async function updateOrderStatus(orderId, status) {
-  if (status === "delivered") {
-    await db.query(
-      "UPDATE orders SET status = ?, delivered_at = NOW() WHERE order_id = ?",
-      [status, orderId]
-    );
+async function updateOrderStatus(order_id, status, conn = null) {
+  const query = "UPDATE orders SET status = ? WHERE order_id = ?";
+  if (conn) {
+    await conn.query(query, [status, order_id]); // use transaction connection
   } else {
-    await db.query("UPDATE orders SET status = ? WHERE order_id = ?", [status, orderId]);
+    await db.query(query, [status, order_id]); // fallback for normal updates
   }
 }
+
 
 /* -------------------------------------------------------------------
    EXPORT ROUTER

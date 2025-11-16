@@ -14,7 +14,7 @@ import { toast } from "react-hot-toast";
 export default function Manageservicesection() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("view");
-  const [targetAudience, setTargetAudience] = useState("all"); // NEW STATE
+  const [targetAudience, setTargetAudience] = useState("all");
 
   const [services, setServices] = useState([
     {
@@ -109,13 +109,13 @@ export default function Manageservicesection() {
         </button>
       </div>
 
-      {/* Inline Tabs */}
+      {/* Tabs */}
       <div className="flex gap-6 border-b border-gray-300 mb-6">
         <button
           onClick={() => setActiveTab("view")}
           className={`pb-2 text-lg font-semibold ${activeTab === "view"
-              ? "border-b-2 border-green-600 text-green-600"
-              : "text-gray-600 hover:text-gray-800"
+            ? "border-b-2 border-green-600 text-green-600"
+            : "text-gray-600 hover:text-gray-800"
             }`}
         >
           View Services
@@ -123,21 +123,19 @@ export default function Manageservicesection() {
         <button
           onClick={() => setActiveTab("add")}
           className={`pb-2 text-lg font-semibold ${activeTab === "add"
-              ? "border-b-2 border-green-600 text-green-600"
-              : "text-gray-600 hover:text-gray-800"
+            ? "border-b-2 border-green-600 text-green-600"
+            : "text-gray-600 hover:text-gray-800"
             }`}
         >
           Add Service
         </button>
       </div>
 
-      {/* Content Wrapper */}
-      <div className="w-full flex flex-col lg:flex-row gap-8 min-h-[480px]">
+      <div className="w-full flex flex-col lg:flex-row gap-8">
         {/* VIEW SERVICES TAB */}
         {activeTab === "view" && (
-          <div className="flex-1 flex justify-center h-full">
-            <div className="relative w-full max-w-6xl flex items-start gap-6 h-full">
-              {/* Left Arrow */}
+          <div className="flex-1 flex justify-center">
+            <div className="relative w-full max-w-6xl flex items-start gap-6">
               <button
                 onClick={prevSlide}
                 disabled={currentIndex === 0}
@@ -146,10 +144,9 @@ export default function Manageservicesection() {
                 <ChevronLeft className="w-5 h-5" />
               </button>
 
-              {/* Carousel */}
-              <div className="overflow-hidden w-full h-full">
+              <div className="overflow-hidden w-full">
                 <div
-                  className="flex transition-transform duration-300 ease-in-out h-full"
+                  className="flex transition-transform duration-300 ease-in-out"
                   style={{
                     transform: `translateX(-${currentIndex * (100 / servicesPerView)
                       }%)`,
@@ -159,11 +156,11 @@ export default function Manageservicesection() {
                   {services.map((service) => (
                     <div
                       key={service.id}
-                      className="flex-shrink-0 flex-grow-0 basis-[calc(33.333%-16px)] mx-2 h-full"
+                      className="flex-shrink-0 flex-grow-0 basis-[calc(33.333%-16px)] mx-2"
                     >
                       <div className="bg-white shadow-lg rounded-2xl border flex flex-col w-full h-full">
                         {editingService?.id === service.id ? (
-                          <div className="p-4 flex flex-col gap-2 h-full">
+                          <div className="p-4 flex flex-col gap-2">
                             <input
                               type="text"
                               value={editingService.title}
@@ -183,7 +180,7 @@ export default function Manageservicesection() {
                                   description: e.target.value,
                                 })
                               }
-                              className="border rounded-lg p-2 w-full flex-1"
+                              className="border rounded-lg p-2 w-full"
                             />
                             <input
                               type="file"
@@ -223,27 +220,13 @@ export default function Manageservicesection() {
                               </div>
                             )}
 
-                            <div className="p-4 flex flex-col flex-1 h-full">
-                              <h2 className="text-lg font-semibold">
+                            <div className="p-4 flex flex-col">
+                              <h2 className="text-lg font-semibold truncate">
                                 {service.title}
                               </h2>
-                              <p className="text-gray-600 mb-3">
+                              <p className="text-gray-600 mb-3 line-clamp-3">
                                 {service.description}
                               </p>
-
-                              <div className="flex-1 overflow-y-auto">
-                                <h3 className="text-sm font-semibold mb-1">
-                                  Form Fields:
-                                </h3>
-                                <ul className="list-disc list-inside text-gray-700 text-sm">
-                                  {service.fields.map((f) => (
-                                    <li key={f.id}>
-                                      {f.label} ({f.type})
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-
                               <div className="flex justify-between items-center mt-auto">
                                 <span className="text-xs text-gray-500 italic">
                                   Target:{" "}
@@ -277,7 +260,6 @@ export default function Manageservicesection() {
                 </div>
               </div>
 
-              {/* Right Arrow */}
               <button
                 onClick={nextSlide}
                 disabled={currentIndex === maxIndex}
@@ -290,10 +272,11 @@ export default function Manageservicesection() {
         )}
 
         {/* ADD SERVICE TAB */}
+        {/* ADD SERVICE TAB */}
         {activeTab === "add" && (
-          <div className="flex-1 flex flex-col lg:flex-row gap-8 h-full">
+          <div className="flex-1 flex flex-col lg:flex-row gap-6">
             {/* Image Card */}
-            <div className="flex-1 flex flex-col items-center justify-start bg-white shadow-lg rounded-2xl border p-6 min-h-[480px]">
+            <div className="w-full lg:w-1/3 flex flex-col items-center justify-center bg-white shadow-lg rounded-2xl border p-6">
               <label className="block text-gray-700 font-semibold mb-3 text-lg">
                 Service Image
               </label>
@@ -302,155 +285,52 @@ export default function Manageservicesection() {
                 accept="image/*"
                 onChange={(e) => handleImageUpload(e, "new")}
                 className="w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4
-        file:rounded-full file:border-0 file:text-sm file:font-semibold
-        file:bg-green-600 file:text-white hover:file:bg-green-700"
+          file:rounded-full file:border-0 file:text-sm file:font-semibold
+          file:bg-green-600 file:text-white hover:file:bg-green-700"
               />
-              {newService.image ? (
-                <img
-                  src={URL.createObjectURL(newService.image)}
-                  alt="Preview"
-                  className="mt-4 w-full h-full object-cover rounded-xl border border-gray-300"
-                />
-              ) : (
-                <div className="mt-4 flex flex-col items-center justify-center w-full h-full bg-gray-100 rounded-xl border border-gray-300">
-                  <Box className="w-12 h-12 text-gray-400 mb-2" />
-                  <p className="text-gray-500 text-sm">No image selected</p>
-                </div>
-              )}
+              <div className="mt-4 w-full h-64 flex items-center justify-center bg-gray-100 rounded-xl border border-gray-300">
+                {newService.image ? (
+                  <img
+                    src={URL.createObjectURL(newService.image)}
+                    alt="Preview"
+                    className="w-full h-full object-cover rounded-xl"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center">
+                    <Box className="w-12 h-12 text-gray-400 mb-2" />
+                    <p className="text-gray-500 text-sm">No image selected</p>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Form Card */}
-            <div className="flex-1 flex flex-col justify-start bg-white shadow-lg rounded-2xl border p-6 h-[480px]">
-              <input
-                type="text"
-                value={newService.title}
-                onChange={(e) =>
-                  setNewService({ ...newService, title: e.target.value })
-                }
-                placeholder="Service Title"
-                className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-600 focus:outline-none text-gray-800 text-base mb-4"
-              />
-              <textarea
-                value={newService.description}
-                onChange={(e) =>
-                  setNewService({
-                    ...newService,
-                    description: e.target.value,
-                  })
-                }
-                placeholder="Service Description"
-                className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-600 focus:outline-none text-gray-800 text-base mb-4"
-                rows="5"
-              ></textarea>
-
-              {/* Scrollable Optional Fields */}
-              <div className="flex-1 flex flex-col bg-gray-100 border border-gray-300 rounded-xl p-4 gap-3 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-200">
-                <h3 className="font-semibold">Optional Fields</h3>
-
-                {/* Text Field Toggle */}
-                <div className="flex items-center justify-between">
-                  <span>Text Field</span>
-                  <input
-                    type="checkbox"
-                    checked={!!newService.fields.find((f) => f.type === "text")}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        if (!newService.fields.find((f) => f.type === "text")) {
-                          setNewService({
-                            ...newService,
-                            fields: [
-                              ...newService.fields,
-                              { id: Date.now(), type: "text", label: "" },
-                            ],
-                          });
-                        }
-                      } else {
-                        setNewService({
-                          ...newService,
-                          fields: newService.fields.filter(
-                            (f) => f.type !== "text"
-                          ),
-                        });
-                      }
-                    }}
-                  />
-                </div>
-                {newService.fields.find((f) => f.type === "text") && (
-                  <input
-                    type="text"
-                    placeholder="Text Field Label"
-                    value={
-                      newService.fields.find((f) => f.type === "text")?.label ||
-                      ""
-                    }
-                    onChange={(e) =>
-                      setNewService({
-                        ...newService,
-                        fields: newService.fields.map((f) =>
-                          f.type === "text"
-                            ? { ...f, label: e.target.value }
-                            : f
-                        ),
-                      })
-                    }
-                    className="border rounded-lg p-2 w-full"
-                  />
-                )}
-
-                {/* Image Field Toggle */}
-                <div className="flex items-center justify-between">
-                  <span>Image Field</span>
-                  <input
-                    type="checkbox"
-                    checked={!!newService.fields.find((f) => f.type === "image")}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        if (!newService.fields.find((f) => f.type === "image")) {
-                          setNewService({
-                            ...newService,
-                            fields: [
-                              ...newService.fields,
-                              { id: Date.now(), type: "image", label: "" },
-                            ],
-                          });
-                        }
-                      } else {
-                        setNewService({
-                          ...newService,
-                          fields: newService.fields.filter(
-                            (f) => f.type !== "image"
-                          ),
-                        });
-                      }
-                    }}
-                  />
-                </div>
-                {newService.fields.find((f) => f.type === "image") && (
-                  <input
-                    type="text"
-                    placeholder="Image Field Label"
-                    value={
-                      newService.fields.find((f) => f.type === "image")?.label ||
-                      ""
-                    }
-                    onChange={(e) =>
-                      setNewService({
-                        ...newService,
-                        fields: newService.fields.map((f) =>
-                          f.type === "image"
-                            ? { ...f, label: e.target.value }
-                            : f
-                        ),
-                      })
-                    }
-                    className="border rounded-lg p-2 w-full"
-                  />
-                )}
+            {/* Form Card */}
+            <div className="w-full lg:w-2/3 flex flex-col justify-between bg-white shadow-lg rounded-2xl border p-6">
+              {/* Inputs container: make it grow to fill space */}
+              <div className="flex flex-col gap-4 flex-1">
+                <input
+                  type="text"
+                  value={newService.title}
+                  onChange={(e) =>
+                    setNewService({ ...newService, title: e.target.value })
+                  }
+                  placeholder="Service Title"
+                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-600 focus:outline-none text-gray-800 text-base"
+                />
+                <textarea
+                  value={newService.description}
+                  onChange={(e) =>
+                    setNewService({ ...newService, description: e.target.value })
+                  }
+                  placeholder="Service Description"
+                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-600 focus:outline-none text-gray-800 text-base flex-1 resize-none"
+                  rows="5"
+                ></textarea>
               </div>
 
-              {/* Add Service Row */}
-              <div className="flex items-center justify-between mt-4">
-                {/* Dropdown on left */}
+              {/* Dropdown and Add button at the bottom */}
+              <div className="flex items-center justify-between mt-6">
                 <select
                   value={targetAudience}
                   onChange={(e) => setTargetAudience(e.target.value)}
@@ -461,7 +341,6 @@ export default function Manageservicesection() {
                   <option value="business">Business Owner Only</option>
                 </select>
 
-                {/* Add Service Button on right */}
                 <button
                   onClick={handleAddService}
                   className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2 font-semibold"
@@ -473,6 +352,7 @@ export default function Manageservicesection() {
             </div>
           </div>
         )}
+
       </div>
     </div>
   );

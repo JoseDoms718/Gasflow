@@ -23,7 +23,6 @@ export default function ReportsPage() {
 
   const branches = ["Boac", "Mogpog", "Gasan", "Buenavista", "Torrijos", "Santa Cruz"];
 
-  // Fetch user info, expenses, and transactions
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) return;
@@ -59,8 +58,9 @@ export default function ReportsPage() {
 
         if (transactionsRes.success) {
           const formattedTrans = transactionsRes.orders.flatMap((order) =>
-            order.items.map((item) => ({
-              id: item.product_id,
+            order.items.map((item, index) => ({
+              id: `${order.order_id}-${item.product_id}-${index}`, // unique key fix
+              product_id: item.product_id,
               productName: item.product_name,
               quantity: item.quantity,
               totalPrice: parseFloat(item.price) * parseFloat(item.quantity),
@@ -82,7 +82,6 @@ export default function ReportsPage() {
     fetchData();
   }, []);
 
-  // Add Expense
   const handleAddExpense = async () => {
     if (!newExpense.name.trim() || !newExpense.amount || newExpense.amount <= 0) {
       return toast.error("Please fill all fields correctly.");
@@ -125,7 +124,6 @@ export default function ReportsPage() {
     }
   };
 
-  // Filters
   const filteredTransactions = transactions.filter((t) => {
     const date = new Date(t.date);
     const tYear = date.getFullYear();
@@ -137,11 +135,9 @@ export default function ReportsPage() {
 
     const today = new Date();
     if (timeFilter === "daily") {
-      return (
-        tYear === today.getFullYear() &&
+      return tYear === today.getFullYear() &&
         tMonth === String(today.getMonth() + 1).padStart(2, "0") &&
-        tDay === today.getDate()
-      );
+        tDay === today.getDate();
     }
 
     if (timeFilter === "weekly") {
@@ -167,11 +163,9 @@ export default function ReportsPage() {
 
     const today = new Date();
     if (timeFilter === "daily") {
-      return (
-        eYear === today.getFullYear() &&
+      return eYear === today.getFullYear() &&
         eMonth === String(today.getMonth() + 1).padStart(2, "0") &&
-        eDay === today.getDate()
-      );
+        eDay === today.getDate();
     }
 
     if (timeFilter === "weekly") {
@@ -189,7 +183,6 @@ export default function ReportsPage() {
   const totalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
   const netIncome = totalRevenue - totalExpenses;
 
-  // Export Excel
   const handleExportExcel = () => {
     const data =
       activeTab === "sales"
@@ -237,7 +230,6 @@ export default function ReportsPage() {
     saveAs(new Blob([wbout], { type: "application/octet-stream" }), fileName);
   };
 
-  // Chart Data
   const productQuantityMap = filteredTransactions.reduce((acc, t) => {
     acc[t.productName] = (acc[t.productName] || 0) + t.quantity;
     return acc;
@@ -280,8 +272,8 @@ export default function ReportsPage() {
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`px-4 py-2 font-semibold ${activeTab === tab
-                ? "border-b-4 border-blue-600 text-blue-600"
-                : "text-gray-600 hover:text-blue-500"
+                  ? "border-b-4 border-blue-600 text-blue-600"
+                  : "text-gray-600 hover:text-blue-500"
                 }`}
             >
               {tab === "sales" ? "Sales Report" : "Expenses Report"}
@@ -296,7 +288,7 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters & Buttons */}
       <div className="flex items-center justify-between mb-6 gap-4">
         <div className="flex gap-4 items-center">
           {userRole === "admin" && (
@@ -352,10 +344,8 @@ export default function ReportsPage() {
           </select>
         </div>
 
-        {/* Buttons */}
-        {/* Buttons */}
         <div className="flex gap-4">
-          {activeTab === "expenses" && userRole !== "admin" && ( // only show for non-admin
+          {activeTab === "expenses" && userRole !== "admin" && (
             <button
               onClick={() => setShowExpenseModal(true)}
               className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow"
@@ -376,7 +366,6 @@ export default function ReportsPage() {
       {/* Main Content */}
       {activeTab === "sales" ? (
         <div className="flex flex-1 gap-6 overflow-hidden">
-          {/* Sales Table */}
           <div className="flex-1 border border-gray-300 rounded-lg overflow-y-auto">
             {filteredTransactions.length === 0 ? (
               <div className="flex justify-center items-center h-full text-gray-500 py-20">
@@ -387,9 +376,7 @@ export default function ReportsPage() {
                 <thead className="bg-gray-900 text-white sticky top-0 z-10">
                   <tr>
                     {userRole === "admin" && (
-                      <>
-                        <th className="px-4 py-3 border-b border-gray-700">Municipality</th>
-                      </>
+                      <th className="px-4 py-3 border-b border-gray-700">Municipality</th>
                     )}
                     <th className="px-4 py-3 border-b border-gray-700">Product</th>
                     <th className="px-4 py-3 border-b border-gray-700">Quantity</th>
@@ -400,11 +387,7 @@ export default function ReportsPage() {
                 <tbody className="bg-white">
                   {filteredTransactions.map((t) => (
                     <tr key={t.id} className="hover:bg-gray-50 border-t border-gray-300">
-                      {userRole === "admin" && (
-                        <>
-                          <td className="px-4 py-3">{t.branch}</td>
-                        </>
-                      )}
+                      {userRole === "admin" && <td className="px-4 py-3">{t.branch}</td>}
                       <td className="px-4 py-3 font-semibold">{t.productName}</td>
                       <td className="px-4 py-3">{t.quantity}</td>
                       <td className="px-4 py-3 text-green-600 font-medium">
@@ -418,7 +401,6 @@ export default function ReportsPage() {
             )}
           </div>
 
-          {/* Charts */}
           <div className="w-[45%] flex flex-col gap-6">
             {filteredTransactions.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-gray-500 border border-gray-300 rounded-lg bg-white">
@@ -450,22 +432,17 @@ export default function ReportsPage() {
         />
       )}
 
-      {/* ===================== EXPENSE MODAL ===================== */}
       {showExpenseModal && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4 text-gray-800">
-              Add New Expense
-            </h2>
+            <h2 className="text-xl font-bold mb-4 text-gray-800">Add New Expense</h2>
 
             <div className="flex flex-col gap-4">
               <input
                 type="text"
                 placeholder="Expense Name"
                 value={newExpense.name}
-                onChange={(e) =>
-                  setNewExpense({ ...newExpense, name: e.target.value })
-                }
+                onChange={(e) => setNewExpense({ ...newExpense, name: e.target.value })}
                 className="border border-gray-300 rounded p-2"
               />
 
@@ -473,9 +450,7 @@ export default function ReportsPage() {
                 type="number"
                 placeholder="Amount"
                 value={newExpense.amount}
-                onChange={(e) =>
-                  setNewExpense({ ...newExpense, amount: e.target.value })
-                }
+                onChange={(e) => setNewExpense({ ...newExpense, amount: e.target.value })}
                 className="border border-gray-300 rounded p-2"
               />
             </div>

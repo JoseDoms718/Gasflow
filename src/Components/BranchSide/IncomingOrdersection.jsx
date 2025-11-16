@@ -1,8 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronDown, ChevronUp, ShoppingCart } from "lucide-react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
+import { io } from "socket.io-client";
+
+const SOCKET_URL = "http://localhost:5000"; // adjust if needed
 
 export default function IncomingOrderSection() {
   const [activeTab, setActiveTab] = useState("pending");
@@ -10,8 +13,8 @@ export default function IncomingOrderSection() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState([]);
   const navigate = useNavigate();
+  const socketRef = useRef(null);
 
-  // Mapping internal status to user-friendly labels
   const statusLabels = {
     pending: "Pending",
     preparing: "Preparing",
@@ -19,7 +22,7 @@ export default function IncomingOrderSection() {
     delivered: "Delivered",
   };
 
-  // Fetch retailer's incoming orders
+  // ───────── FETCH ORDERS ─────────
   const fetchOrders = async () => {
     try {
       const token = localStorage.getItem("token");
@@ -44,26 +47,43 @@ export default function IncomingOrderSection() {
 
   useEffect(() => {
     fetchOrders();
-  }, []);
 
-  // Filter orders by active status
+    // ───────── SOCKET SETUP ─────────
+    socketRef.current = io(SOCKET_URL, {
+      auth: { token: localStorage.getItem("token") },
+    });
+
+    socketRef.current.on("order-updated", (updatedOrder) => {
+      setOrders((prevOrders) => {
+        const index = prevOrders.findIndex(o => o.order_id === updatedOrder.order_id);
+        if (index >= 0) {
+          const newOrders = [...prevOrders];
+          newOrders[index] = updatedOrder;
+          return newOrders;
+        } else {
+          // New incoming order
+          if (updatedOrder.status === activeTab) {
+            toast.info(`New order #${updatedOrder.order_id} received!`);
+          }
+          return [updatedOrder, ...prevOrders];
+        }
+      });
+    });
+
+    return () => socketRef.current.disconnect();
+  }, [activeTab]);
+
   const filteredOrders = orders.filter((order) => order.status === activeTab);
 
-  // Determine next status
   const getNextStatus = (current) => {
     switch (current) {
-      case "pending":
-        return "preparing";
-      case "preparing":
-        return "on_delivery";
-      case "on_delivery":
-        return "delivered";
-      default:
-        return null;
+      case "pending": return "preparing";
+      case "preparing": return "on_delivery";
+      case "on_delivery": return "delivered";
+      default: return null;
     }
   };
 
-  // Update order status
   const updateOrderStatus = async (order_id, newStatus) => {
     try {
       const token = localStorage.getItem("token");
@@ -75,6 +95,13 @@ export default function IncomingOrderSection() {
           : `Updating status to "${statusLabels[newStatus] || newStatus}"...`;
 
       const loadingToast = toast.loading(actionText);
+
+      // Optimistic UI update
+      setOrders(prevOrders =>
+        prevOrders.map(o =>
+          o.order_id === order_id ? { ...o, status: newStatus } : o
+        )
+      );
 
       const res = await axios.put(
         `http://localhost:5000/orders/retailer/update-status/${order_id}`,
@@ -90,14 +117,25 @@ export default function IncomingOrderSection() {
             ? "Order has been cancelled."
             : `Order marked as ${statusLabels[newStatus] || newStatus}!`
         );
-        fetchOrders();
       } else {
+        // Revert optimistic update if failed
+        setOrders(prevOrders =>
+          prevOrders.map(o =>
+            o.order_id === order_id ? { ...o, status: getPrevStatus(newStatus) } : o
+          )
+        );
         toast.error(res.data.error || "Failed to update order.");
       }
     } catch (err) {
       console.error("❌ Error updating order status:", err);
       toast.error("Failed to update order.");
     }
+  };
+
+  const getPrevStatus = (status) => {
+    const orderFlow = ["pending", "preparing", "on_delivery", "delivered"];
+    const idx = orderFlow.indexOf(status);
+    return idx > 0 ? orderFlow[idx - 1] : "pending";
   };
 
   const toggleExpand = (order_id) => {
@@ -123,7 +161,7 @@ export default function IncomingOrderSection() {
         <h2 className="text-2xl font-bold text-gray-900">Order Management</h2>
       </div>
 
-      {/* Tabs & Walk-in Button Row */}
+      {/* Tabs & Walk-in Button */}
       <div className="flex justify-between items-center border-b mb-3 pb-1">
         <div className="flex space-x-2">
           {["pending", "preparing", "on_delivery", "delivered"].map((key) => (
@@ -143,7 +181,6 @@ export default function IncomingOrderSection() {
           ))}
         </div>
 
-        {/* Walk-in Order button */}
         <button
           onClick={() => navigate("/walkinorder")}
           className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center gap-2 shadow-md"
@@ -152,7 +189,7 @@ export default function IncomingOrderSection() {
         </button>
       </div>
 
-      {/* Orders Container */}
+      {/* Orders List */}
       <div className="rounded-xl p-4 overflow-y-auto shadow-inner bg-gray-100 border border-gray-300 h-[560px]">
         {filteredOrders.length === 0 ? (
           <p className="text-center py-10 text-gray-600 italic">
@@ -176,9 +213,7 @@ export default function IncomingOrderSection() {
                 {/* Collapsible Header */}
                 <div
                   onClick={() => toggleExpand(order.order_id)}
-                  className={`flex justify-between items-center px-5 py-3 cursor-pointer transition-colors ${isOpen
-                    ? "bg-gray-200"
-                    : "bg-gray-100 hover:bg-gray-200"
+                  className={`flex justify-between items-center px-5 py-3 cursor-pointer transition-colors ${isOpen ? "bg-gray-200" : "bg-gray-100 hover:bg-gray-200"
                     }`}
                 >
                   <div>
@@ -205,7 +240,7 @@ export default function IncomingOrderSection() {
                 {isOpen && (
                   <div className="p-5 border-t border-gray-200 bg-gray-50">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-                      {/* Product Section */}
+                      {/* Products */}
                       <div className="flex flex-col items-center border rounded-lg p-3 bg-white shadow-sm hover:shadow-md transition">
                         {order.items.map((item, idx) => (
                           <div key={idx} className="flex flex-col items-center mb-2">
@@ -226,7 +261,7 @@ export default function IncomingOrderSection() {
                         ))}
                       </div>
 
-                      {/* Info Section */}
+                      {/* Info */}
                       <div className="text-sm text-gray-800 space-y-2">
                         <p>
                           <span className="font-semibold">Address:</span>{" "}
@@ -255,7 +290,7 @@ export default function IncomingOrderSection() {
                       </div>
                     </div>
 
-                    {/* Action Buttons */}
+                    {/* Actions */}
                     <div className="flex flex-wrap gap-2 justify-end mt-4">
                       {nextStatus && (
                         <button
@@ -269,7 +304,9 @@ export default function IncomingOrderSection() {
                       )}
                       {order.status !== "delivered" && (
                         <button
-                          onClick={() => updateOrderStatus(order.order_id, "cancelled")}
+                          onClick={() =>
+                            updateOrderStatus(order.order_id, "cancelled")
+                          }
                           className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 shadow-md transition"
                         >
                           Cancel

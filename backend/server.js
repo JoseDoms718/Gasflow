@@ -22,7 +22,7 @@ const branchInfoRoutes = require("./routes/branchinfo"); // branch routes
 const bannersRoutes = require("./routes/banners");
 const retailerRoutes = require("./routes/retailerSignup");
 const damagedProductsRoute = require("./routes/damagedProducts");
-const chatRoutes = require("./routes/chat"); // your chat route
+const chatRoutes = require("./routes/chat"); // chat route
 
 /* -----------------------------------------
    ✅ Initialize App & Server
@@ -46,6 +46,7 @@ app.set("io", io);
 io.on("connection", (socket) => {
   console.log("⚡ New client connected:", socket.id);
 
+  // Join room for private chats (optional)
   socket.on("joinRoom", (conversationId) => {
     socket.join(`room_${conversationId}`);
     console.log(`Socket ${socket.id} joined room_${conversationId}`);
@@ -100,7 +101,7 @@ app.use("/damaged-products", damagedProductsRoute);
 app.use("/api/chat", chatRoutes);
 
 /* -----------------------------------------
-   ✅ Test Route (Optional)
+   ✅ Test Route
 ----------------------------------------- */
 app.get("/", (req, res) => {
   res.send("✅ Solane LPG backend is running with Socket.IO...");

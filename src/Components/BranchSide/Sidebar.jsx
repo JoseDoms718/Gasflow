@@ -12,18 +12,21 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import LogoWhite from "../../assets/Design/LogoWhite.png";
 import EditProfileModal from "../Modals/EditProfileModal";
+import { io } from "socket.io-client";
+
+const SOCKET_URL = "http://localhost:5000"; // adjust if needed
 
 export default function Sidebar({ role }) {
   const location = useLocation();
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
 
-  // Initialize user from localStorage
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem("user");
     return savedUser ? JSON.parse(savedUser) : { name: "Guest", role: "guest" };
   });
   const [showEditModal, setShowEditModal] = useState(false);
+  const [newOrdersCount, setNewOrdersCount] = useState(0); // track new orders
 
   // Fetch latest user data
   useEffect(() => {
@@ -57,24 +60,55 @@ export default function Sidebar({ role }) {
   const userRole = role || user?.role || "guest";
   const isActive = (path) => location.pathname === path;
 
+  // ───────── SOCKET SETUP FOR NEW ORDERS ─────────
+  useEffect(() => {
+    if (!token) return;
+
+    const socket = io(SOCKET_URL, {
+      auth: { token },
+    });
+
+    // Listen for new orders
+    socket.on("newOrder", (order) => {
+      if (order.status === "pending") setNewOrdersCount((prev) => prev + 1);
+    });
+
+
+    return () => socket.disconnect();
+  }, [token]);
+
   // Role-based menus
   const roleMenus = {
     admin: [
-      { to: "/admininventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
+      {
+        to: "/admininventory",
+        label: "Products & Inventory",
+        icon: <Package className="w-5 h-5" />,
+      },
       { to: "/adminsalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
       { to: "/adminmanageuser", label: "Manage Users", icon: <Users className="w-5 h-5" /> },
       { to: "/adminmaintenance", label: "Maintenance & Updates", icon: <Settings className="w-5 h-5" /> },
-      { to: "/admininquiries", label: "Inquiries", icon: <FileText className="w-5 h-5" /> }, // New
+      { to: "/admininquiries", label: "Inquiries", icon: <FileText className="w-5 h-5" /> },
     ],
     branch_manager: [
-      { to: "/branchorder", label: "Orders", icon: <ShoppingCart className="w-5 h-5" /> },
+      {
+        to: "/branchorder",
+        label: "Orders",
+        icon: <ShoppingCart className="w-5 h-5" />,
+        showBadge: true,
+      },
       { to: "/branchinventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
       { to: "/branchsalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
       { to: "/branchretailer", label: "Manage Retailers", icon: <Users className="w-5 h-5" /> },
-      { to: "/branchinquiries", label: "Inquiries", icon: <FileText className="w-5 h-5" /> }, // New
+      { to: "/branchinquiries", label: "Inquiries", icon: <FileText className="w-5 h-5" /> },
     ],
     retailer: [
-      { to: "/retailerorder", label: "Orders", icon: <ShoppingCart className="w-5 h-5" /> },
+      {
+        to: "/retailerorder",
+        label: "Orders",
+        icon: <ShoppingCart className="w-5 h-5" />,
+        showBadge: true,
+      },
       { to: "/retailerinventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
       { to: "/retailersalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
     ],
@@ -85,15 +119,12 @@ export default function Sidebar({ role }) {
 
   return (
     <>
-      {/* Sidebar Container */}
       <aside className="bg-gray-900 text-white w-64 min-h-screen flex flex-col fixed left-0 top-0">
-        {/* Logo */}
         <div className="flex items-center gap-3 p-6 border-b border-gray-700">
           <img src={LogoWhite} alt="Gasflow Logo" className="w-10 h-10 object-contain" />
           <h1 className="text-xl font-bold">Gasflow</h1>
         </div>
 
-        {/* Profile Section */}
         <div className="flex items-center gap-4 p-6 border-b border-gray-700">
           <div className="w-12 h-12 bg-gray-800 rounded-full flex items-center justify-center">
             <User className="w-6 h-6 text-gray-400" />
@@ -101,12 +132,11 @@ export default function Sidebar({ role }) {
           <p className="text-lg font-medium truncate max-w-[140px]">{user?.name || "Guest"}</p>
         </div>
 
-        {/* Menu */}
         <nav className="flex-1 p-4 overflow-y-auto">
           <ul className="space-y-2">
             {menuItems.length > 0 ? (
               menuItems.map((item) => (
-                <li key={item.to}>
+                <li key={item.to} className="relative">
                   <Link
                     to={item.to}
                     className={`flex items-center gap-3 p-3 rounded-lg transition ${isActive(item.to) ? "bg-gray-800" : "hover:bg-gray-800 hover:text-blue-400"
@@ -115,6 +145,13 @@ export default function Sidebar({ role }) {
                     {item.icon}
                     {item.label}
                   </Link>
+
+                  {/* Badge for new orders */}
+                  {item.showBadge && newOrdersCount > 0 && (
+                    <span className="absolute top-2 right-3 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-600 rounded-full">
+                      {newOrdersCount}
+                    </span>
+                  )}
                 </li>
               ))
             ) : (
@@ -123,7 +160,6 @@ export default function Sidebar({ role }) {
           </ul>
         </nav>
 
-        {/* Settings & Logout */}
         <div className="p-4 border-t border-gray-700 space-y-2">
           <button
             onClick={() => setShowEditModal(true)}
@@ -147,7 +183,6 @@ export default function Sidebar({ role }) {
         </div>
       </aside>
 
-      {/* Edit Profile Modal */}
       <EditProfileModal
         user={user}
         showModal={showEditModal}
