@@ -1,9 +1,10 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../config/db");
-const sendEmail = require("../utils/sendEmail");
+const sendEmail = require("../utils/sendEmail")
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
+const OtpEmailTemplate = require("../utils/OtpEmailTemplate"); // <-- Import template
 
 // Philippine mobile number regex (+639XXXXXXXXX)
 const PH_MOBILE_REGEX = /^\+639\d{9}$/;
@@ -69,7 +70,10 @@ router.post("/", async (req, res) => {
         [otp, expiresAt, email]
       );
 
-      await sendEmail(email, "Your OTP Code", `Your OTP code is ${otp}. It will expire in 5 minutes.`);
+      // ✅ Send HTML email using template
+      const htmlContent = OtpEmailTemplate({ name: existingOtp[0].name, otpCode: otp });
+      await sendEmail(email, "Gasflow - OTP Verification", { html: htmlContent, text: `Hi ${existingOtp[0].name}, your OTP is ${otp}. It will expire in 5 minutes.` });
+
       return res.json({ success: true, message: "✅ OTP resent successfully!" });
     }
 
@@ -121,7 +125,9 @@ router.post("/", async (req, res) => {
       [email, otp, expiresAt, name, barangay_id, contact_number, hashedPassword, role]
     );
 
-    await sendEmail(email, "Your OTP Code", `Your OTP code is ${otp}. It will expire in 5 minutes.`);
+    // ✅ Send HTML email using template
+    const htmlContent = OtpEmailTemplate({ name, otpCode: otp });
+    await sendEmail(email, "Gasflow - OTP Verification", { html: htmlContent, text: `Hi ${name}, your OTP is ${otp}. It will expire in 5 minutes.` });
 
     res.json({ success: true, message: "✅ OTP sent! Please verify to complete registration." });
 

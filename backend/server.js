@@ -22,7 +22,8 @@ const branchInfoRoutes = require("./routes/branchinfo"); // branch routes
 const bannersRoutes = require("./routes/banners");
 const retailerRoutes = require("./routes/retailerSignup");
 const damagedProductsRoute = require("./routes/damagedProducts");
-const chatRoutes = require("./routes/chat"); // chat route
+const chatRoutes = require("./routes/chat");
+const servicesRoutes = require("./routes/services");
 
 /* -----------------------------------------
    ✅ Initialize App & Server
@@ -94,6 +95,7 @@ app.use("/branchinfo", branchInfoRoutes);
 app.use("/banners", bannersRoutes);
 app.use("/retailerSignup", retailerRoutes);
 app.use("/damaged-products", damagedProductsRoute);
+app.use("/services", servicesRoutes);
 
 /* -----------------------------------------
    ✅ Chat Routes
