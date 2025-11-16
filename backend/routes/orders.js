@@ -887,24 +887,22 @@ router.put(
 
         // Build JSON array manually using GROUP_CONCAT
         const [updatedOrderRows] = await db.query(
-          `
-          SELECT 
-            o.*,
+          `SELECT o.*,
             CONCAT('[', GROUP_CONCAT(
               CONCAT(
                 '{"product_id":', oi.product_id,
-                ',"product_name":"', REPLACE(p.product_name, '"', '\\"'), '"',
-                ',"quantity":', oi.quantity,
+                ',"product_name":"', REPLACE(p.product_name, '"', '\\"'),
+                '","quantity":', oi.quantity,
                 ',"price":', oi.price,
-                ',"image_url":"', REPLACE(p.image_url, '"', '\\"'), '"}'
+                ',"image_url":"http://localhost:5000/products/images/', REPLACE(p.image_url, '"', '\\"'),
+                '"}'
               )
             ), ']') AS items
           FROM orders o
           JOIN order_items oi ON o.order_id = oi.order_id
           JOIN products p ON oi.product_id = p.product_id
           WHERE o.order_id = ?
-          GROUP BY o.order_id
-          `,
+          GROUP BY o.order_id`,
           [id]
         );
 
