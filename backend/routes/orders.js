@@ -338,17 +338,18 @@ router.post("/walk-in", authenticateToken, async (req, res) => {
 router.post("/buy", authenticateToken, async (req, res) => {
   const connection = await db.getConnection();
   try {
-    const io = req.app.get("io"); // ✅ get Socket.IO instance
+    const io = req.app.get("io"); // get Socket.IO instance
 
     let { items, product_id, quantity, full_name, contact_number, barangay_id } = req.body;
     const buyer_id = req.user.id;
 
-    // ✅ Single-product shortcut
+    // Single-product shortcut
     if (!items && product_id && quantity) {
-      items = [{ product_id, quantity }];
+      // default type to regular if not specified
+      items = [{ product_id, quantity, type: "regular" }];
     }
 
-    // ✅ Validate buyer info
+    // Validate buyer info
     if (!full_name || !contact_number || !barangay_id) {
       connection.release();
       return res.status(400).json({ success: false, error: "Missing required buyer fields." });
@@ -362,9 +363,9 @@ router.post("/buy", authenticateToken, async (req, res) => {
       });
     }
 
-    // ✅ Normalize items input
+    // Normalize items input
     const orderItems = Array.isArray(items)
-      ? items.filter((i) => i.product_id && i.quantity)
+      ? items.filter((i) => i.product_id && i.quantity && i.type)
       : [];
 
     if (orderItems.length === 0) {
@@ -372,21 +373,21 @@ router.post("/buy", authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, error: "No valid items provided." });
     }
 
-    // ✅ Validate barangay exists
+    // Validate barangay exists
     const barangayRow = await fetchBarangay(barangay_id);
     if (!barangayRow) {
       connection.release();
       return res.status(404).json({ success: false, error: "Barangay not found." });
     }
 
-    // ✅ Fetch products + inventory and group by seller
+    // Fetch products + inventory, group by seller
     const productsMap = {};
     const baseUrl = process.env.BASE_URL || "http://localhost:5000";
 
     for (const item of orderItems) {
       const sql = `
-        SELECT p.product_id, p.product_name, p.product_description, p.price, p.discounted_price, p.seller_id, p.image_url,
-               i.stock
+        SELECT p.product_id, p.product_name, p.product_description, p.price, p.discounted_price, p.refill_price,
+               p.seller_id, p.image_url, i.stock
         FROM products p
         LEFT JOIN inventory i ON p.product_id = i.product_id
         WHERE p.product_id = ?
@@ -409,7 +410,13 @@ router.post("/buy", authenticateToken, async (req, res) => {
       }
 
       const seller_id = product.seller_id;
-      const price = product.discounted_price ?? product.price;
+
+      // Choose price based on type
+      const price =
+        item.type === "refill"
+          ? product.refill_price
+          : product.discounted_price ?? product.price;
+
       const subtotal = price * item.quantity;
 
       if (!productsMap[seller_id]) productsMap[seller_id] = [];
@@ -427,12 +434,13 @@ router.post("/buy", authenticateToken, async (req, res) => {
         product_description: product.product_description,
         image_url: imageUrl,
         quantity: item.quantity,
+        type: item.type,
         price,
         subtotal,
       });
     }
 
-    // ✅ Begin transaction
+    // Begin transaction
     await connection.beginTransaction();
     const createdOrders = [];
 
@@ -449,11 +457,11 @@ router.post("/buy", authenticateToken, async (req, res) => {
 
       const order_id = orderResult.insertId;
 
-      // ✅ Insert items only — NO STOCK DEDUCTION HERE
+      // Insert items with type and price
       for (const item of sellerItems) {
         await connection.query(
-          `INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)`,
-          [order_id, item.product_id, item.quantity, item.price]
+          `INSERT INTO order_items (order_id, product_id, quantity, price, type) VALUES (?, ?, ?, ?, ?)`,
+          [order_id, item.product_id, item.quantity, item.price, item.type]
         );
       }
 
@@ -462,12 +470,13 @@ router.post("/buy", authenticateToken, async (req, res) => {
         seller_id,
         total_price: totalSellerPrice,
         status: "pending",
-        items: sellerItems.map(({ product_id, product_name, product_description, image_url, quantity, price, subtotal }) => ({
+        items: sellerItems.map(({ product_id, product_name, product_description, image_url, quantity, price, subtotal, type }) => ({
           product_id,
           product_name,
           product_description,
-          image_url: image_url || `${process.env.BASE_URL || "http://localhost:5000"}/placeholder.png`,
+          image_url: image_url || `${baseUrl}/placeholder.png`,
           quantity,
+          type,
           price,
           subtotal,
         })),
@@ -475,8 +484,8 @@ router.post("/buy", authenticateToken, async (req, res) => {
 
       createdOrders.push(orderObj);
 
-      // ✅ Emit real-time order event to frontend
-      io.emit("newOrder", orderObj); // emits to all connected clients
+      // Emit real-time order event
+      io.emit("newOrder", orderObj);
     }
 
     await connection.commit();
@@ -493,7 +502,6 @@ router.post("/buy", authenticateToken, async (req, res) => {
     return res.status(500).json({ success: false, error: "Failed to process order." });
   }
 });
-
 
 // routes/orders.js
 

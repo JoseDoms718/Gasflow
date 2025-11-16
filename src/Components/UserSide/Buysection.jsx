@@ -25,6 +25,7 @@ export default function Buysection() {
   const navigate = useNavigate();
 
   const [product, setProduct] = useState(null);
+  const [productType, setProductType] = useState("regular"); // "regular" or "refill"
   const [quantity, setQuantity] = useState(1);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("+63");
@@ -140,13 +141,6 @@ export default function Buysection() {
   }, [municipality]);
 
   // ───────── INPUT HANDLERS ─────────
-  const handleQuantityChange = (e) => {
-    let value = parseInt(e.target.value) || 1;
-    if (product?.stock && value > product.stock) value = product.stock;
-    if (value < 1) value = 1;
-    setQuantity(value);
-  };
-
   const handleNameChange = (e) => {
     const value = e.target.value;
     if (/^[A-Za-z\s]*$/.test(value)) setName(value);
@@ -167,7 +161,9 @@ export default function Buysection() {
     const cartKey = getUserCartKey();
     const cart = JSON.parse(localStorage.getItem(cartKey)) || [];
 
-    const existingIndex = cart.findIndex((item) => item.product_id === product.product_id);
+    const price = productType === "refill" ? product.refill_price : product.discounted_price || product.price;
+
+    const existingIndex = cart.findIndex((item) => item.product_id === product.product_id && item.type === productType);
     if (existingIndex >= 0) {
       const newQuantity = cart[existingIndex].quantity + quantity;
       cart[existingIndex].quantity = newQuantity > product.stock ? product.stock : newQuantity;
@@ -177,15 +173,16 @@ export default function Buysection() {
         product_name: product.product_name,
         product_description: product.product_description || "No description",
         image_url: getFullImageUrl(product.image_url),
-        price: product.discounted_price || product.price,
+        price,
         quantity,
+        type: productType,
         seller_name: product.seller_name || "Unknown",
       });
     }
 
     localStorage.setItem(cartKey, JSON.stringify(cart));
     window.dispatchEvent(new Event("storage"));
-    toast.success(`🛒 Added ${quantity} × ${product.product_name} to cart!`);
+    toast.success(`🛒 Added ${quantity} × ${product.product_name} (${productType}) to cart!`);
   };
 
   const handleCheckout = async () => {
@@ -212,17 +209,25 @@ export default function Buysection() {
 
       setIsPlacingOrder(true);
 
+      const price = productType === "refill" ? product.refill_price : product.discounted_price || product.price;
+
       const res = await axios.post(
         `${BASE_URL}/orders/buy`,
         {
-          product_id: product.product_id,
-          quantity,
+          items: [
+            {
+              product_id: product.product_id,
+              quantity,
+              type: productType, // now backend sees refill correctly
+            }
+          ],
           full_name: name,
           contact_number: phone,
           barangay_id: selectedBarangayId,
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+
 
       toast.success(res.data.message || "Order placed successfully!");
       navigate("/orders");
@@ -237,7 +242,7 @@ export default function Buysection() {
   if (loading) return <p className="text-white">Loading product...</p>;
   if (!product) return <p className="text-white">Product not found.</p>;
 
-  const pricePerUnit = product.discounted_price || product.price;
+  const pricePerUnit = productType === "refill" ? product.refill_price : product.discounted_price || product.price;
   const totalPrice = pricePerUnit * quantity;
   const outOfStock = product.stock <= 0;
 
@@ -266,22 +271,40 @@ export default function Buysection() {
               <p className="text-red-400 font-semibold mb-4">⚠️ Out of stock.</p>
             )}
 
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <label className="block text-sm font-medium mb-1">Quantity</label>
-                <input
-                  type="number"
-                  min="1"
-                  max={product.stock}
+            {/* Type & Quantity Dropdown */}
+            <div className="flex flex-col mb-6">
+              <label className="block text-sm font-medium mb-2">Type & Quantity</label>
+
+              <div className="flex items-center gap-4">
+                {/* Type Dropdown */}
+                <select
+                  value={productType}
+                  onChange={(e) => setProductType(e.target.value)}
+                  className="px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="regular">Regular</option>
+                  <option value="refill">Refill</option>
+                </select>
+
+                {/* Quantity Dropdown */}
+                <select
                   value={quantity}
-                  onChange={handleQuantityChange}
+                  onChange={(e) => setQuantity(parseInt(e.target.value))}
                   disabled={outOfStock}
-                  className="w-24 px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                  className="px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {Array.from({ length: product.stock }, (_, i) => i + 1).map((q) => (
+                    <option key={q} value={q}>
+                      {q}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Price Display */}
+                <p className="text-2xl font-semibold">
+                  ₱{totalPrice.toLocaleString()}.00
+                </p>
               </div>
-              <p className="text-2xl font-semibold">
-                ₱{totalPrice.toLocaleString()}.00
-              </p>
             </div>
 
             <div className="space-y-4 mb-6">
