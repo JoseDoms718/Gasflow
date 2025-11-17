@@ -106,23 +106,31 @@ export default function Sidebar({ role }) {
       { to: "/admininventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
       { to: "/adminsalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
       { to: "/adminmanageuser", label: "Manage Users", icon: <Users className="w-5 h-5" /> },
-      { to: "/adminmaintenance", label: "Maintenance & Updates", icon: <Settings className="w-5 h-5" /> },
-      { to: "/admininquiries", label: "Inquiries", icon: <FileText className="w-5 h-5" /> },
+
+      // HIDDEN ITEMS
+      { to: "/adminmaintenance", label: "Maintenance & Updates", icon: <Settings className="w-5 h-5" />, hidden: true },
+      { to: "/admininquiries", label: "Inquiries", icon: <FileText className="w-5 h-5" />, hidden: true },
     ],
+
     branch_manager: [
       { to: "/branchorder", label: "Orders", icon: <ShoppingCart className="w-5 h-5" />, showBadge: true },
       { to: "/branchinventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
       { to: "/branchsalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
       { to: "/branchretailer", label: "Manage Retailers", icon: <Users className="w-5 h-5" /> },
-      { to: "/branchinquiries", label: "Inquiries", icon: <FileText className="w-5 h-5" /> },
+
+      // HIDDEN
+      { to: "/branchinquiries", label: "Inquiries", icon: <FileText className="w-5 h-5" />, hidden: true },
     ],
+
     retailer: [
       { to: "/retailerorder", label: "Orders", icon: <ShoppingCart className="w-5 h-5" />, showBadge: true },
       { to: "/retailerinventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
       { to: "/retailersalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
     ],
+
     guest: [],
   };
+
 
   const menuItems = roleMenus[userRole] || [];
 
@@ -144,24 +152,26 @@ export default function Sidebar({ role }) {
         <nav className="flex-1 p-4 overflow-y-auto">
           <ul className="space-y-2">
             {menuItems.length > 0 ? (
-              menuItems.map((item) => (
-                <li key={item.to} className="relative">
-                  <Link
-                    to={item.to}
-                    className={`flex items-center gap-3 p-3 rounded-lg transition ${isActive(item.to) ? "bg-gray-800" : "hover:bg-gray-800 hover:text-blue-400"}`}
-                  >
-                    {item.icon}
-                    {item.label}
-                  </Link>
+              menuItems
+                .filter((item) => !item.hidden)  // Hides maintenance + inquiries
+                .map((item) => (
+                  <li key={item.to} className="relative">
+                    <Link
+                      to={item.to}
+                      className={`flex items-center gap-3 p-3 rounded-lg transition ${isActive(item.to) ? "bg-gray-800" : "hover:bg-gray-800 hover:text-blue-400"}`}
+                    >
+                      {item.icon}
+                      {item.label}
+                    </Link>
 
-                  {/* Badge for new orders */}
-                  {item.showBadge && newOrdersCount > 0 && (
-                    <span className="absolute top-2 right-3 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-600 rounded-full">
-                      {newOrdersCount}
-                    </span>
-                  )}
-                </li>
-              ))
+                    {/* Badge for new orders */}
+                    {item.showBadge && newOrdersCount > 0 && (
+                      <span className="absolute top-2 right-3 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-600 rounded-full">
+                        {newOrdersCount}
+                      </span>
+                    )}
+                  </li>
+                ))
             ) : (
               <li className="text-gray-500 text-sm italic text-center mt-4">No menu available</li>
             )}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Chart from "react-apexcharts";
 import { PlusCircle, Download } from "lucide-react";
 import axios from "axios";
@@ -23,6 +23,9 @@ export default function ReportsPage() {
 
   const branches = ["Boac", "Mogpog", "Gasan", "Buenavista", "Torrijos", "Santa Cruz"];
 
+  const toLocalDate = (dateString) => new Date(dateString).toLocaleDateString("en-CA");
+
+  // Fetch data
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) return;
@@ -44,7 +47,7 @@ export default function ReportsPage() {
             id: e.expense_id,
             name: e.expenses_details,
             amount: parseFloat(e.expenses_cost),
-            date: new Date(e.created_at).toISOString().split("T")[0],
+            date: toLocalDate(e.created_at),
             branch: e.municipality || "Unknown",
             addedBy: e.user_name || "N/A",
           }));
@@ -59,14 +62,14 @@ export default function ReportsPage() {
         if (transactionsRes.success) {
           const formattedTrans = transactionsRes.orders.flatMap((order) =>
             order.items.map((item, index) => ({
-              id: `${order.order_id}-${item.product_id}-${index}`, // unique key fix
+              id: `${order.order_id}-${item.product_id}-${index}`,
               product_id: item.product_id,
               productName: item.product_name,
               quantity: item.quantity,
               totalPrice: parseFloat(item.price) * parseFloat(item.quantity),
               date: order.delivered_at
-                ? new Date(order.delivered_at).toISOString().split("T")[0]
-                : new Date(order.ordered_at).toISOString().split("T")[0],
+                ? toLocalDate(order.delivered_at)
+                : toLocalDate(order.ordered_at),
               branch: order.municipality || order.barangay || "Unknown",
               addedBy: item.seller_name || "N/A",
               buyer: order.full_name || "N/A",
@@ -82,6 +85,7 @@ export default function ReportsPage() {
     fetchData();
   }, []);
 
+  // Add expense
   const handleAddExpense = async () => {
     if (!newExpense.name.trim() || !newExpense.amount || newExpense.amount <= 0) {
       return toast.error("Please fill all fields correctly.");
@@ -107,7 +111,7 @@ export default function ReportsPage() {
             id: e.expense_id,
             name: e.expenses_details,
             amount: parseFloat(e.expenses_cost),
-            date: new Date(e.created_at).toISOString().split("T")[0],
+            date: toLocalDate(e.created_at),
             branch: e.municipality || "Unknown",
             addedBy: e.user_name || "N/A",
           }));
@@ -124,65 +128,57 @@ export default function ReportsPage() {
     }
   };
 
-  const filteredTransactions = transactions.filter((t) => {
-    const date = new Date(t.date);
-    const tYear = date.getFullYear();
-    const tMonth = String(date.getMonth() + 1).padStart(2, "0");
-    const tDay = date.getDate();
+  // Filter by date and branch
+  const filterByDateAndBranch = (items) => {
+    return items.filter((item) => {
+      const date = new Date(item.date);
+      const iYear = date.getFullYear();
+      const iMonth = String(date.getMonth() + 1).padStart(2, "0");
+      const iDay = date.getDate();
 
-    const branchMatch = userRole === "admin" ? branch === "All" || t.branch === branch : true;
-    if (!branchMatch) return false;
+      const branchMatch = userRole === "admin" ? branch === "All" || item.branch === branch : true;
+      if (!branchMatch) return false;
 
-    const today = new Date();
-    if (timeFilter === "daily") {
-      return tYear === today.getFullYear() &&
-        tMonth === String(today.getMonth() + 1).padStart(2, "0") &&
-        tDay === today.getDate();
-    }
+      const today = new Date();
+      if (timeFilter === "daily") {
+        return (
+          iYear === today.getFullYear() &&
+          iMonth === String(today.getMonth() + 1).padStart(2, "0") &&
+          iDay === today.getDate()
+        );
+      }
 
-    if (timeFilter === "weekly") {
-      const startOfWeek = new Date(today);
-      startOfWeek.setDate(today.getDate() - today.getDay());
-      const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      if (timeFilter === "weekly") {
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - today.getDay());
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6);
+        return date >= startOfWeek && date <= endOfWeek;
+      }
 
-      return date >= startOfWeek && date <= endOfWeek;
-    }
+      return iMonth === month && iYear.toString() === year;
+    });
+  };
 
-    return tMonth === month && tYear.toString() === year;
-  });
+  const filteredTransactions = useMemo(
+    () => filterByDateAndBranch(transactions),
+    [transactions, month, year, timeFilter, branch]
+  );
 
-  const filteredExpenses = expenses.filter((e) => {
-    const date = new Date(e.date);
-    const eYear = date.getFullYear();
-    const eMonth = String(date.getMonth() + 1).padStart(2, "0");
-    const eDay = date.getDate();
+  const filteredExpenses = useMemo(
+    () => filterByDateAndBranch(expenses),
+    [expenses, month, year, timeFilter, branch]
+  );
 
-    const branchMatch = userRole === "admin" ? branch === "All" || e.branch === branch : true;
-    if (!branchMatch) return false;
-
-    const today = new Date();
-    if (timeFilter === "daily") {
-      return eYear === today.getFullYear() &&
-        eMonth === String(today.getMonth() + 1).padStart(2, "0") &&
-        eDay === today.getDate();
-    }
-
-    if (timeFilter === "weekly") {
-      const startOfWeek = new Date(today);
-      startOfWeek.setDate(today.getDate() - today.getDay());
-      const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(startOfWeek.getDate() + 6);
-      return date >= startOfWeek && date <= endOfWeek;
-    }
-
-    return eMonth === month && eYear.toString() === year;
-  });
+  // Calculate total expenses independently
+  const totalExpensesWithDamage = useMemo(() => {
+    return filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+  }, [filteredExpenses]);
 
   const totalRevenue = filteredTransactions.reduce((sum, t) => sum + t.totalPrice, 0);
-  const totalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
-  const netIncome = totalRevenue - totalExpenses;
+  const totalNet = totalRevenue - totalExpensesWithDamage;
 
+  // Export to Excel
   const handleExportExcel = () => {
     const data =
       activeTab === "sales"
@@ -230,11 +226,11 @@ export default function ReportsPage() {
     saveAs(new Blob([wbout], { type: "application/octet-stream" }), fileName);
   };
 
+  // Chart data
   const productQuantityMap = filteredTransactions.reduce((acc, t) => {
     acc[t.productName] = (acc[t.productName] || 0) + t.quantity;
     return acc;
   }, {});
-
   const pieOptions = {
     labels: Object.keys(productQuantityMap),
     legend: { position: "bottom" },
@@ -247,7 +243,6 @@ export default function ReportsPage() {
     return acc;
   }, {});
   const sortedDates = Object.keys(dateRevenueMap).sort((a, b) => new Date(a) - new Date(b));
-
   const lineOptions = {
     chart: { id: "sales-trend" },
     xaxis: { categories: sortedDates },
@@ -255,10 +250,7 @@ export default function ReportsPage() {
     yaxis: { labels: { formatter: (val) => `₱${val.toFixed(2)}` } },
     tooltip: { y: { formatter: (val) => `₱${val.toFixed(2)}` } },
   };
-
-  const lineSeries = [
-    { name: "Total Sales", data: sortedDates.map((d) => dateRevenueMap[d]) },
-  ];
+  const lineSeries = [{ name: "Total Sales", data: sortedDates.map((d) => dateRevenueMap[d]) }];
 
   return (
     <div className="p-6 w-full h-[750px] flex flex-col">
@@ -283,8 +275,8 @@ export default function ReportsPage() {
 
         <div className="text-lg font-semibold text-gray-800 flex gap-4">
           Revenue: <span className="text-green-600">₱{totalRevenue.toFixed(2)}</span> |{" "}
-          Expenses: <span className="text-red-600">₱{totalExpenses.toFixed(2)}</span> |{" "}
-          Net: <span className="text-blue-600">₱{netIncome.toFixed(2)}</span>
+          Expenses: <span className="text-red-600">₱{totalExpensesWithDamage.toFixed(2)}</span> |{" "}
+          Net: <span className="text-blue-600">₱{totalNet.toFixed(2)}</span>
         </div>
       </div>
 
@@ -375,9 +367,7 @@ export default function ReportsPage() {
               <table className="w-full border-collapse text-center">
                 <thead className="bg-gray-900 text-white sticky top-0 z-10">
                   <tr>
-                    {userRole === "admin" && (
-                      <th className="px-4 py-3 border-b border-gray-700">Municipality</th>
-                    )}
+                    {userRole === "admin" && <th className="px-4 py-3 border-b border-gray-700">Municipality</th>}
                     <th className="px-4 py-3 border-b border-gray-700">Product</th>
                     <th className="px-4 py-3 border-b border-gray-700">Quantity</th>
                     <th className="px-4 py-3 border-b border-gray-700">Total Price</th>
@@ -390,9 +380,7 @@ export default function ReportsPage() {
                       {userRole === "admin" && <td className="px-4 py-3">{t.branch}</td>}
                       <td className="px-4 py-3 font-semibold">{t.productName}</td>
                       <td className="px-4 py-3">{t.quantity}</td>
-                      <td className="px-4 py-3 text-green-600 font-medium">
-                        ₱{t.totalPrice.toFixed(2)}
-                      </td>
+                      <td className="px-4 py-3 text-green-600 font-medium">₱{t.totalPrice.toFixed(2)}</td>
                       <td className="px-4 py-3">{t.date}</td>
                     </tr>
                   ))}
@@ -411,7 +399,6 @@ export default function ReportsPage() {
                 <div className="bg-white rounded-lg p-4 border border-gray-300">
                   <Chart options={pieOptions} series={pieSeries} type="pie" height={250} />
                 </div>
-
                 <div className="bg-white rounded-lg p-4 border border-gray-300 flex-1">
                   <Chart options={lineOptions} series={lineSeries} type="line" height="100%" />
                 </div>
@@ -429,6 +416,7 @@ export default function ReportsPage() {
           newExpense={newExpense}
           setNewExpense={setNewExpense}
           handleAddExpense={handleAddExpense}
+          onTotalChange={() => { }} // No longer needed here
         />
       )}
 
@@ -445,7 +433,6 @@ export default function ReportsPage() {
                 onChange={(e) => setNewExpense({ ...newExpense, name: e.target.value })}
                 className="border border-gray-300 rounded p-2"
               />
-
               <input
                 type="number"
                 placeholder="Amount"
