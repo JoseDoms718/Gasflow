@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { X, PlusCircle } from "lucide-react";
+import { PlusCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import AddUserModal from "../Modals/AddUserModal";
-import ViewUserModal from "../Modals/ViewUserModal";
 
 export default function ManageUsersection() {
   const navigate = useNavigate();
@@ -20,7 +19,6 @@ export default function ManageUsersection() {
 
   const roles = ["users", "business_owner", "branch_manager", "retailer", "admin"];
 
-  // Role label mapping (UI names)
   const roleLabels = {
     users: "User",
     business_owner: "Business Owner",
@@ -32,13 +30,6 @@ export default function ManageUsersection() {
   const [users, setUsers] = useState([]);
   const [roleFilter, setRoleFilter] = useState("All");
   const [municipalityFilter, setMunicipalityFilter] = useState("All");
-
-  // View / Edit State
-  const [viewUser, setViewUser] = useState(null);
-  const [editPassword, setEditPassword] = useState("");
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [editFields, setEditFields] = useState({});
-  const [editMode, setEditMode] = useState({});
 
   // Add modal state
   const [showModal, setShowModal] = useState(false);
@@ -54,7 +45,7 @@ export default function ManageUsersection() {
     confirmPassword: "",
   });
 
-  // Fetch all users
+  // Fetch users
   const fetchUsers = async () => {
     try {
       const res = await axios.get("http://localhost:5000/users");
@@ -69,7 +60,7 @@ export default function ManageUsersection() {
     fetchUsers();
   }, []);
 
-  // Handle form inputs
+  // Handle inputs
   const handleChange = (e) => {
     const { name, value } = e.target;
 
@@ -86,7 +77,7 @@ export default function ManageUsersection() {
     }
   };
 
-  // Handle form submit
+  // Submit new user
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -103,8 +94,8 @@ export default function ManageUsersection() {
         password: formData.password,
         role: formData.role,
         type: formData.type,
-        municipality: formData.municipality, // send municipality string
-        barangay_id: formData.barangay_id,   // send barangay ID
+        municipality: formData.municipality,
+        barangay_id: formData.barangay_id,
       };
 
       const res = await axios.post("http://localhost:5000/users", newUser);
@@ -112,8 +103,7 @@ export default function ManageUsersection() {
       if (res.data.success) {
         toast.success("✅ User added successfully!");
         setShowModal(false);
-
-        await fetchUsers(); // refresh table
+        fetchUsers();
 
         setFormData({
           name: "",
@@ -129,14 +119,23 @@ export default function ManageUsersection() {
       }
     } catch (err) {
       console.error("Error adding user:", err);
-      const msg = err.response?.data?.error || "❌ Failed to add user.";
-      toast.error(msg);
+      toast.error(err.response?.data?.error || "❌ Failed to add user.");
     }
   };
 
+  // Activate / Deactivate user
+  const updateUserType = async (userId, newType) => {
+    try {
+      await axios.put(`http://localhost:5000/users/${userId}`, { type: newType });
+      toast.success(`User set to ${newType} successfully!`);
+      fetchUsers();
+    } catch (err) {
+      console.error("Error updating user:", err);
+      toast.error("❌ Failed to update user.");
+    }
+  };
 
-
-  // Filtered list
+  // Filter users
   const filteredUsers = users.filter((user) => {
     return (
       (roleFilter === "All" || user.role === roleFilter) &&
@@ -155,7 +154,7 @@ export default function ManageUsersection() {
         <select
           value={roleFilter}
           onChange={(e) => setRoleFilter(e.target.value)}
-          className="px-3 py-2 border border-gray-400 rounded bg-white"
+          className="px-3 py-2 border rounded bg-white"
         >
           <option value="All">All Roles</option>
           {roles.map((role, index) => (
@@ -168,7 +167,7 @@ export default function ManageUsersection() {
         <select
           value={municipalityFilter}
           onChange={(e) => setMunicipalityFilter(e.target.value)}
-          className="px-3 py-2 border border-gray-400 rounded bg-white"
+          className="px-3 py-2 border rounded bg-white"
         >
           <option value="All">All Municipalities</option>
           {municipalities.map((m, index) => (
@@ -197,10 +196,10 @@ export default function ManageUsersection() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 border border-gray-300 rounded-lg shadow-md overflow-hidden bg-white relative">
+      <div className="flex-1 border rounded-lg shadow-md overflow-hidden bg-white">
         <div className="max-h-[70vh] overflow-y-auto">
-          <table className="min-w-[850px] w-full border-collapse text-center relative">
-            <thead className="bg-gray-900 text-white sticky top-0 z-20 shadow-[0_4px_6px_rgba(0,0,0,0.4)]">
+          <table className="min-w-[850px] w-full border-collapse text-center">
+            <thead className="bg-gray-900 text-white sticky top-0">
               <tr>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Role</th>
@@ -222,20 +221,15 @@ export default function ManageUsersection() {
                 filteredUsers.map((user, index) => (
                   <tr key={user.user_id || index} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-semibold">{user.name}</td>
-
-                    {/* ROLE WITH FRIENDLY LABEL */}
                     <td className="px-4 py-3">{roleLabels[user.role]}</td>
-
                     <td className="px-4 py-3">{user.municipality}</td>
                     <td className="px-4 py-3">{user.email}</td>
 
                     <td className="px-4 py-3">
                       <span
                         className={`px-2 py-1 rounded text-sm ${user.type === "active"
-                          ? "bg-green-100 text-green-700"
-                          : user.type === "inactive"
-                            ? "bg-red-100 text-red-700"
-                            : "bg-gray-200 text-gray-700"
+                            ? "bg-green-100 text-green-700"
+                            : "bg-red-100 text-red-700"
                           }`}
                       >
                         {user.type}
@@ -243,44 +237,46 @@ export default function ManageUsersection() {
                     </td>
 
                     <td className="px-4 py-3 flex items-center justify-center gap-2">
+
+                      {/* ACTIVATE BUTTON */}
                       <button
-                        className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-                        onClick={() => {
-                          setViewUser(user);
-                          setEditFields({
-                            municipality: user.municipality,
-                          });
-                          setEditMode({});
-                          setEditPassword("");
-                          setCurrentPassword("");
-                        }}
+                        className={`px-3 py-1.5 rounded text-white text-sm font-medium
+                          ${user.type === "active"
+                            ? "bg-gray-300 cursor-not-allowed"
+                            : "bg-green-500 hover:bg-green-600"
+                          }`}
+                        disabled={user.type === "active"}
+                        onClick={() => updateUserType(user.user_id, "active")}
                       >
-                        View
+                        Activate
                       </button>
 
+                      {/* DEACTIVATE BUTTON */}
                       <button
-                        className={`px-3 py-1 rounded text-white ${user.type === "inactive"
-                          ? "bg-gray-600 hover:bg-gray-700 cursor-pointer"
-                          : "bg-gray-300 cursor-not-allowed"
+                        className={`px-3 py-1.5 rounded text-white text-sm font-medium
+                          ${user.type === "inactive"
+                            ? "bg-gray-300 cursor-not-allowed"
+                            : "bg-red-500 hover:bg-red-600"
+                          }`}
+                        disabled={user.type === "inactive"}
+                        onClick={() => updateUserType(user.user_id, "inactive")}
+                      >
+                        Deactivate
+                      </button>
+
+                      {/* ARCHIVE BUTTON */}
+                      <button
+                        className={`px-3 py-1.5 rounded text-white text-sm font-medium
+                          ${user.type === "inactive"
+                            ? "bg-gray-700 hover:bg-gray-800"
+                            : "bg-gray-300 cursor-not-allowed"
                           }`}
                         disabled={user.type !== "inactive"}
-                        onClick={async () => {
-                          if (user.type !== "inactive") return;
-                          try {
-                            await axios.put(
-                              `http://localhost:5000/users/${user.user_id}`,
-                              { type: "archived" }
-                            );
-                            toast.success("✅ User archived successfully!");
-                            fetchUsers();
-                          } catch (err) {
-                            console.error("Error archiving user:", err);
-                            toast.error("❌ Failed to archive user.");
-                          }
-                        }}
+                        onClick={() => updateUserType(user.user_id, "archived")}
                       >
                         Archive
                       </button>
+
                     </td>
                   </tr>
                 ))
@@ -290,7 +286,7 @@ export default function ManageUsersection() {
         </div>
       </div>
 
-      {/* Modals */}
+      {/* Add User Modal */}
       <AddUserModal
         showModal={showModal}
         setShowModal={setShowModal}
@@ -299,22 +295,6 @@ export default function ManageUsersection() {
         formData={formData}
         handleChange={handleChange}
         handleSubmit={handleSubmit}
-      />
-
-      <ViewUserModal
-        viewUser={viewUser}
-        setViewUser={setViewUser}
-        roles={roles}
-        municipalities={municipalities}
-        editMode={editMode}
-        setEditMode={setEditMode}
-        editFields={editFields}
-        setEditFields={setEditFields}
-        editPassword={editPassword}
-        setEditPassword={setEditPassword}
-        currentPassword={currentPassword}
-        setCurrentPassword={setCurrentPassword}
-        fetchUsers={fetchUsers}
       />
     </div>
   );
