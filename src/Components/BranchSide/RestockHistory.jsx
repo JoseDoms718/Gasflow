@@ -61,7 +61,6 @@ export default function RestockHistory({ refreshTrigger, onHistoryFetched, borde
             if (onHistoryFetched) onHistoryFetched(formatted);
 
             if (!fetchedOnce.current) {
-                toast.success(`Fetched ${formatted.length} restock record(s).`);
                 fetchedOnce.current = true;
             }
         } catch (err) {
