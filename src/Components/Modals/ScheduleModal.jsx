@@ -7,6 +7,9 @@ export default function ScheduleModal({ isOpen, onClose, onSave, initialData = {
     const [examTime, setExamTime] = useState(initialData.examTime || "");
     const [examLocation, setExamLocation] = useState(initialData.examLocation || "");
 
+    // Compute today's date in YYYY-MM-DD format
+    const today = new Date().toISOString().split("T")[0];
+
     const handleSave = () => {
         if (!examDate || !examTime || !examLocation) {
             alert("Please fill in all fields.");
@@ -41,6 +44,7 @@ export default function ScheduleModal({ isOpen, onClose, onSave, initialData = {
                             type="date"
                             value={examDate}
                             onChange={(e) => setExamDate(e.target.value)}
+                            min={today} // Prevent past days
                             className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             required
                         />
