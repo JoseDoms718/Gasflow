@@ -1,4 +1,4 @@
-import { FaUserCircle } from "react-icons/fa";
+import { FaUserCircle, FaBars, FaTimes } from "react-icons/fa";
 import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
@@ -6,7 +6,7 @@ import { io } from "socket.io-client";
 import LogoBlue from "../../assets/Design/LogoBlue.png";
 import EditProfileModal from "../Modals/EditProfileModal";
 
-const SOCKET_URL = "http://localhost:5000"; // adjust if needed
+const SOCKET_URL = "http://localhost:5000";
 
 export default function NavBar() {
   const navigate = useNavigate();
@@ -16,20 +16,18 @@ export default function NavBar() {
     return savedUser ? JSON.parse(savedUser) : null;
   });
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [newOrderNotification, setNewOrderNotification] = useState(false);
   const dropdownRef = useRef(null);
   const socketRef = useRef(null);
 
-  /* Fetch latest user silently */
+  // Fetch current user
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) return;
-
     axios
-      .get("http://localhost:5000/auth/me", {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      .get("http://localhost:5000/auth/me", { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => {
         if (res.data.success) {
           setUser(res.data.user);
@@ -47,7 +45,7 @@ export default function NavBar() {
       });
   }, []);
 
-  /* Close dropdown on outside click */
+  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -58,28 +56,18 @@ export default function NavBar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [dropdownOpen]);
 
-  /* Socket.IO for order notifications */
+  // Socket for order notifications
   useEffect(() => {
     if (!user) return;
-    socketRef.current = io(SOCKET_URL, {
-      auth: { token: localStorage.getItem("token") },
+    socketRef.current = io(SOCKET_URL, { auth: { token: localStorage.getItem("token") } });
+    socketRef.current.on("order-updated", () => {
+      if (location.pathname !== "/orders") setNewOrderNotification(true);
     });
-
-    socketRef.current.on("order-updated", (updatedOrder) => {
-      // Only trigger notification if not on /orders
-      if (location.pathname !== "/orders") {
-        setNewOrderNotification(true);
-      }
-    });
-
     return () => socketRef.current.disconnect();
   }, [user, location.pathname]);
 
-  /* Clear notification if navigating to Orders */
   useEffect(() => {
-    if (location.pathname === "/orders") {
-      setNewOrderNotification(false);
-    }
+    if (location.pathname === "/orders") setNewOrderNotification(false);
   }, [location.pathname]);
 
   const handleNav = (e, path) => {
@@ -90,59 +78,51 @@ export default function NavBar() {
   };
 
   return (
-    <nav className="fixed z-10 top-0 left-0 w-full bg-white text-gray-800 shadow-md transition-all duration-300">
-      <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-        {/* Left Section */}
-        <div className="flex items-center">
-          <Link to="/" className="flex items-center gap-3 mr-14">
-            <img src={LogoBlue} alt="Logo" className="w-10 h-10 rounded-full" />
-            <span className="text-xl font-bold tracking-wide">GAS FLOW</span>
-          </Link>
+    <nav className="fixed z-20 top-0 left-0 w-full bg-white text-gray-800 shadow-md transition-all duration-300">
+      <div className="container mx-auto px-4 md:px-6 py-3 md:py-4 flex items-center justify-between">
+        {/* Mobile Hamburger */}
+        <button
+          className="md:hidden text-gray-700 mr-3 flex-shrink-0"
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+        >
+          {mobileMenuOpen ? <FaTimes className="text-2xl" /> : <FaBars className="text-2xl" />}
+        </button>
 
-          <div className="flex items-center gap-10 text-lg font-medium">
-            {["Home", "Products", "Services", "Orders", "Contact"].map((item) => (
-              <Link
-                key={item}
-                to={`/${item === "Home" ? "" : item.toLowerCase()}`}
-                onClick={(e) => handleNav(e, `/${item.toLowerCase()}`)}
-                className="relative group hover:text-blue-500 transition"
-              >
-                {item}
-                {item === "Orders" && newOrderNotification && (
-                  <span className="absolute -top-2 -right-2 w-3 h-3 rounded-full bg-red-600 animate-pulse"></span>
-                )}
-                <span className="absolute left-0 bottom-0 w-0 h-[2px] bg-blue-500 transition-all duration-300 group-hover:w-full"></span>
-              </Link>
-            ))}
-          </div>
+        {/* Logo only on mobile, logo+title on desktop */}
+        <Link
+          to="/"
+          className="flex items-center gap-2 md:gap-3 ml-auto md:ml-0 flex-shrink-0"
+        >
+          <img
+            src={LogoBlue}
+            alt="Logo"
+            className="w-8 h-8 md:w-10 md:h-10 rounded-full"
+          />
+          <span className="hidden md:inline text-xl font-bold tracking-wide whitespace-nowrap">
+            GAS FLOW
+          </span>
+        </Link>
+
+        {/* Desktop Links */}
+        <div className="hidden md:flex items-center gap-8 text-lg font-medium ml-auto">
+          {["Home", "Products", "Services", "Orders", "Contact"].map((item) => (
+            <Link
+              key={item}
+              to={`/${item === "Home" ? "" : item.toLowerCase()}`}
+              onClick={(e) => handleNav(e, `/${item.toLowerCase()}`)}
+              className="relative group hover:text-blue-500 transition"
+            >
+              {item}
+              {item === "Orders" && newOrderNotification && (
+                <span className="absolute -top-2 -right-2 w-3 h-3 rounded-full bg-red-600 animate-pulse"></span>
+              )}
+              <span className="absolute left-0 bottom-0 w-0 h-[2px] bg-blue-500 transition-all duration-300 group-hover:w-full"></span>
+            </Link>
+          ))}
         </div>
 
-        {/* Right Section */}
-        <div className="flex items-center gap-6">
-          {/* Search Bar */}
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search..."
-              className="bg-gray-100 text-gray-700 rounded-lg pl-3 pr-8 py-1 focus:outline-none focus:ring-2 focus:ring-blue-400"
-            />
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth="2"
-              stroke="currentColor"
-              className="w-5 h-5 absolute right-2 top-1.5 text-gray-500"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-          </div>
-
-          {/* User Dropdown */}
+        {/* Desktop User Dropdown */}
+        <div className="hidden md:flex items-center gap-6 ml-6">
           {user ? (
             <div className="relative" ref={dropdownRef}>
               <button
@@ -154,14 +134,10 @@ export default function NavBar() {
               {dropdownOpen && (
                 <div
                   className="absolute w-44 bg-gray-900 border border-gray-700 rounded-lg shadow-lg z-20"
-                  style={{
-                    left: "50%",
-                    transform: "translateX(-50%)",
-                    top: "calc(100% + 12px)",
-                  }}
+                  style={{ left: "50%", transform: "translateX(-50%)", top: "calc(100% + 12px)" }}
                 >
                   <button
-                    className="flex items-center gap-3 w-full text-left px-4 py-2 text-gray-200 hover:bg-gray-800 transition"
+                    className="flex items-center gap-2 w-full text-left px-4 py-2 text-gray-200 hover:bg-gray-800 transition"
                     onClick={() => {
                       setDropdownOpen(false);
                       setShowEditModal(true);
@@ -170,7 +146,7 @@ export default function NavBar() {
                     Edit Profile
                   </button>
                   <button
-                    className="flex items-center gap-3 w-full text-left px-4 py-2 text-gray-200 hover:bg-red-600 transition"
+                    className="flex items-center gap-2 w-full text-left px-4 py-2 text-gray-200 hover:bg-red-600 transition"
                     onClick={() => {
                       setDropdownOpen(false);
                       localStorage.removeItem("user");
@@ -196,7 +172,62 @@ export default function NavBar() {
         </div>
       </div>
 
-      {/* Reusable EditProfileModal */}
+      {/* Mobile Menu */}
+      {mobileMenuOpen && (
+        <div className="md:hidden bg-white shadow-md border-t border-gray-200 px-4 py-3 space-y-3">
+          {["Home", "Products", "Services", "Orders", "Contact"].map((item) => (
+            <Link
+              key={item}
+              to={`/${item === "Home" ? "" : item.toLowerCase()}`}
+              onClick={(e) => {
+                handleNav(e, `/${item.toLowerCase()}`);
+                setMobileMenuOpen(false);
+              }}
+              className="block text-gray-800 font-medium hover:text-blue-500 transition"
+            >
+              {item}
+              {item === "Orders" && newOrderNotification && (
+                <span className="inline-block ml-2 w-3 h-3 rounded-full bg-red-600 animate-pulse"></span>
+              )}
+            </Link>
+          ))}
+
+          {user ? (
+            <div className="space-y-2">
+              <button
+                className="w-full text-left text-gray-800 hover:text-blue-500 transition"
+                onClick={() => {
+                  setShowEditModal(true);
+                  setMobileMenuOpen(false);
+                }}
+              >
+                Edit Profile
+              </button>
+              <button
+                className="w-full text-left text-gray-800 hover:text-red-600 transition"
+                onClick={() => {
+                  localStorage.removeItem("user");
+                  localStorage.removeItem("token");
+                  setUser(null);
+                  setMobileMenuOpen(false);
+                  navigate("/login");
+                }}
+              >
+                Logout
+              </button>
+            </div>
+          ) : (
+            <Link
+              to="/login"
+              className="block text-gray-800 hover:text-blue-500 transition"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Log in / Sign up
+            </Link>
+          )}
+        </div>
+      )}
+
       <EditProfileModal
         user={user}
         showModal={showEditModal}

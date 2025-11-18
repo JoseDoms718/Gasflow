@@ -25,24 +25,18 @@ export default function Productsection() {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        console.log("📡 Checking discounted products...");
-
         const discountedRes = await axios.get(
           "http://localhost:5000/products/public/products",
           { params: { type: "discounted" } }
         );
 
         let dataToUse = discountedRes.data;
-
         if (!dataToUse || dataToUse.length === 0) {
-          console.log("⚠️ No discounted products found, loading regular ones...");
           const regularRes = await axios.get(
             "http://localhost:5000/products/public/products",
             { params: { type: "regular" } }
           );
           dataToUse = regularRes.data;
-        } else {
-          console.log("✅ Discounted products found!");
         }
 
         const formatted = (dataToUse || []).map((p) => {
@@ -50,16 +44,13 @@ export default function Productsection() {
           if (imageUrl && !imageUrl.startsWith("http")) {
             imageUrl = `http://localhost:5000/products/images/${imageUrl}`;
           }
-          return {
-            ...p,
-            image_url: imageUrl,
-          };
+          return { ...p, image_url: imageUrl };
         });
 
         setProducts(formatted);
         setShowNavigation(formatted.length > 3);
       } catch (err) {
-        console.error("❌ Failed to load products:", err);
+        console.error("Failed to load products:", err);
       } finally {
         setLoading(false);
       }
@@ -79,13 +70,12 @@ export default function Productsection() {
 
   if (loading) {
     return (
-      <section className="bg-gray-900 py-12 text-center text-white">
+      <section className="bg-gray-900 py-8 text-center text-white">
         <p>Loading products...</p>
       </section>
     );
   }
 
-  // Minimum slides for consistent layout
   const minSlides = 6;
   const displayProducts = [...products];
   while (displayProducts.length < minSlides) {
@@ -93,21 +83,20 @@ export default function Productsection() {
   }
 
   return (
-    <section className="bg-gray-900 py-12">
-      <div className="container mx-auto px-6">
-        <h2 className="text-3xl font-bold text-white mb-2">Our Products</h2>
-        <p className="text-gray-300 max-w-2xl mb-8">
-          Browse our available Solane LPG products and accessories. Get
-          high-quality gas for home or business with trusted service.
+    <section className="bg-gray-900 py-8 md:py-12">
+      <div className="container mx-auto px-4">
+        <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Our Products</h2>
+        <p className="text-gray-300 text-sm md:text-base max-w-xl mb-6 md:mb-8">
+          Browse our available Solane LPG products and accessories. Get high-quality gas for home or business with trusted service.
         </p>
 
         <div className="relative">
           <Swiper
             key={displayProducts.length}
             modules={[Navigation]}
-            spaceBetween={20}
-            slidesPerView={3}
-            loop={displayProducts.length > 3}
+            spaceBetween={12}
+            slidesPerView={1}
+            loop={displayProducts.length > 1}
             navigation={{
               nextEl: ".custom-swiper-button-next",
               prevEl: ".custom-swiper-button-prev",
@@ -121,23 +110,22 @@ export default function Productsection() {
           >
             {displayProducts.map((p, i) => (
               <SwiperSlide key={i}>
-                <div className="bg-white rounded-lg shadow-md hover:shadow-xl transition duration-300 border border-gray-200 flex flex-col h-[450px]">
-                  {/* Fixed card height */}
-                  <div className="w-full h-48 bg-gray-200 flex items-center justify-center flex-shrink-0">
+                <div className="bg-white rounded-lg shadow-md hover:shadow-xl transition duration-300 border border-gray-200 flex flex-col h-[350px] md:h-[450px]">
+                  <div className="w-full h-36 md:h-48 bg-gray-200 flex items-center justify-center flex-shrink-0">
                     {p.placeholder ? (
-                      <Package className="w-12 h-12 text-gray-400" />
+                      <Package className="w-10 h-10 text-gray-400" />
                     ) : p.image_url ? (
                       <img
                         src={p.image_url}
                         alt={p.product_name}
-                        className="w-full h-48 object-cover"
+                        className="w-full h-full object-cover"
                       />
                     ) : (
-                      <Package className="w-12 h-12 text-gray-400" />
+                      <Package className="w-10 h-10 text-gray-400" />
                     )}
                   </div>
 
-                  <div className="p-4 flex flex-col flex-grow">
+                  <div className="p-3 md:p-4 flex flex-col flex-grow">
                     {p.placeholder ? (
                       <>
                         <h3 className="text-lg font-semibold text-gray-800 mb-1">
@@ -147,21 +135,21 @@ export default function Productsection() {
                           Placeholder product description.
                         </p>
                         <div className="flex items-center justify-between mt-auto">
-                          <p className="text-blue-600 font-bold text-lg">₱0.00</p>
+                          <p className="text-blue-600 font-bold text-base">₱0.00</p>
                           <span className="text-sm font-medium px-2 py-1 rounded bg-gray-100 text-gray-400">
                             Out of stock
                           </span>
                         </div>
                         <button
                           disabled
-                          className="mt-4 w-full py-2 rounded-lg bg-gray-400 text-gray-200 cursor-not-allowed"
+                          className="mt-3 w-full py-2 rounded-md bg-gray-400 text-gray-200 cursor-not-allowed"
                         >
                           Buy Now
                         </button>
                       </>
                     ) : (
                       <>
-                        <h3 className="text-lg font-semibold text-gray-800 mb-1">
+                        <h3 className="text-lg font-semibold text-gray-800 mb-1 line-clamp-1">
                           {p.product_name}
                         </h3>
                         <p className="text-gray-600 text-sm mb-2 line-clamp-2 flex-grow">
@@ -173,19 +161,19 @@ export default function Productsection() {
                               <p className="text-gray-500 line-through text-sm">
                                 ₱{formatPrice(p.price)}
                               </p>
-                              <p className="text-green-600 font-bold text-lg">
+                              <p className="text-green-600 font-bold text-base">
                                 ₱{formatPrice(p.discounted_price)}
                               </p>
                             </div>
                           ) : (
-                            <p className="text-blue-600 font-bold text-lg">
+                            <p className="text-blue-600 font-bold text-base">
                               ₱{formatPrice(p.price)}
                             </p>
                           )}
                           <span
                             className={`text-sm font-medium px-2 py-1 rounded ${p.stock > 0
-                                ? "bg-green-100 text-green-700"
-                                : "bg-red-100 text-red-700"
+                              ? "bg-green-100 text-green-700"
+                              : "bg-red-100 text-red-700"
                               }`}
                           >
                             {p.stock > 0 ? `${p.stock} in stock` : "Out of stock"}
@@ -194,9 +182,9 @@ export default function Productsection() {
                         <button
                           onClick={() => handleBuyClick(p)}
                           disabled={p.stock <= 0}
-                          className={`mt-4 w-full py-2 rounded-lg transition ${p.stock > 0
-                              ? "bg-blue-600 text-white hover:bg-blue-700"
-                              : "bg-gray-400 text-gray-200 cursor-not-allowed"
+                          className={`mt-3 w-full py-2 rounded-md transition ${p.stock > 0
+                            ? "bg-blue-600 text-white hover:bg-blue-700"
+                            : "bg-gray-400 text-gray-200 cursor-not-allowed"
                             }`}
                         >
                           Buy Now
@@ -211,11 +199,11 @@ export default function Productsection() {
 
           {showNavigation && (
             <>
-              <div className="custom-swiper-button-prev absolute -left-14 top-1/2 -translate-y-1/2 cursor-pointer z-0 bg-white shadow-md p-3 rounded-full hover:bg-gray-100 transition-opacity duration-300">
-                <span className="text-gray-900 text-3xl font-bold">❮</span>
+              <div className="custom-swiper-button-prev absolute -left-10 md:-left-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-2 md:p-3 rounded-full hover:bg-gray-100 transition duration-300">
+                <span className="text-gray-900 text-xl md:text-3xl font-bold">❮</span>
               </div>
-              <div className="custom-swiper-button-next absolute -right-14 top-1/2 -translate-y-1/2 cursor-pointer z-0 bg-white shadow-md p-3 rounded-full hover:bg-gray-100 transition-opacity duration-300">
-                <span className="text-gray-900 text-3xl font-bold">❯</span>
+              <div className="custom-swiper-button-next absolute -right-10 md:-right-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-2 md:p-3 rounded-full hover:bg-gray-100 transition duration-300">
+                <span className="text-gray-900 text-xl md:text-3xl font-bold">❯</span>
               </div>
             </>
           )}
