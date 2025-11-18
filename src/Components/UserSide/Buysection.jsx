@@ -6,15 +6,13 @@ import { X, ShoppingCart, CreditCard } from "lucide-react";
 import { io } from "socket.io-client";
 
 const BASE_URL = "http://localhost:5000";
-const SOCKET_URL = "http://localhost:5000"; // adjust if different
+const SOCKET_URL = "http://localhost:5000";
 
-// 🔹 Helper to normalize image URLs
 const getFullImageUrl = (url) => {
   if (!url) return "/placeholder.png";
   return url.startsWith("http") ? url : `${BASE_URL}/products/images/${url.replace(/^\/+/, "")}`;
 };
 
-// 🔹 Get cart key based on logged-in user
 const getUserCartKey = () => {
   const token = localStorage.getItem("token");
   return token ? `cart_${token}` : "cart_guest";
@@ -25,7 +23,7 @@ export default function Buysection() {
   const navigate = useNavigate();
 
   const [product, setProduct] = useState(null);
-  const [productType, setProductType] = useState("regular"); // "regular" or "refill"
+  const [productType, setProductType] = useState("regular");
   const [quantity, setQuantity] = useState(1);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("+63");
@@ -41,15 +39,13 @@ export default function Buysection() {
   useEffect(() => {
     const socket = io(SOCKET_URL);
 
-    // Stock updates
     socket.on("stock-updated", (data) => {
       if (data.product_id === id) {
-        setProduct((prev) => prev ? { ...prev, stock: data.stock } : prev);
+        setProduct((prev) => (prev ? { ...prev, stock: data.stock } : prev));
         toast.info(`⚠️ Stock updated: ${data.stock} units available`);
       }
     });
 
-    // Cart updates
     socket.on("cart-updated", (data) => {
       const cartKey = getUserCartKey();
       const cart = JSON.parse(localStorage.getItem(cartKey)) || [];
@@ -132,7 +128,9 @@ export default function Buysection() {
         const list = res.data || [];
         setBarangays(list);
 
-        setSelectedBarangayId((prevId) => list.some((b) => String(b.id) === String(prevId)) ? prevId : "");
+        setSelectedBarangayId((prevId) =>
+          list.some((b) => String(b.id) === String(prevId)) ? prevId : ""
+        );
       } catch (err) {
         console.error(err);
       }
@@ -154,19 +152,38 @@ export default function Buysection() {
     setPhone(value);
   };
 
+  const handleQuantityChange = (e) => {
+    const val = e.target.value;
+    // Allow empty string
+    if (val === "") {
+      setQuantity(null);
+      return;
+    }
+    let num = parseInt(val);
+    if (isNaN(num) || num < 0) num = 0;
+    if (product && num > product.stock) num = product.stock;
+    setQuantity(num);
+  };
+
   // ───────── CART HANDLERS ─────────
   const handleAddToCart = () => {
     if (!product) return;
+    if (!quantity || quantity <= 0) {
+      toast.error("Quantity must be at least 1.");
+      return;
+    }
 
     const cartKey = getUserCartKey();
     const cart = JSON.parse(localStorage.getItem(cartKey)) || [];
 
     const price = productType === "refill" ? product.refill_price : product.discounted_price || product.price;
 
-    const existingIndex = cart.findIndex((item) => item.product_id === product.product_id && item.type === productType);
+    const existingIndex = cart.findIndex(
+      (item) => item.product_id === product.product_id && item.type === productType
+    );
     if (existingIndex >= 0) {
       const newQuantity = cart[existingIndex].quantity + quantity;
-      cart[existingIndex].quantity = newQuantity > product.stock ? product.stock : newQuantity;
+      cart[existingIndex].quantity = Math.min(newQuantity, product.stock);
     } else {
       cart.push({
         product_id: product.product_id,
@@ -186,8 +203,12 @@ export default function Buysection() {
   };
 
   const handleCheckout = async () => {
+    if (!quantity || quantity <= 0) {
+      toast.error("Quantity must be at least 1.");
+      return;
+    }
     if (!name || !phone || !municipality || !selectedBarangayId) {
-      toast.error("Please fill out all fields.");
+      toast.error("Please fill out all required fields.");
       return;
     }
     if (!/^\+639\d{9}$/.test(phone)) {
@@ -209,25 +230,16 @@ export default function Buysection() {
 
       setIsPlacingOrder(true);
 
-      const price = productType === "refill" ? product.refill_price : product.discounted_price || product.price;
-
       const res = await axios.post(
         `${BASE_URL}/orders/buy`,
         {
-          items: [
-            {
-              product_id: product.product_id,
-              quantity,
-              type: productType, // now backend sees refill correctly
-            }
-          ],
+          items: [{ product_id: product.product_id, quantity, type: productType }],
           full_name: name,
           contact_number: phone,
           barangay_id: selectedBarangayId,
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-
 
       toast.success(res.data.message || "Order placed successfully!");
       navigate("/orders");
@@ -243,12 +255,12 @@ export default function Buysection() {
   if (!product) return <p className="text-white">Product not found.</p>;
 
   const pricePerUnit = productType === "refill" ? product.refill_price : product.discounted_price || product.price;
-  const totalPrice = pricePerUnit * quantity;
+  const totalPrice = (quantity || 0) * pricePerUnit;
   const outOfStock = product.stock <= 0;
 
   return (
     <section className="bg-gray-900 min-h-screen text-white px-6 pt-28 pb-20 flex items-center justify-center">
-      <div className="max-w-6xl w-full grid md:grid-cols-2 gap-10 items-center">
+      <div className="max-w-6xl w-full grid md:grid-cols-2 gap-10 items-start">
         {/* Product Image */}
         <div className="rounded-2xl shadow-xl flex items-center justify-center bg-gray-800 p-8 h-[600px]">
           <img
@@ -262,48 +274,34 @@ export default function Buysection() {
         <div className="bg-gray-800 p-10 rounded-2xl shadow-lg flex flex-col justify-between h-[600px] max-h-[85vh] overflow-y-auto">
           <div>
             <h2 className="text-3xl font-bold mb-2">{product.product_name}</h2>
-            <p className="text-gray-300 mb-2">
-              {product.product_description || "No description available."}
-            </p>
-            <p className="text-gray-400 mb-4">Available Stock: {product.stock}</p>
+            <p className="text-gray-300 mb-4">{product.product_description || "No description available."}</p>
+            {outOfStock && <p className="text-red-400 font-semibold mb-4">⚠️ Out of stock.</p>}
 
-            {outOfStock && (
-              <p className="text-red-400 font-semibold mb-4">⚠️ Out of stock.</p>
-            )}
+            {/* Price Above Inputs */}
+            <p className="text-2xl font-semibold mb-4">₱{totalPrice.toLocaleString()}.00</p>
 
-            {/* Type & Quantity Dropdown */}
-            <div className="flex flex-col mb-6">
-              <label className="block text-sm font-medium mb-2">Type & Quantity</label>
-
+            {/* Type & Quantity */}
+            <div className="flex flex-col mb-6 gap-2">
+              <label className="block text-sm font-medium">Type & Quantity</label>
               <div className="flex items-center gap-4">
-                {/* Type Dropdown */}
                 <select
                   value={productType}
                   onChange={(e) => setProductType(e.target.value)}
-                  className="px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg"
                 >
                   <option value="regular">Regular</option>
                   <option value="refill">Refill</option>
                 </select>
 
-                {/* Quantity Dropdown */}
-                <select
-                  value={quantity}
-                  onChange={(e) => setQuantity(parseInt(e.target.value))}
-                  disabled={outOfStock}
-                  className="px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {Array.from({ length: product.stock }, (_, i) => i + 1).map((q) => (
-                    <option key={q} value={q}>
-                      {q}
-                    </option>
-                  ))}
-                </select>
-
-                {/* Price Display */}
-                <p className="text-2xl font-semibold">
-                  ₱{totalPrice.toLocaleString()}.00
-                </p>
+                <input
+                  type="number"
+                  value={quantity ?? ""}
+                  onChange={handleQuantityChange}
+                  min={0}
+                  max={product.stock}
+                  className="w-20 px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg text-center"
+                  placeholder="0"
+                />
               </div>
             </div>
 
@@ -323,7 +321,6 @@ export default function Buysection() {
                 maxLength={13}
                 className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700"
               />
-
               <select
                 value={municipality}
                 onChange={(e) => setMunicipality(e.target.value)}
@@ -336,7 +333,6 @@ export default function Buysection() {
                   </option>
                 ))}
               </select>
-
               <select
                 value={selectedBarangayId}
                 onChange={(e) => setSelectedBarangayId(e.target.value)}
@@ -357,9 +353,7 @@ export default function Buysection() {
             <button
               onClick={handleAddToCart}
               disabled={outOfStock}
-              className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold ${outOfStock
-                ? "bg-yellow-500 cursor-not-allowed"
-                : "bg-yellow-600 hover:bg-yellow-700"
+              className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold ${outOfStock ? "bg-yellow-500 cursor-not-allowed" : "bg-yellow-600 hover:bg-yellow-700"
                 }`}
             >
               <ShoppingCart size={20} /> Add to Cart
@@ -368,17 +362,10 @@ export default function Buysection() {
             <button
               onClick={handleCheckout}
               disabled={isPlacingOrder || outOfStock}
-              className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold ${isPlacingOrder || outOfStock
-                ? "bg-blue-400 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-700"
+              className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold ${isPlacingOrder || outOfStock ? "bg-blue-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
                 }`}
             >
-              <CreditCard size={20} />{" "}
-              {outOfStock
-                ? "Out of Stock"
-                : isPlacingOrder
-                  ? "Placing Order..."
-                  : "Checkout"}
+              <CreditCard size={20} /> {outOfStock ? "Out of Stock" : isPlacingOrder ? "Placing Order..." : "Checkout"}
             </button>
 
             <button

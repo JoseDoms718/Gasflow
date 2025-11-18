@@ -7,7 +7,7 @@ export default function BusinessOwnerForm() {
   const [formData, setFormData] = useState({
     name: "",
     municipality: "",
-    barangay: "", // this will hold the barangay ID
+    barangay: "", // holds barangay ID
     contact_number: "+63",
     email: "",
     password: "",
@@ -66,7 +66,7 @@ export default function BusinessOwnerForm() {
     if (loading) return;
     setLoading(true);
 
-    // Basic validations
+    // Validations
     if (formData.password !== formData.confirmPassword) {
       toast.error("❌ Passwords do not match!");
       setLoading(false);
@@ -114,7 +114,6 @@ export default function BusinessOwnerForm() {
 
       toast.success("🎉 Registration successful! Please wait for admin confirmation.");
 
-      // Reset form
       setFormData({
         name: "",
         municipality: "",
@@ -128,9 +127,10 @@ export default function BusinessOwnerForm() {
       });
     } catch (err) {
       console.error("❌ Registration error:", err);
-
-      // Handle duplicate email
-      if (err.response?.data?.error?.toLowerCase().includes("duplicate") || err.response?.data?.error?.toLowerCase().includes("email")) {
+      if (
+        err.response?.data?.error?.toLowerCase().includes("duplicate") ||
+        err.response?.data?.error?.toLowerCase().includes("email")
+      ) {
         toast.error("⚠️ This email is already registered.");
       } else {
         toast.error(err.response?.data?.error || "⚠️ Failed to register.");
@@ -141,11 +141,11 @@ export default function BusinessOwnerForm() {
   };
 
   return (
-    <div className="relative">
+    <div className="relative w-full">
       <div className="max-h-[75vh] overflow-y-auto">
         <form
           onSubmit={handleRegister}
-          className="grid grid-cols-2 gap-4 bg-gray-900 text-white p-6 rounded-xl shadow-md min-w-full"
+          className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-900 text-white p-6 rounded-xl shadow-md"
         >
           <input
             type="text"
@@ -154,7 +154,7 @@ export default function BusinessOwnerForm() {
             onChange={handleChange}
             placeholder="Full Name"
             required
-            className="col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
+            className="col-span-1 md:col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
           />
 
           <select
@@ -200,7 +200,7 @@ export default function BusinessOwnerForm() {
             placeholder="+639XXXXXXXXX"
             maxLength="13"
             required
-            className="col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
+            className="col-span-1 md:col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
           />
 
           <input
@@ -210,10 +210,10 @@ export default function BusinessOwnerForm() {
             onChange={handleChange}
             placeholder="Email Address"
             required
-            className="col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
+            className="col-span-1 md:col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
           />
 
-          <div className="col-span-2 relative">
+          <div className="col-span-1 md:col-span-2 relative">
             <input
               type={showPassword ? "text" : "password"}
               name="password"
@@ -233,7 +233,7 @@ export default function BusinessOwnerForm() {
             </button>
           </div>
 
-          <div className="col-span-2 relative">
+          <div className="col-span-1 md:col-span-2 relative">
             <input
               type={showConfirmPassword ? "text" : "password"}
               name="confirmPassword"
@@ -253,7 +253,7 @@ export default function BusinessOwnerForm() {
             </button>
           </div>
 
-          <div className="col-span-2 text-left mt-2">
+          <div className="col-span-1 md:col-span-2 text-left mt-2">
             <label className="text-gray-400 text-sm mb-2 block">
               Upload Business/Establishment Picture
             </label>
@@ -270,7 +270,7 @@ export default function BusinessOwnerForm() {
           <button
             type="submit"
             disabled={loading}
-            className={`col-span-2 w-full py-4 rounded-full font-semibold text-lg transition ${loading ? "bg-gray-600 cursor-not-allowed" : "bg-[#2d5ee0] hover:bg-[#244bb5] text-white"
+            className={`col-span-1 md:col-span-2 w-full py-4 rounded-full font-semibold text-lg transition ${loading ? "bg-gray-600 cursor-not-allowed" : "bg-[#2d5ee0] hover:bg-[#244bb5] text-white"
               }`}
           >
             {loading ? <Loader2 className="mx-auto animate-spin" size={22} /> : "Sign Up"}

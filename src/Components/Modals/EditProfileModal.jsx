@@ -35,15 +35,10 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
 
                 if (data.success) {
                     setUser(data.user);
-
-                    // ensure editFields uses string for barangay_id if present
-                    setEditFields((prev) => ({
+                    setEditFields({
                         ...data.user,
-                        barangay_id:
-                            data.user?.barangay_id !== undefined && data.user?.barangay_id !== null
-                                ? String(data.user.barangay_id)
-                                : prev.barangay_id ?? "",
-                    }));
+                        barangay_id: data.user?.barangay_id ? String(data.user.barangay_id) : "",
+                    });
 
                     if (data.user.role === "branch_manager") {
                         const branchRes = await axios.get("http://localhost:5000/branchinfo", {
@@ -76,38 +71,30 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
         fetchMunicipalities();
     }, []);
 
-    /* -------------------- FETCH USER BARANGAYS (Option 1: filtered by municipality) -------------------- */
+    /* -------------------- FETCH USER BARANGAYS -------------------- */
     useEffect(() => {
         if (!user) return;
         const municipality = editFields.municipality ?? user.municipality;
-        if (!municipality) return; // wait for municipality
+        if (!municipality) return;
 
         const fetchBarangays = async () => {
             try {
-                const res = await axios.get(`http://localhost:5000/barangays?municipality=${encodeURIComponent(municipality)}`);
+                const res = await axios.get(
+                    `http://localhost:5000/barangays?municipality=${encodeURIComponent(municipality)}`
+                );
 
-                // tolerant mapping: support both { barangay_id, barangay_name } and { id, name }
                 const barangayOptions = res.data.map((b) => {
-                    const id = b.barangay_id ?? b.id ?? b.barangayId ?? b.barangay_id;
-                    const name = b.barangay_name ?? b.name ?? b.barangayName ?? b.barangay_name;
-                    return {
-                        value: id !== undefined && id !== null ? String(id) : "",
-                        label: name ?? "",
-                    };
+                    const id = b.barangay_id ?? b.id;
+                    const name = b.barangay_name ?? b.name;
+                    return { value: id ? String(id) : "", label: name ?? "" };
                 });
 
                 setUserBarangays(barangayOptions);
 
-                // ensure editFields.barangay_id is set to a string if user has one
                 setEditFields((prev) => {
                     const next = { ...prev };
-                    if ((next.barangay_id === undefined || next.barangay_id === null || next.barangay_id === "") && user.barangay_id) {
-                        next.barangay_id = String(user.barangay_id);
-                    }
-                    // If the municipality changed from original user value, reset barangay selection
-                    if (next.municipality !== user.municipality) {
-                        next.barangay_id = next.barangay_id ?? "";
-                    }
+                    if (!next.barangay_id && user.barangay_id) next.barangay_id = String(user.barangay_id);
+                    if (next.municipality !== user.municipality) next.barangay_id = "";
                     return next;
                 });
             } catch (err) {
@@ -129,9 +116,9 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                 );
 
                 const mapped = res.data.map((b) => {
-                    const id = b.barangay_id ?? b.id ?? b.barangayId;
-                    const name = b.barangay_name ?? b.name ?? b.barangayName;
-                    return { value: id !== undefined && id !== null ? String(id) : "", label: name ?? "" };
+                    const id = b.barangay_id ?? b.id;
+                    const name = b.barangay_name ?? b.name;
+                    return { value: id ? String(id) : "", label: name ?? "" };
                 });
 
                 setBranchBarangays(mapped);
@@ -156,10 +143,9 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
             }
 
             if (Object.keys(editFields).length > 0) {
-                // when sending to backend, convert barangay_id back to number or null if empty
                 const payload = { ...editFields };
                 if (payload.barangay_id === "") payload.barangay_id = null;
-                else if (payload.barangay_id !== undefined && payload.barangay_id !== null) payload.barangay_id = Number(payload.barangay_id);
+                else if (payload.barangay_id) payload.barangay_id = Number(payload.barangay_id);
 
                 await axios.put(`http://localhost:5000/users/${user.user_id}`, payload, {
                     headers: { Authorization: `Bearer ${token}` },
@@ -217,8 +203,8 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
     if (!showModal || !user) return null;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-            <div className="bg-gray-900 text-white p-8 rounded-xl w-full max-w-3xl shadow-2xl relative flex flex-col gap-6">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-900 text-white p-6 md:p-8 rounded-xl w-full max-w-3xl shadow-2xl relative flex flex-col gap-6 overflow-y-auto max-h-[90vh]">
                 <button
                     className="absolute top-5 right-5 text-gray-400 hover:text-white text-xl"
                     onClick={() => setShowModal(false)}
@@ -246,65 +232,64 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
 
                 {/* User Tab */}
                 {activeTab === "user" && (
-                    <>
-                        <div className="grid grid-cols-2 gap-x-12 gap-y-6 mt-4 text-sm">
-                            <EditableField
-                                label="Name"
-                                field="name"
-                                value={editFields.name ?? user.name}
-                                editMode={editMode}
-                                setEditMode={setEditMode}
-                                setEditFields={setEditFields}
-                            />
-                            {user.role === "Admin" && (
-                                <EditableSelect
-                                    label="Role"
-                                    field="role"
-                                    value={editFields.role ?? user.role ?? "User"}
-                                    options={roles.map((r) => ({ value: r, label: r }))}
-                                    editMode={editMode}
-                                    setEditMode={setEditMode}
-                                    setEditFields={setEditFields}
-                                />
-                            )}
+                    <div className="flex flex-col gap-4 mt-4 text-sm">
+                        <EditableField
+                            label="Name"
+                            field="name"
+                            value={editFields.name ?? user.name}
+                            editMode={editMode}
+                            setEditMode={setEditMode}
+                            setEditFields={setEditFields}
+                        />
+                        {user.role === "Admin" && (
                             <EditableSelect
-                                label="Municipality"
-                                field="municipality"
-                                value={editFields.municipality ?? user.municipality}
-                                options={municipalities}
+                                label="Role"
+                                field="role"
+                                value={editFields.role ?? user.role ?? "User"}
+                                options={roles.map((r) => ({ value: r, label: r }))}
                                 editMode={editMode}
                                 setEditMode={setEditMode}
                                 setEditFields={setEditFields}
                             />
-                            <EditableSelect
-                                label="Barangay"
-                                field="barangay_id"
-                                value={editFields.barangay_id ?? (user.barangay_id !== undefined ? String(user.barangay_id) : "")}
-                                options={userBarangays}
-                                editMode={editMode}
-                                setEditMode={setEditMode}
-                                setEditFields={setEditFields}
-                            />
-                            <EditableField
-                                label="Email"
-                                field="email"
-                                value={editFields.email ?? user.email}
-                                editMode={editMode}
-                                setEditMode={setEditMode}
-                                setEditFields={setEditFields}
-                            />
-                            <EditableField
-                                label="Contact"
-                                field="contact_number"
-                                value={editFields.contact_number ?? user.contact_number ?? "+63"}
-                                editMode={editMode}
-                                setEditMode={setEditMode}
-                                setEditFields={setEditFields}
-                                isPhone
-                            />
-                        </div>
+                        )}
+                        <EditableSelect
+                            label="Municipality"
+                            field="municipality"
+                            value={editFields.municipality ?? user.municipality}
+                            options={municipalities}
+                            editMode={editMode}
+                            setEditMode={setEditMode}
+                            setEditFields={setEditFields}
+                        />
+                        <EditableSelect
+                            label="Barangay"
+                            field="barangay_id"
+                            value={editFields.barangay_id ?? (user.barangay_id ? String(user.barangay_id) : "")}
+                            options={userBarangays}
+                            editMode={editMode}
+                            setEditMode={setEditMode}
+                            setEditFields={setEditFields}
+                        />
+                        <EditableField
+                            label="Email"
+                            field="email"
+                            value={editFields.email ?? user.email}
+                            editMode={editMode}
+                            setEditMode={setEditMode}
+                            setEditFields={setEditFields}
+                        />
+                        <EditableField
+                            label="Contact"
+                            field="contact_number"
+                            value={editFields.contact_number ?? user.contact_number ?? "+63"}
+                            editMode={editMode}
+                            setEditMode={setEditMode}
+                            setEditFields={setEditFields}
+                            isPhone
+                        />
 
-                        <div className="flex flex-col gap-2 mt-6 p-4 bg-gray-800 rounded-lg">
+                        {/* Change Password */}
+                        <div className="flex flex-col gap-2 p-4 bg-gray-800 rounded-lg">
                             <span className="font-semibold mb-2">Change Password:</span>
                             <input
                                 type="password"
@@ -321,7 +306,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                                 placeholder="Confirm Password"
                             />
                         </div>
-                    </>
+                    </div>
                 )}
 
                 {/* Branch Tab */}
@@ -335,7 +320,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                 )}
 
                 {/* Action Buttons */}
-                <div className="flex gap-4 mt-6 justify-end">
+                <div className="flex flex-col sm:flex-row gap-4 mt-6 justify-end">
                     <button
                         className="px-4 py-2 bg-green-500 rounded hover:bg-green-600 text-white font-medium"
                         onClick={handleSaveChanges}
@@ -407,9 +392,9 @@ export function EditableField({ label, field, value, editMode, setEditMode, setE
     );
 }
 
-/* -------------------- ✅ FIXED EditableSelect -------------------- */
+/* -------------------- EditableSelect -------------------- */
 export function EditableSelect({ label, field, value, options = [], editMode, setEditMode, setEditFields }) {
-    const normalizedValue = value !== undefined && value !== null ? String(value) : "";
+    const normalizedValue = value ? String(value) : "";
 
     const getDisplayValue = () => {
         if (!options || options.length === 0) return normalizedValue ?? "";
@@ -418,8 +403,7 @@ export function EditableSelect({ label, field, value, options = [], editMode, se
     };
 
     const handleChange = (e) => {
-        const val = e.target.value;
-        setEditFields((prev) => ({ ...prev, [field]: val }));
+        setEditFields((prev) => ({ ...prev, [field]: e.target.value }));
     };
 
     return (
@@ -427,17 +411,13 @@ export function EditableSelect({ label, field, value, options = [], editMode, se
             <span className="text-gray-300 text-sm font-semibold">{label}:</span>
             {editMode[field] ? (
                 <div className="flex items-center justify-between gap-2 bg-gray-800 px-3 py-2 rounded-lg border border-gray-700">
-                    <select className="bg-gray-800 text-white outline-none w-full" value={normalizedValue ?? ""} onChange={handleChange}>
+                    <select className="bg-gray-800 text-white outline-none w-full" value={normalizedValue} onChange={handleChange}>
                         <option value="">Select {label}</option>
                         {options.map((opt) =>
                             typeof opt === "string" ? (
-                                <option key={opt} value={opt}>
-                                    {opt}
-                                </option>
+                                <option key={opt} value={opt}>{opt}</option>
                             ) : (
-                                <option key={opt.value} value={opt.value}>
-                                    {opt.label}
-                                </option>
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
                             )
                         )}
                     </select>

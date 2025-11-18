@@ -18,16 +18,12 @@ export default function Loginsection() {
   const [otpEmail, setOtpEmail] = useState(""); // email passed to OTP form
   const navigate = useNavigate();
 
-  // ----------------------
   // Auto-login if token exists
-  // ----------------------
   useEffect(() => {
     const token = localStorage.getItem("token");
     const user = localStorage.getItem("user");
     if (token && user) {
-      // ✅ Set Axios default header for all requests
       axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-
       const parsed = JSON.parse(user);
       switch (parsed.role) {
         case "users":
@@ -49,9 +45,7 @@ export default function Loginsection() {
     }
   }, [navigate]);
 
-  // ----------------------
-  // LOGIN HANDLER
-  // ----------------------
+  // Login handler
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!email || !password) {
@@ -72,7 +66,6 @@ export default function Loginsection() {
         return;
       }
 
-      // ✅ Store token and user info
       localStorage.setItem("token", res.data.token);
       localStorage.setItem(
         "user",
@@ -81,15 +74,13 @@ export default function Loginsection() {
           name: res.data.name,
           role: res.data.role,
           municipality: res.data.municipality,
-          barangay_id: res.data.barangay_id, // ✅ include barangay_id
+          barangay_id: res.data.barangay_id,
           contact_number: res.data.contact_number || "",
         })
       );
 
-      // ✅ Set Axios default header
       axios.defaults.headers.common["Authorization"] = `Bearer ${res.data.token}`;
 
-      // ✅ Redirect based on role
       switch (res.data.role) {
         case "users":
         case "business_owner":
@@ -114,25 +105,29 @@ export default function Loginsection() {
   };
 
   return (
-    <section className="h-screen w-screen flex bg-gray-900 overflow-hidden">
-      {/* LEFT SIDE */}
-      <div className="flex-1 flex flex-col justify-start items-start p-8">
-        <div className="flex items-center gap-3 mb-8">
+    <section className="min-h-screen w-full flex flex-col md:flex-row bg-gray-900 overflow-hidden">
+      {/* LEFT SIDE - HIDE IMAGE ON MOBILE WHEN SIGNUP */}
+      <div
+        className={`flex-1 flex flex-col justify-start items-center md:items-start p-6 md:p-12 transition-all duration-300
+          ${!isLogin ? "hidden sm:flex" : "flex"}
+        `}
+      >
+        <div className="flex items-center gap-3 mb-6 md:mb-12">
           <img src={LogoWhite} alt="Logo" className="w-12 h-12" />
-          <span className="text-white text-2xl font-bold tracking-wide">GAS FLOW</span>
+          <span className="text-white text-2xl md:text-3xl font-bold tracking-wide">GAS FLOW</span>
         </div>
-        <div className="flex justify-center items-center flex-1">
-          <img src={Model} alt="Model" className="h-full object-contain" />
+        <div className="flex justify-center items-center flex-1 w-full">
+          <img src={Model} alt="Model" className="w-full max-w-md md:max-w-full h-auto object-contain" />
         </div>
       </div>
 
       {/* RIGHT SIDE */}
-      <div className="flex-1 flex justify-center items-center bg-gray-900">
-        <div className="w-full max-w-lg text-center">
+      <div className="flex-1 flex justify-center items-center p-6 md:p-12">
+        <div className="w-full max-w-md text-center">
           {/* LOGIN FORM */}
           {isLogin && !isOtpActive && (
             <form className="space-y-5">
-              <h2 className="text-white text-3xl font-bold mb-8">SIGN IN</h2>
+              <h2 className="text-white text-3xl md:text-4xl font-bold mb-6 md:mb-8">SIGN IN</h2>
               <input
                 type="email"
                 placeholder="Enter Your Email"
@@ -161,49 +156,24 @@ export default function Loginsection() {
 
           {/* SIGNUP FORMS */}
           {!isLogin && !isOtpActive && (
-            <div className="mt-20">
-              <div className="flex gap-4 justify-center mb-4">
-                <label className="flex items-center gap-2 text-white">
-                  <input
-                    type="radio"
-                    name="userType"
-                    value="normal"
-                    checked={userType === "normal"}
-                    onChange={() => setUserType("normal")}
-                    className="accent-[#2d5ee0]"
-                  />
-                  Customer
-                </label>
-                <label className="flex items-center gap-2 text-white">
-                  <input
-                    type="radio"
-                    name="userType"
-                    value="business"
-                    checked={userType === "business"}
-                    onChange={() => setUserType("business")}
-                    className="accent-[#2d5ee0]"
-                  />
-                  Business Owner
-                </label>
-                <label className="flex items-center gap-2 text-white">
-                  <input
-                    type="radio"
-                    name="userType"
-                    value="retailer"
-                    checked={userType === "retailer"}
-                    onChange={() => setUserType("retailer")}
-                    className="accent-[#2d5ee0]"
-                  />
-                  Retailer
-                </label>
+            <div className="mt-6 md:mt-10">
+              <div className="flex flex-wrap gap-4 justify-center mb-4">
+                {["normal", "business", "retailer"].map((type) => (
+                  <label key={type} className="flex items-center gap-2 text-white">
+                    <input
+                      type="radio"
+                      name="userType"
+                      value={type}
+                      checked={userType === type}
+                      onChange={() => setUserType(type)}
+                      className="accent-[#2d5ee0]"
+                    />
+                    {type === "normal" ? "Customer" : type === "business" ? "Business Owner" : "Retailer"}
+                  </label>
+                ))}
               </div>
 
-              {userType === "normal" && (
-                <Userform
-                  setIsOtpActive={setIsOtpActive}
-                  setOtpEmail={setOtpEmail}
-                />
-              )}
+              {userType === "normal" && <Userform setIsOtpActive={setIsOtpActive} setOtpEmail={setOtpEmail} />}
               {userType === "business" && <Businessownerform setIsOtpActive={setIsOtpActive} />}
               {userType === "retailer" && <Retailerform setIsOtpActive={setIsOtpActive} />}
             </div>
@@ -211,7 +181,7 @@ export default function Loginsection() {
 
           {/* OTP VERIFICATION FORM */}
           {isOtpActive && (
-            <div className="max-h-[75vh] overflow-y-auto">
+            <div className="max-h-[60vh] overflow-y-auto">
               <OtpVerificationForm
                 email={otpEmail}
                 onVerifyOtp={() => {
@@ -230,7 +200,7 @@ export default function Loginsection() {
 
           {/* LOGIN/SIGNUP TOGGLE */}
           {!isOtpActive && (
-            <p className="text-white mt-6">
+            <p className="text-white mt-6 text-sm md:text-base">
               {isLogin ? "Don't have an account? " : "Already have an account? "}
               <button
                 type="button"

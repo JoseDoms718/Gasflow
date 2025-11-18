@@ -88,41 +88,40 @@ export default function NavBar() {
           {mobileMenuOpen ? <FaTimes className="text-2xl" /> : <FaBars className="text-2xl" />}
         </button>
 
-        {/* Logo only on mobile, logo+title on desktop */}
-        <Link
-          to="/"
-          className="flex items-center gap-2 md:gap-3 ml-auto md:ml-0 flex-shrink-0"
-        >
-          <img
-            src={LogoBlue}
-            alt="Logo"
-            className="w-8 h-8 md:w-10 md:h-10 rounded-full"
-          />
-          <span className="hidden md:inline text-xl font-bold tracking-wide whitespace-nowrap">
-            GAS FLOW
-          </span>
-        </Link>
+        {/* Logo + Desktop Links */}
+        <div className="flex items-center gap-6 flex-1">
+          <Link to="/" className="flex items-center gap-2 md:gap-3 flex-shrink-0">
+            <img
+              src={LogoBlue}
+              alt="Logo"
+              className="w-8 h-8 md:w-10 md:h-10 rounded-full"
+            />
+            <span className="hidden md:inline text-xl font-bold tracking-wide whitespace-nowrap">
+              GAS FLOW
+            </span>
+          </Link>
 
-        {/* Desktop Links */}
-        <div className="hidden md:flex items-center gap-8 text-lg font-medium ml-auto">
-          {["Home", "Products", "Services", "Orders", "Contact"].map((item) => (
-            <Link
-              key={item}
-              to={`/${item === "Home" ? "" : item.toLowerCase()}`}
-              onClick={(e) => handleNav(e, `/${item.toLowerCase()}`)}
-              className="relative group hover:text-blue-500 transition"
-            >
-              {item}
-              {item === "Orders" && newOrderNotification && (
-                <span className="absolute -top-2 -right-2 w-3 h-3 rounded-full bg-red-600 animate-pulse"></span>
-              )}
-              <span className="absolute left-0 bottom-0 w-0 h-[2px] bg-blue-500 transition-all duration-300 group-hover:w-full"></span>
-            </Link>
-          ))}
+          {/* Desktop Links */}
+          <div className="hidden md:flex items-center gap-8 text-lg font-medium">
+            {["Home", "Products", "Services", "Orders", "Contact"].map((item) => (
+              <Link
+                key={item}
+                to={`/${item === "Home" ? "" : item.toLowerCase()}`}
+                onClick={(e) => handleNav(e, `/${item.toLowerCase()}`)}
+                className="relative group hover:text-blue-500 transition"
+              >
+                {item}
+                {item === "Orders" && newOrderNotification && (
+                  <span className="absolute -top-2 -right-2 w-3 h-3 rounded-full bg-red-600 animate-pulse"></span>
+                )}
+                <span className="absolute left-0 bottom-0 w-0 h-[2px] bg-blue-500 transition-all duration-300 group-hover:w-full"></span>
+              </Link>
+            ))}
+          </div>
         </div>
 
         {/* Desktop User Dropdown */}
-        <div className="hidden md:flex items-center gap-6 ml-6">
+        <div className="hidden md:flex items-center gap-6">
           {user ? (
             <div className="relative" ref={dropdownRef}>
               <button

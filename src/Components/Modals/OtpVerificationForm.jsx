@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import axios from "axios";
-import { useNavigate } from "react-router-dom"; // <- import useNavigate
+import { useNavigate } from "react-router-dom";
 
 export default function OtpVerificationForm({ email, onVerifyOtp }) {
     const [otp, setOtp] = useState("");
@@ -11,13 +11,17 @@ export default function OtpVerificationForm({ email, onVerifyOtp }) {
     const [resendTimer, setResendTimer] = useState(60);
     const timerRef = useRef(null);
 
-    const navigate = useNavigate(); // <- initialize navigate
+    const navigate = useNavigate();
 
-    // Start countdown
+    // Start countdown on mount
     useEffect(() => {
+        resetTimer();
+        return () => clearInterval(timerRef.current);
+    }, []);
+
+    const resetTimer = () => {
         setResendTimer(60);
         if (timerRef.current) clearInterval(timerRef.current);
-
         timerRef.current = setInterval(() => {
             setResendTimer((prev) => {
                 if (prev <= 1) {
@@ -27,14 +31,12 @@ export default function OtpVerificationForm({ email, onVerifyOtp }) {
                 return prev - 1;
             });
         }, 1000);
-
-        return () => clearInterval(timerRef.current);
-    }, []);
+    };
 
     // Verify OTP
     const handleVerify = async (e) => {
         e.preventDefault();
-        if (!otp.trim() || otp.length !== 6) {
+        if (otp.length !== 6) {
             toast.error("⚠️ Enter a valid 6-digit OTP.");
             return;
         }
@@ -61,7 +63,7 @@ export default function OtpVerificationForm({ email, onVerifyOtp }) {
             setSendingOtp(true);
             await axios.post("http://localhost:5000/send-otp", { email, action: "resend" });
             toast.success("✅ OTP resent successfully!");
-            setResendTimer(60);
+            resetTimer();
         } catch (err) {
             console.error("❌ Resend OTP error:", err);
             toast.error(err?.response?.data?.error || "Failed to resend OTP.");
@@ -78,9 +80,7 @@ export default function OtpVerificationForm({ email, onVerifyOtp }) {
             setOtp("");
             clearInterval(timerRef.current);
             setResendTimer(0);
-
-            // Redirect to /login
-            navigate("/");
+            navigate("/"); // redirect to login/home
         } catch (err) {
             console.error("❌ Cancel OTP error:", err);
             toast.error(err?.response?.data?.error || "Failed to cancel OTP.");
@@ -130,7 +130,9 @@ export default function OtpVerificationForm({ email, onVerifyOtp }) {
                 type="button"
                 onClick={handleResend}
                 disabled={resendTimer > 0 || sendingOtp}
-                className={`mt-2 w-full text-sm font-semibold ${resendTimer > 0 || sendingOtp ? "text-gray-500 cursor-not-allowed" : "text-blue-400 hover:underline"
+                className={`mt-2 w-full text-sm font-semibold ${resendTimer > 0 || sendingOtp
+                        ? "text-gray-500 cursor-not-allowed"
+                        : "text-blue-400 hover:underline"
                     }`}
             >
                 {sendingOtp ? "Sending..." : `Resend OTP ${resendTimer > 0 ? `(${resendTimer}s)` : ""}`}

@@ -99,13 +99,13 @@ export default function Contactsection() {
                       {branch.branch_name}
                     </h3>
 
-                    {/* Address with MapPin icon */}
+                    {/* Address */}
                     <p className="text-gray-700 text-sm mb-1 flex items-center gap-1">
                       <MapPin className="w-4 h-4 text-gray-600" />
                       {branch.barangay_name}, <span className="font-medium">{branch.municipality}</span>
                     </p>
 
-                    {/* Contact with Phone icon */}
+                    {/* Contact */}
                     <p className="text-gray-600 text-sm flex items-center gap-1 mb-3">
                       <Phone className="w-4 h-4 text-gray-600" /> {branch.branch_contact}
                     </p>
@@ -122,6 +122,7 @@ export default function Contactsection() {
             ))}
           </Swiper>
 
+          {/* Swiper Navigation Buttons */}
           <div className="custom-swiper-button-prev absolute -left-10 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full hover:bg-gray-100 transition">
             <span className="text-gray-900 text-2xl font-bold">❮</span>
           </div>

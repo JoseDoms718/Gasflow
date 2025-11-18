@@ -48,18 +48,23 @@ export default function Retailerform() {
     const handleChange = (e) => {
         const { name, value, files } = e.target;
 
-        if (name === "municipality") return setFormData((prev) => ({ ...prev, municipality: value, barangay: "" }));
+        if (name === "municipality") {
+            setFormData((prev) => ({ ...prev, municipality: value, barangay: "" }));
+            return;
+        }
 
         if (name === "contact_number") {
             let digits = value.replace(/[^\d]/g, "");
             if (digits.startsWith("0")) digits = digits.slice(1);
             if (digits.startsWith("63")) digits = digits.slice(2);
             if (digits.length > 10) digits = digits.slice(0, 10);
-            return setFormData((prev) => ({ ...prev, contact_number: `+63${digits}` }));
+            setFormData((prev) => ({ ...prev, contact_number: `+63${digits}` }));
+            return;
         }
 
         if (permitList.some((p) => p.key === name)) {
-            return setFormData((prev) => ({ ...prev, permits: { ...prev.permits, [name]: files[0] } }));
+            setFormData((prev) => ({ ...prev, permits: { ...prev.permits, [name]: files[0] } }));
+            return;
         }
 
         setFormData((prev) => ({ ...prev, [name]: value }));
@@ -70,6 +75,7 @@ export default function Retailerform() {
         if (loading) return;
         setLoading(true);
 
+        // Password validation
         if (formData.password !== formData.confirmPassword) {
             toast.error("❌ Passwords do not match!");
             setLoading(false);
@@ -81,6 +87,7 @@ export default function Retailerform() {
             return;
         }
 
+        // Phone validation
         const phoneRegex = /^\+639\d{9}$/;
         if (!phoneRegex.test(formData.contact_number)) {
             toast.error("⚠️ Enter a valid PH number (+639XXXXXXXXX).");
@@ -88,6 +95,7 @@ export default function Retailerform() {
             return;
         }
 
+        // Email validation
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(formData.email)) {
             toast.error("⚠️ Enter a valid email address.");
@@ -95,28 +103,34 @@ export default function Retailerform() {
             return;
         }
 
+        // Municipality & Barangay validation
         if (!formData.municipality || !formData.barangay) {
             toast.error("⚠️ Select municipality and barangay.");
             setLoading(false);
             return;
         }
 
+        // Check all file uploads
+        for (let permit of permitList) {
+            if (!formData.permits[permit.key]) {
+                toast.error(`⚠️ ${permit.label} is required.`);
+                setLoading(false);
+                return;
+            }
+        }
+
         try {
             const data = new FormData();
-            data.append("name", formData.name);
-            data.append("email", formData.email);
-            data.append("password", formData.password);
-            data.append("contact_number", formData.contact_number);
-            data.append("municipality", formData.municipality);
-            data.append("barangay", formData.barangay);
-            data.append("role", formData.role);
-
-            // append files dynamically
-            Object.keys(formData.permits).forEach((key) => {
-                if (formData.permits[key]) data.append(key, formData.permits[key]);
+            Object.keys(formData).forEach((key) => {
+                if (key === "permits") {
+                    Object.keys(formData.permits).forEach((pKey) => {
+                        data.append(pKey, formData.permits[pKey]);
+                    });
+                } else {
+                    data.append(key, formData[key]);
+                }
             });
 
-            // ✅ send to backend endpoint
             const res = await axios.post("http://localhost:5000/retailerSignup", data, {
                 headers: { "Content-Type": "multipart/form-data" },
             });
@@ -143,11 +157,11 @@ export default function Retailerform() {
     };
 
     return (
-        <div className="relative">
+        <div className="relative w-full">
             <div className="max-h-[75vh] overflow-y-auto">
                 <form
                     onSubmit={handleRegister}
-                    className="grid grid-cols-2 gap-4 bg-gray-900 text-white p-6 rounded-xl shadow-md min-w-full"
+                    className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-900 text-white p-6 rounded-xl shadow-md"
                 >
                     {/* Name */}
                     <input
@@ -157,7 +171,7 @@ export default function Retailerform() {
                         value={formData.name}
                         onChange={handleChange}
                         required
-                        className="col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
+                        className="col-span-1 md:col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
                     />
 
                     {/* Municipality */}
@@ -191,7 +205,6 @@ export default function Retailerform() {
                         <option value="" disabled>
                             {formData.municipality ? "Select Barangay" : "Select Municipality first"}
                         </option>
-
                         {barangays.map((b) => (
                             <option key={b.id} value={b.id}>
                                 {b.name}
@@ -208,7 +221,7 @@ export default function Retailerform() {
                         onChange={handleChange}
                         maxLength="13"
                         required
-                        className="col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
+                        className="col-span-1 md:col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
                     />
 
                     {/* Email */}
@@ -219,11 +232,11 @@ export default function Retailerform() {
                         value={formData.email}
                         onChange={handleChange}
                         required
-                        className="col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
+                        className="col-span-1 md:col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
                     />
 
                     {/* Password */}
-                    <div className="col-span-2 relative">
+                    <div className="col-span-1 md:col-span-2 relative">
                         <input
                             type={showPassword ? "text" : "password"}
                             name="password"
@@ -244,7 +257,7 @@ export default function Retailerform() {
                     </div>
 
                     {/* Confirm Password */}
-                    <div className="col-span-2 relative">
+                    <div className="col-span-1 md:col-span-2 relative">
                         <input
                             type={showConfirmPassword ? "text" : "password"}
                             name="confirmPassword"
@@ -264,8 +277,8 @@ export default function Retailerform() {
                         </button>
                     </div>
 
-                    {/* Requirements Section */}
-                    <div className="col-span-2 mt-2">
+                    {/* Requirements Toggle */}
+                    <div className="col-span-1 md:col-span-2 mt-2">
                         <button
                             type="button"
                             onClick={() => setShowRequirements(!showRequirements)}
@@ -293,11 +306,11 @@ export default function Retailerform() {
                         )}
                     </div>
 
-                    {/* Submit Button */}
+                    {/* Submit */}
                     <button
                         type="submit"
                         disabled={loading}
-                        className={`col-span-2 w-full py-4 rounded-full font-semibold text-lg transition ${loading ? "bg-gray-600 cursor-not-allowed" : "bg-[#2d5ee0] hover:bg-[#244bb5] text-white"
+                        className={`col-span-1 md:col-span-2 w-full py-4 rounded-full font-semibold text-lg transition ${loading ? "bg-gray-600 cursor-not-allowed" : "bg-[#2d5ee0] hover:bg-[#244bb5] text-white"
                             }`}
                     >
                         {loading ? <Loader2 className="mx-auto animate-spin" size={22} /> : "Sign Up as Retailer"}

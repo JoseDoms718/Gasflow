@@ -34,7 +34,6 @@ export default function Orderlist({ role: propRole }) {
   const [expandedOrder, setExpandedOrder] = useState(null);
   const [showModal, setShowModal] = useState(false);
 
-  // 🔹 Get user cart from localStorage
   const getUserCart = useCallback(() => {
     const token = localStorage.getItem("token");
     const cartKey = token ? `cart_${token}` : "cart_guest";
@@ -45,7 +44,6 @@ export default function Orderlist({ role: propRole }) {
     }));
   }, []);
 
-  // 🔹 Fetch orders and merge local cart
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
@@ -71,7 +69,6 @@ export default function Orderlist({ role: propRole }) {
         }));
       }
 
-      // Include local cart only for non-retailers
       if (!isRetailer) {
         const localCart = getUserCart();
         if (localCart.length) {
@@ -94,7 +91,6 @@ export default function Orderlist({ role: propRole }) {
     }
   }, [getUserCart, isRetailer]);
 
-  // 🔹 Initial fetch + cart sync
   useEffect(() => {
     fetchOrders();
     const handleStorageChange = (e) => {
@@ -104,28 +100,21 @@ export default function Orderlist({ role: propRole }) {
     return () => window.removeEventListener("storage", handleStorageChange);
   }, [fetchOrders]);
 
-  // 🔹 Setup Socket.IO for real-time updates
-  // 🔹 Setup Socket.IO for real-time updates (clean + safe)
   useEffect(() => {
     const socket = io(SOCKET_URL);
-
     socket.on("newOrder", (order) => {
       toast.success(`📦 New Order #${order.order_id} received!`);
-      fetchOrders();   // reload from backend
+      fetchOrders();
     });
-
     socket.on("order-updated", (order) => {
       toast.success(`Order #${order.order_id} updated!`);
-      fetchOrders();   // reload from backend
+      fetchOrders();
     });
-
     return () => socket.disconnect();
   }, [fetchOrders]);
 
-
   const toggleOrder = (id) => setExpandedOrder(expandedOrder === id ? null : id);
 
-  // 🔹 Update local cart without reload
   const updateLocalCart = (updatedCart) => {
     const token = localStorage.getItem("token");
     const cartKey = token ? `cart_${token}` : "cart_guest";
@@ -137,12 +126,8 @@ export default function Orderlist({ role: propRole }) {
       const cartIndex = newOrders.findIndex((o) => o.order_id === "local_cart");
       if (cartIndex !== -1) {
         if (updatedCart.length === 0) {
-          // Remove local_cart entirely
           newOrders.splice(cartIndex, 1);
-          // Collapse expanded order if it was local_cart
-          setExpandedOrder((prevExpanded) =>
-            prevExpanded === "local_cart" ? null : prevExpanded
-          );
+          setExpandedOrder((prevExpanded) => (prevExpanded === "local_cart" ? null : prevExpanded));
         } else {
           newOrders[cartIndex] = {
             order_id: "local_cart",
@@ -159,7 +144,6 @@ export default function Orderlist({ role: propRole }) {
     });
   };
 
-  // 🔹 Handle order/cart actions
   const handleOrderAction = async (order_id, newStatus) => {
     const token = localStorage.getItem("token");
     if (!token) return toast.error("Please log in first.");
@@ -177,7 +161,6 @@ export default function Orderlist({ role: propRole }) {
         }
       }
 
-      // Backend orders
       const res = await axios.put(
         `${BASE_URL}/orders/update-status/${order_id}`,
         { status: newStatus },
@@ -196,7 +179,6 @@ export default function Orderlist({ role: propRole }) {
     }
   };
 
-  // 🔹 Confirm checkout modal
   const handleConfirmCheckout = async (info) => {
     try {
       const token = localStorage.getItem("token");
@@ -258,7 +240,7 @@ export default function Orderlist({ role: propRole }) {
         : "bg-gray-900 text-white py-12 mt-12 h-dvh"
         } flex flex-col`}
     >
-      <div className="container mx-auto px-6">
+      <div className="container mx-auto px-4 md:px-6">
         {!isRetailer && (
           <>
             <h2 className="text-3xl font-bold text-white mb-2">My Orders</h2>
@@ -278,15 +260,15 @@ export default function Orderlist({ role: propRole }) {
           {[...(isRetailer
             ? []
             : [{ key: "cart", icon: ShoppingCart, label: "Cart" }]),
-          { key: "current", icon: Clock, label: "Current Orders" },
-          { key: "finished", icon: CheckCircle, label: "Finished Orders" },
+          { key: "current", icon: Clock, label: "Current" },
+          { key: "finished", icon: CheckCircle, label: "Finished" },
           ].map((tab) => {
             const Icon = tab.icon;
             return (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${activeTab === tab.key
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition text-sm sm:text-base ${activeTab === tab.key
                   ? "bg-blue-600 text-white shadow"
                   : isRetailer
                     ? "bg-gray-100 text-gray-800 hover:bg-gray-200"
@@ -302,7 +284,7 @@ export default function Orderlist({ role: propRole }) {
         {/* Orders List */}
         <div
           className={`${isRetailer ? "bg-white border border-gray-200" : "bg-gray-800"
-            } rounded-lg shadow-md p-6 flex flex-col h-[60vh]`}
+            } rounded-lg shadow-md p-4 sm:p-6 flex flex-col h-[60vh] sm:h-[70vh]`}
         >
           {filteredOrders.length ? (
             <div
@@ -322,43 +304,43 @@ export default function Orderlist({ role: propRole }) {
                     {/* Header */}
                     <button
                       onClick={() => toggleOrder(order.order_id)}
-                      className={`w-full flex justify-between items-center p-4 text-left transition ${isRetailer ? "hover:bg-gray-100" : "hover:bg-gray-600"
+                      className={`w-full flex justify-between items-center p-3 sm:p-4 text-left transition ${isRetailer ? "hover:bg-gray-100" : "hover:bg-gray-600"
                         }`}
                     >
                       <div>
-                        <h3 className={`font-semibold ${isRetailer ? "text-gray-900" : "text-white"}`}>
+                        <h3 className={`font-semibold ${isRetailer ? "text-gray-900" : "text-white"} text-sm sm:text-base`}>
                           {firstItem?.product_name || "Unnamed Product"}
                         </h3>
-                        <p className={`text-sm ${isRetailer ? "text-gray-500" : "text-gray-300"}`}>
+                        <p className={`text-xs sm:text-sm ${isRetailer ? "text-gray-500" : "text-gray-300"}`}>
                           Status: {order.status}
                         </p>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <p className={`font-bold text-lg ${isRetailer ? "text-blue-700" : "text-blue-400"}`}>
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <p className={`font-bold text-sm sm:text-lg ${isRetailer ? "text-blue-700" : "text-blue-400"}`}>
                           ₱{order.total_price?.toLocaleString()}
                         </p>
-                        {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                        {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                       </div>
                     </button>
 
                     {/* Expanded content */}
                     {isExpanded && (
-                      <div className={`p-4 border-t space-y-3 ${isRetailer ? "border-gray-200 bg-gray-50" : "border-gray-600 bg-gray-800"}`}>
-                        <div className="max-h-[300px] overflow-y-auto space-y-3 pr-1">
+                      <div className={`p-2 sm:p-4 border-t space-y-2 sm:space-y-3 ${isRetailer ? "border-gray-200 bg-gray-50" : "border-gray-600 bg-gray-800"}`}>
+                        <div className="max-h-[250px] sm:max-h-[300px] overflow-y-auto space-y-2 sm:space-y-3 pr-1">
                           {order.items.map((item, index) => (
-                            <div key={index} className={`flex items-start gap-4 rounded-md p-3 ${isRetailer ? "bg-white border border-gray-200" : "bg-gray-700"}`}>
+                            <div key={index} className={`flex flex-col sm:flex-row items-start gap-2 sm:gap-4 rounded-md p-2 sm:p-3 ${isRetailer ? "bg-white border border-gray-200" : "bg-gray-700"}`}>
                               {item.image_url && (
-                                <div className="flex-shrink-0 w-24 h-24 rounded-md overflow-hidden border border-gray-300">
+                                <div className="flex-shrink-0 w-full sm:w-24 h-24 rounded-md overflow-hidden border border-gray-300">
                                   <img src={item.image_url} alt={item.product_name} className="w-full h-full object-cover" />
                                 </div>
                               )}
 
                               {/* Item Info */}
-                              <div className="flex-1 flex flex-col justify-between">
-                                <div className="flex justify-between items-start">
-                                  <div>
-                                    <h4 className="font-semibold text-sm md:text-base">{item.product_name}</h4>
-                                    <p className="text-xs italic text-gray-400 mt-1">{item.product_description || "No description"}</p>
+                              <div className="flex-1 flex flex-col justify-between w-full">
+                                <div className="flex justify-between items-start flex-wrap">
+                                  <div className="flex-1 min-w-0">
+                                    <h4 className="font-semibold text-xs sm:text-sm md:text-base truncate">{item.product_name}</h4>
+                                    <p className="text-[10px] sm:text-xs italic text-gray-400 mt-1 truncate">{item.product_description || "No description"}</p>
                                   </div>
 
                                   {order.order_id === "local_cart" && (
@@ -379,8 +361,8 @@ export default function Orderlist({ role: propRole }) {
                                 </div>
 
                                 {order.order_id === "local_cart" && (
-                                  <div className="flex items-center gap-2 mt-2">
-                                    <span className="text-sm">Qty:</span>
+                                  <div className="flex items-center gap-2 mt-1 sm:mt-2">
+                                    <span className="text-[10px] sm:text-sm">Qty:</span>
                                     <input
                                       type="number"
                                       min="1"
@@ -392,14 +374,14 @@ export default function Orderlist({ role: propRole }) {
                                         const updated = cart.map((c) => c.product_id === item.product_id ? { ...c, quantity: newQty } : c);
                                         updateLocalCart(updated);
                                       }}
-                                      className="w-16 px-2 py-1 rounded border border-gray-400 text-center text-sm bg-transparent"
+                                      className="w-14 sm:w-16 px-2 py-1 rounded border border-gray-400 text-center text-[10px] sm:text-sm bg-transparent"
                                     />
                                   </div>
                                 )}
 
-                                <div className="mt-2">
-                                  <p className="font-medium text-sm md:text-base">₱{item.price?.toLocaleString()} each</p>
-                                  <p className="text-xs text-gray-500">{isRetailer ? `Buyer: ${item.buyer_name || "Unknown"}` : `Seller: ${item.seller_name || "Unknown"}`}</p>
+                                <div className="mt-1 sm:mt-2">
+                                  <p className="font-medium text-xs sm:text-sm md:text-base">₱{item.price?.toLocaleString()} each</p>
+                                  <p className="text-[10px] sm:text-xs text-gray-500 truncate">{isRetailer ? `Buyer: ${item.buyer_name || "Unknown"}` : `Seller: ${item.seller_name || "Unknown"}`}</p>
                                 </div>
                               </div>
                             </div>
@@ -408,15 +390,15 @@ export default function Orderlist({ role: propRole }) {
 
                         {/* Actions */}
                         {order.order_id === "local_cart" && !isRetailer && (
-                          <div className="flex justify-end gap-3 pt-3 border-t border-gray-600">
-                            <button onClick={() => handleOrderAction(order.order_id, "pending")} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm">Checkout All</button>
-                            <button onClick={() => handleOrderAction(order.order_id, "cancelled")} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded text-sm">Cancel All</button>
+                          <div className="flex flex-wrap justify-end gap-2 sm:gap-3 pt-2 sm:pt-3 border-t border-gray-600">
+                            <button onClick={() => handleOrderAction(order.order_id, "pending")} className="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-1 sm:py-2 rounded text-xs sm:text-sm">Checkout All</button>
+                            <button onClick={() => handleOrderAction(order.order_id, "cancelled")} className="bg-red-500 hover:bg-red-600 text-white px-3 sm:px-4 py-1 sm:py-2 rounded text-xs sm:text-sm">Cancel All</button>
                           </div>
                         )}
 
                         {activeTab === "current" && order.status === "pending" && (
-                          <div className="flex justify-end pt-3 border-t border-gray-600">
-                            <button onClick={() => handleOrderAction(order.order_id, "cancelled")} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded text-sm">Cancel Order</button>
+                          <div className="flex justify-end pt-2 sm:pt-3 border-t border-gray-600">
+                            <button onClick={() => handleOrderAction(order.order_id, "cancelled")} className="bg-red-500 hover:bg-red-600 text-white px-3 sm:px-4 py-1 sm:py-2 rounded text-xs sm:text-sm">Cancel Order</button>
                           </div>
                         )}
                       </div>
@@ -435,7 +417,6 @@ export default function Orderlist({ role: propRole }) {
         </div>
       </div>
 
-      {/* Checkout Modal */}
       {showModal && (
         <OrderInfoModal onClose={() => setShowModal(false)} onConfirm={handleConfirmCheckout} user={user} />
       )}

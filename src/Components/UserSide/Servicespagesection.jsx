@@ -54,7 +54,7 @@ export default function Servicespagesection() {
 
   return (
     <section className="bg-gray-900 pt-15 pb-15 mt-8">
-      <div className="container mx-auto px-6">
+      <div className="container mx-auto px-4 md:px-6">
         <h2 className="text-3xl font-bold text-white mb-2">Our Services</h2>
         <p className="text-gray-300 max-w-2xl mb-8">
           Discover the different services we offer to make your LPG needs more convenient and accessible.
@@ -67,7 +67,7 @@ export default function Servicespagesection() {
             <Swiper
               modules={[Navigation]}
               spaceBetween={20}
-              slidesPerView={3}
+              slidesPerView={1}
               navigation={{
                 nextEl: ".custom-swiper-button-next",
                 prevEl: ".custom-swiper-button-prev",
@@ -81,7 +81,7 @@ export default function Servicespagesection() {
             >
               {services.map((service, index) => (
                 <SwiperSlide key={index}>
-                  <div className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col">
+                  <div className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col h-full">
                     <div className="w-full h-48 bg-gray-200 flex items-center justify-center">
                       {service.image ? (
                         <img
@@ -118,10 +118,10 @@ export default function Servicespagesection() {
             </Swiper>
 
             {/* Custom Navigation Arrows */}
-            <div className="custom-swiper-button-prev absolute -left-10 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-gray-100 shadow-md p-3 rounded-full hover:bg-gray-200">
+            <div className="custom-swiper-button-prev absolute -left-8 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-gray-100 shadow-md p-3 rounded-full hover:bg-gray-200 hidden sm:flex">
               <span className="text-gray-900 text-3xl font-bold">❮</span>
             </div>
-            <div className="custom-swiper-button-next absolute -right-10 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-gray-100 shadow-md p-3 rounded-full hover:bg-gray-200">
+            <div className="custom-swiper-button-next absolute -right-8 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-gray-100 shadow-md p-3 rounded-full hover:bg-gray-200 hidden sm:flex">
               <span className="text-gray-900 text-3xl font-bold">❯</span>
             </div>
           </div>
@@ -129,7 +129,7 @@ export default function Servicespagesection() {
       </div>
 
       {modalType && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50 px-4">
           <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md relative">
             <button
               onClick={() => setModalType(null)}

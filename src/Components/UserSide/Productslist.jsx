@@ -36,14 +36,9 @@ export default function Productslist() {
     const fetchProducts = async () => {
       try {
         console.log("📡 Fetching regular & discounted products...");
-
         const [regularRes, discountedRes] = await Promise.all([
-          axios.get(
-            "http://localhost:5000/products/public/products?type=regular"
-          ),
-          axios.get(
-            "http://localhost:5000/products/public/products?type=discounted"
-          ),
+          axios.get("http://localhost:5000/products/public/products?type=regular"),
+          axios.get("http://localhost:5000/products/public/products?type=discounted"),
         ]);
 
         const formatProducts = (list) =>
@@ -79,11 +74,8 @@ export default function Productslist() {
 
   const handleBuyClick = (product) => {
     const token = localStorage.getItem("token");
-    if (token) {
-      navigate(`/buy/${product.product_id}`);
-    } else {
-      navigate("/login");
-    }
+    if (token) navigate(`/buy/${product.product_id}`);
+    else navigate("/login");
   };
 
   const addPlaceholders = (list, min = 6) => {
@@ -189,7 +181,7 @@ export default function Productslist() {
         {/* Municipality Filter */}
         <div className="flex flex-col md:flex-row gap-4 mb-12">
           <select
-            className="p-2 border border-gray-500 bg-gray-800 text-white rounded-lg focus:outline-none focus:border-blue-500"
+            className="w-48 md:w-64 p-3 border border-gray-500 bg-gray-800 text-white rounded-lg focus:outline-none focus:border-blue-500"
             value={selectedMunicipality}
             onChange={(e) => setSelectedMunicipality(e.target.value)}
           >
@@ -232,10 +224,10 @@ export default function Productslist() {
 
           {showDiscountNav && (
             <>
-              <div className="discount-prev absolute -left-14 top-1/2 -translate-y-1/2 cursor-pointer z-0 bg-white shadow-md p-3 rounded-full hover:bg-gray-100">
+              <div className="hidden md:block discount-prev absolute -left-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full hover:bg-gray-100">
                 <span className="text-gray-900 text-3xl font-bold">❮</span>
               </div>
-              <div className="discount-next absolute -right-14 top-1/2 -translate-y-1/2 cursor-pointer z-0 bg-white shadow-md p-3 rounded-full hover:bg-gray-100">
+              <div className="hidden md:block discount-next absolute -right-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full hover:bg-gray-100">
                 <span className="text-gray-900 text-3xl font-bold">❯</span>
               </div>
             </>
@@ -270,10 +262,10 @@ export default function Productslist() {
 
           {showRegularNav && (
             <>
-              <div className="products-prev absolute -left-14 top-1/2 -translate-y-1/2 cursor-pointer z-0 bg-white shadow-md p-3 rounded-full hover:bg-gray-100">
+              <div className="hidden md:block products-prev absolute -left-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full hover:bg-gray-100">
                 <span className="text-gray-900 text-3xl font-bold">❮</span>
               </div>
-              <div className="products-next absolute -right-14 top-1/2 -translate-y-1/2 cursor-pointer z-0 bg-white shadow-md p-3 rounded-full hover:bg-gray-100">
+              <div className="hidden md:block products-next absolute -right-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full hover:bg-gray-100">
                 <span className="text-gray-900 text-3xl font-bold">❯</span>
               </div>
             </>
