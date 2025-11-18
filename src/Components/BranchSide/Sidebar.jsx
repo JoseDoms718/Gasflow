@@ -1,3 +1,4 @@
+
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Package,
@@ -13,8 +14,10 @@ import axios from "axios";
 import LogoWhite from "../../assets/Design/LogoWhite.png";
 import EditProfileModal from "../Modals/EditProfileModal";
 import { io } from "socket.io-client";
+const BASE_URL = import.meta.env.VITE_BASE_URL;
+const SOCKET_URL = BASE_URL;
 
-const SOCKET_URL = "http://localhost:5000"; // adjust if needed
+// adjust if needed
 
 export default function Sidebar({ role }) {
   const location = useLocation();
@@ -34,7 +37,7 @@ export default function Sidebar({ role }) {
 
     const fetchUser = async () => {
       try {
-        const res = await axios.get("http://localhost:5000/auth/me", {
+        const res = await axios.get(`${BASE_URL}/auth/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 

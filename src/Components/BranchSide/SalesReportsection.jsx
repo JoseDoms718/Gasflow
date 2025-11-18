@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from "react";
 import Chart from "react-apexcharts";
 import { PlusCircle, Download } from "lucide-react";
@@ -7,7 +8,7 @@ import { saveAs } from "file-saver";
 import { toast } from "react-hot-toast";
 
 import ExpensesReportSection from "./ExpensesReportSection";
-
+const BASE_URL = import.meta.env.VITE_BASE_URL;
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState("sales");
   const [branch, setBranch] = useState("All");
@@ -32,13 +33,13 @@ export default function ReportsPage() {
 
     const fetchData = async () => {
       try {
-        const { data: me } = await axios.get("http://localhost:5000/auth/me", {
+        const { data: me } = await axios.get(`${BASE_URL}/auth/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setUserRole(me.user.role);
         setUserMunicipality(me.user.municipality);
 
-        const { data: expensesRes } = await axios.get("http://localhost:5000/expenses", {
+        const { data: expensesRes } = await axios.get(`${BASE_URL}/expenses`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
@@ -55,7 +56,7 @@ export default function ReportsPage() {
         }
 
         const { data: transactionsRes } = await axios.get(
-          "http://localhost:5000/orders/my-sold",
+          `${BASE_URL}/orders/my-sold`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
 
@@ -96,13 +97,13 @@ export default function ReportsPage() {
 
     try {
       const res = await axios.post(
-        "http://localhost:5000/expenses",
+        `${BASE_URL}/expenses`,
         { expenses_details: newExpense.name, expenses_cost: newExpense.amount },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
       if (res.data.success) {
-        const refreshed = await axios.get("http://localhost:5000/expenses", {
+        const refreshed = await axios.get(`${BASE_URL}/expenses`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
@@ -264,8 +265,8 @@ export default function ReportsPage() {
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`px-4 py-2 font-semibold ${activeTab === tab
-                  ? "border-b-4 border-blue-600 text-blue-600"
-                  : "text-gray-600 hover:text-blue-500"
+                ? "border-b-4 border-blue-600 text-blue-600"
+                : "text-gray-600 hover:text-blue-500"
                 }`}
             >
               {tab === "sales" ? "Sales Report" : "Expenses Report"}

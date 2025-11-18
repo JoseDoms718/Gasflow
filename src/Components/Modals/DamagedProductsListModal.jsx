@@ -1,5 +1,7 @@
+
 import React from "react";
 import { Box } from "lucide-react";
+const BASE_URL = import.meta.env.VITE_BASE_URL;
 
 export default function DamagedProductsListModal({ damagedProducts }) {
     // Calculate total loss for damaged products only
@@ -13,6 +15,7 @@ export default function DamagedProductsListModal({ damagedProducts }) {
     }, 0);
 
     return (
+
         <div className="flex-1 overflow-hidden border border-gray-300 rounded-lg">
             <div className="overflow-y-auto h-full">
                 <table className="min-w-full text-sm text-center">
@@ -48,7 +51,7 @@ export default function DamagedProductsListModal({ damagedProducts }) {
                                                         src={
                                                             dp.image_url.startsWith("http")
                                                                 ? dp.image_url
-                                                                : `http://localhost:5000/products/images/${dp.image_url}`
+                                                                : `${BASE_URL}/products/images/${dp.image_url}`
                                                         }
                                                         alt={dp.product_name}
                                                         className="w-10 h-10 object-cover rounded"

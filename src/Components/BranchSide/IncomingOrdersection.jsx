@@ -6,9 +6,9 @@ import { ChevronDown, ChevronUp, ShoppingCart } from "lucide-react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import { io } from "socket.io-client";
-
-const SOCKET_URL = "http://localhost:5000";
-const API_BASE = "http://localhost:5000";
+const BASE_URL = import.meta.env.VITE_BASE_URL;
+const API_BASE = BASE_URL;
+const SOCKET_URL = BASE_URL;
 
 export default function IncomingOrderSection() {
   const [activeTab, setActiveTab] = useState("pending");

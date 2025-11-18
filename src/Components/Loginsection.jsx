@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -8,7 +9,7 @@ import Businessownerform from "./Modals/Businessownerform";
 import Retailerform from "./Modals/Retailerform";
 import OtpVerificationForm from "./Modals/OtpVerificationForm";
 import { toast } from "react-hot-toast";
-
+const BASE_URL = import.meta.env.VITE_BASE_URL;
 export default function Loginsection() {
   const [isLogin, setIsLogin] = useState(true);
   const [userType, setUserType] = useState("normal"); // normal, business, retailer
@@ -54,7 +55,7 @@ export default function Loginsection() {
     }
 
     try {
-      const res = await axios.post("http://localhost:5000/auth/login", { email, password });
+      const res = await axios.post(`${BASE_URL}/auth/login`, { email, password });
 
       if (!res.data.success) {
         toast.error(res.data.error || "Login failed");

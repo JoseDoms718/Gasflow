@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import {
   PlusCircle,
@@ -12,7 +13,8 @@ import { toast } from "react-hot-toast";
 import axios from "axios";
 import AddServices from "../Modals/AddServices";
 
-const API_URL = "http://localhost:5000/services";
+const BASE_URL = import.meta.env.VITE_BASE_URL;
+const API_URL = `${BASE_URL}/services`;
 
 export default function Manageservicesection() {
   const navigate = useNavigate();
@@ -35,7 +37,7 @@ export default function Manageservicesection() {
       // Prepend backend URL to image
       const normalized = (res.data.services || []).map(s => ({
         ...s,
-        image: s.image_url ? `http://localhost:5000${s.image_url}` : null
+        image: s.image_url ? `${BASE_URL}${s.image_url}` : null
       }));
       setServices(normalized);
     } catch (err) {

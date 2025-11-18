@@ -1,10 +1,11 @@
+
 import React, { useEffect, useState, useMemo } from "react";
 import { PlusCircle, Box } from "lucide-react";
 import axios from "axios";
 import DamageModal from "../Modals/DamageModal";
 import DamagedProductsListModal from "../Modals/DamagedProductsListModal";
 import toast from "react-hot-toast";
-
+const BASE_URL = import.meta.env.VITE_BASE_URL;
 export default function ExpensesReportSection({
     filteredExpenses,
     userRole,
@@ -31,8 +32,8 @@ export default function ExpensesReportSection({
             try {
                 const url =
                     userRole === "admin"
-                        ? `http://localhost:5000/products/admin/all-products?branch=${selectedBranch}`
-                        : "http://localhost:5000/products/my-products";
+                        ? `${BASE_URL}/products/admin/all-products?branch=${selectedBranch}`
+                        : `${BASE_URL}/products/my-products`;
 
                 const { data } = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
 
@@ -41,7 +42,7 @@ export default function ExpensesReportSection({
                         ...p,
                         image_url: p.image_url?.startsWith("http")
                             ? p.image_url
-                            : `http://localhost:5000/products/images/${p.image_url}`,
+                            : `${BASE_URL}/products/images/${p.image_url}`,
                     }))
                 );
             } catch (err) {
@@ -57,7 +58,7 @@ export default function ExpensesReportSection({
     const fetchDamagedProducts = async () => {
         try {
             const { data } = await axios.get(
-                "http://localhost:5000/damaged-products/my-damaged-products",
+                `${BASE_URL}/damaged-products/my-damaged-products`,
                 { headers: { Authorization: `Bearer ${token}` } }
             );
             setDamagedProducts(data.data || []);
@@ -79,7 +80,7 @@ export default function ExpensesReportSection({
     const handleDamageSubmit = async ({ product, quantity, details }) => {
         try {
             const { data } = await axios.put(
-                `http://localhost:5000/damaged-products/damage/${product.product_id}`,
+                `${BASE_URL}/damaged-products/damage/${product.product_id}`,
                 { quantity, damage_description: details },
                 { headers: { Authorization: `Bearer ${token}` } }
             );

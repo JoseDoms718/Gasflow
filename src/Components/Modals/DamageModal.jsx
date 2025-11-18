@@ -15,8 +15,20 @@ export default function DamageModal({ product, isOpen, onClose, onSubmit }) {
 
     if (!isOpen || !product) return null;
 
+    const handleQuantityChange = (e) => {
+        const value = e.target.value;
+        // Only allow digits
+        if (/^\d*$/.test(value)) {
+            const num = value === "" ? "" : Number(value);
+            // Enforce maximum as stock
+            if (num === "" || num <= product.stock) {
+                setQuantity(num);
+            }
+        }
+    };
+
     const handleSubmit = () => {
-        if (quantity <= 0) return alert("Enter a valid quantity");
+        if (!quantity || quantity <= 0) return alert("Enter a valid quantity");
         if (quantity > product.stock) return alert("Quantity exceeds available stock");
         onSubmit({ product, quantity, details });
         onClose();
@@ -35,12 +47,11 @@ export default function DamageModal({ product, isOpen, onClose, onSubmit }) {
                 <div className="flex flex-col gap-3">
                     <label className="font-medium">Quantity (Available: {product.stock})</label>
                     <input
-                        type="number"
-                        min={1}
-                        max={product.stock}
+                        type="text"
                         value={quantity}
-                        onChange={(e) => setQuantity(Number(e.target.value))}
+                        onChange={handleQuantityChange}
                         className="border px-3 py-2 rounded w-full"
+                        placeholder="Enter quantity"
                     />
                     <label className="font-medium">Details / Reason</label>
                     <textarea

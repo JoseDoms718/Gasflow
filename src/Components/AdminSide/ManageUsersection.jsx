@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { PlusCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -16,7 +17,7 @@ export default function ManageUsersection() {
     "Torrijos",
     "Santa Cruz",
   ];
-
+  const BASE_URL = import.meta.env.VITE_BASE_URL;
   const roles = ["users", "business_owner", "branch_manager", "retailer", "admin"];
 
   const roleLabels = {
@@ -48,7 +49,7 @@ export default function ManageUsersection() {
   // Fetch users
   const fetchUsers = async () => {
     try {
-      const res = await axios.get("http://localhost:5000/users");
+      const res = await axios.get(`${BASE_URL}/users`);
       setUsers(res.data);
     } catch (err) {
       console.error("Error fetching users:", err);
@@ -98,7 +99,7 @@ export default function ManageUsersection() {
         barangay_id: formData.barangay_id,
       };
 
-      const res = await axios.post("http://localhost:5000/users", newUser);
+      const res = await axios.post(`${BASE_URL}/users`, newUser);
 
       if (res.data.success) {
         toast.success("✅ User added successfully!");
@@ -126,7 +127,7 @@ export default function ManageUsersection() {
   // Activate / Deactivate user
   const updateUserType = async (userId, newType) => {
     try {
-      await axios.put(`http://localhost:5000/users/${userId}`, { type: newType });
+      await axios.put(`${BASE_URL}/users/${userId}`, { type: newType });
       toast.success(`User set to ${newType} successfully!`);
       fetchUsers();
     } catch (err) {
@@ -228,8 +229,8 @@ export default function ManageUsersection() {
                     <td className="px-4 py-3">
                       <span
                         className={`px-2 py-1 rounded text-sm ${user.type === "active"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-red-100 text-red-700"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-red-100 text-red-700"
                           }`}
                       >
                         {user.type}

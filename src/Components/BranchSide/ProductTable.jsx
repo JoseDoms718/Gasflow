@@ -15,7 +15,7 @@ export default function ProductTable({
     const [restockProduct, setRestockProduct] = useState(null);
     const [restockQuantity, setRestockQuantity] = useState("");
     const [localProducts, setLocalProducts] = useState(products);
-
+    const BASE_URL = import.meta.env.VITE_BASE_URL;
     useEffect(() => setLocalProducts(products), [products]);
 
     const formatPrice = (value) => {
@@ -39,7 +39,7 @@ export default function ProductTable({
 
         try {
             const res = await axios.put(
-                `http://localhost:5000/products/restock/${restockProduct.product_id}`,
+                `${BASE_URL}/products/restock/${restockProduct.product_id}`,
                 { quantity },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
@@ -131,10 +131,10 @@ export default function ProductTable({
                                     <td className="px-4 py-3">
                                         <span
                                             className={`inline-block px-3 py-1 text-sm font-semibold rounded-lg shadow-sm ${p.stock <= p.stock_threshold
-                                                    ? "bg-red-600 text-white"
-                                                    : p.stock <= p.stock_threshold + 5
-                                                        ? "bg-yellow-400 text-gray-800"
-                                                        : "bg-green-600 text-white"
+                                                ? "bg-red-600 text-white"
+                                                : p.stock <= p.stock_threshold + 5
+                                                    ? "bg-yellow-400 text-gray-800"
+                                                    : "bg-green-600 text-white"
                                                 }`}
                                         >
                                             {p.stock}

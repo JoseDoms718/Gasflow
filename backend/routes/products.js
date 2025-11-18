@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require("express");
 const router = express.Router();
 const multer = require("multer");
@@ -42,7 +43,7 @@ function formatProductImage(p) {
   return {
     ...p,
     image_url: p.image_url
-      ? `http://localhost:5000/products/images/${p.image_url}`
+      ? `${process.env.BASE_URL}/products/images/${p.image_url}`
       : null,
   };
 }

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { X } from "lucide-react";
@@ -7,13 +8,13 @@ export default function Retailersection() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedRetailer, setSelectedRetailer] = useState(null);
-
+  const BASE_URL = import.meta.env.VITE_BASE_URL;
   useEffect(() => {
     const fetchRetailers = async () => {
       setLoading(true);
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.get("http://localhost:5000/retailers/my-retailers", {
+        const res = await axios.get(`${BASE_URL}/retailers/my-retailers`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setRetailers(res.data.retailers || []);

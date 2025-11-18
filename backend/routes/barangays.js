@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require("express");
 const db = require("../config/db"); // your existing db connection
 const router = express.Router();

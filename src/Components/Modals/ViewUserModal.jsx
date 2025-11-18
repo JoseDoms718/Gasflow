@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect } from "react";
 import { X, Pencil, Check } from "lucide-react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
-
+const BASE_URL = import.meta.env.VITE_BASE_URL;
 export default function ViewUserModal({
     viewUser,
     setViewUser,
@@ -22,7 +23,7 @@ export default function ViewUserModal({
         const muni = editFields.municipality ?? viewUser.municipality;
         if (!muni) return;
 
-        axios.get(`http://localhost:5000/barangays?municipality=${muni}`)
+        axios.get(`${BASE_URL}/barangays?municipality=${muni}`)
             .then(res => setBarangays(res.data))
             .catch(err => console.error("Error loading barangays:", err));
     }, [viewUser, editFields.municipality]);
@@ -50,7 +51,7 @@ export default function ViewUserModal({
         }
 
         if (Object.keys(updates).length > 0) {
-            await axios.put(`http://localhost:5000/users/${viewUser.user_id}`, updates);
+            await axios.put(`${BASE_URL}/users/${viewUser.user_id}`, updates);
             fetchUsers();
             toast.success("✅ Updated Successfully!");
         }

@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect } from "react";
 import { X, Pencil, Check } from "lucide-react";
 import { toast } from "react-hot-toast";
 import axios from "axios";
 import EditBranchModal from "./EditBranchInfoModal";
-
+const BASE_URL = import.meta.env.VITE_BASE_URL;
 export default function EditProfileModal({ showModal, setShowModal, onProfileUpdated }) {
     const [user, setUser] = useState(null);
     const [editFields, setEditFields] = useState({});
@@ -29,7 +30,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                 const token = localStorage.getItem("token");
                 if (!token) return;
 
-                const { data } = await axios.get("http://localhost:5000/auth/me", {
+                const { data } = await axios.get(`${BASE_URL}/auth/me`, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
 
@@ -41,7 +42,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                     });
 
                     if (data.user.role === "branch_manager") {
-                        const branchRes = await axios.get("http://localhost:5000/branchinfo", {
+                        const branchRes = await axios.get(`${BASE_URL}/branchinfo`, {
                             headers: { Authorization: `Bearer ${token}` },
                         });
                         if (branchRes.data.success) {
@@ -61,7 +62,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
     useEffect(() => {
         const fetchMunicipalities = async () => {
             try {
-                const res = await axios.get("http://localhost:5000/barangays");
+                const res = await axios.get(`${BASE_URL}/barangays`);
                 const uniqueMunicipalities = [...new Set(res.data.map((b) => b.municipality))];
                 setMunicipalities(uniqueMunicipalities.map((m) => ({ value: m, label: m })));
             } catch (err) {
@@ -80,7 +81,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
         const fetchBarangays = async () => {
             try {
                 const res = await axios.get(
-                    `http://localhost:5000/barangays?municipality=${encodeURIComponent(municipality)}`
+                    `${BASE_URL}/barangays?municipality=${encodeURIComponent(municipality)}`
                 );
 
                 const barangayOptions = res.data.map((b) => {
@@ -112,7 +113,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
         const fetchBranchBarangays = async () => {
             try {
                 const res = await axios.get(
-                    `http://localhost:5000/barangays?municipality=${encodeURIComponent(branchEditFields.municipality)}`
+                    `${BASE_URL}/barangays?municipality=${encodeURIComponent(branchEditFields.municipality)}`
                 );
 
                 const mapped = res.data.map((b) => {
@@ -147,7 +148,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                 if (payload.barangay_id === "") payload.barangay_id = null;
                 else if (payload.barangay_id) payload.barangay_id = Number(payload.barangay_id);
 
-                await axios.put(`http://localhost:5000/users/${user.user_id}`, payload, {
+                await axios.put(`${BASE_URL}/users/${user.user_id}`, payload, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
             }
@@ -159,7 +160,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                     else formData.append(key, val === "" ? null : val);
                 });
 
-                await axios.put("http://localhost:5000/branchinfo", formData, {
+                await axios.put(`${BASE_URL}/branchinfo`, formData, {
                     headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" },
                 });
             }
@@ -167,7 +168,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
             if (editPassword) {
                 if (editPassword === confirmPassword) {
                     await axios.put(
-                        `http://localhost:5000/users/${user.user_id}/password`,
+                        `${BASE_URL}/users/${user.user_id}/password`,
                         { newPassword: editPassword },
                         { headers: { Authorization: `Bearer ${token}` } }
                     );
@@ -177,7 +178,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                 }
             }
 
-            const refreshed = await axios.get("http://localhost:5000/auth/me", {
+            const refreshed = await axios.get(`${BASE_URL}/auth/me`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (refreshed.data.success) {

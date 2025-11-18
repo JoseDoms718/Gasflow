@@ -6,7 +6,7 @@ import "swiper/css/navigation";
 import { Briefcase } from "lucide-react"; // Fallback icon
 import axios from "axios";
 
-const API_URL = "http://localhost:5000/services";
+const API_URL = import.meta.env.VITE_BASE_URL;
 
 export default function Servicesection() {
   const [services, setServices] = useState([]);
@@ -14,12 +14,13 @@ export default function Servicesection() {
   const fetchServices = async () => {
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.get(`${API_URL}/fetchServices`, {
+      const res = await axios.get(`${API_URL}/services/fetchServices`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+
       const normalized = (res.data.services || []).map((s) => ({
         ...s,
-        image: s.image_url ? `http://localhost:5000${s.image_url}` : null,
+        image: s.image_url ? `${API_URL}${s.image_url}` : null,
       }));
       setServices(normalized);
     } catch (err) {
@@ -35,13 +36,11 @@ export default function Servicesection() {
   return (
     <section className="bg-white py-8 md:py-12">
       <div className="container mx-auto px-4">
-        {/* Section Title */}
         <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Our Services</h2>
         <p className="text-gray-600 text-sm md:text-base max-w-xl mb-6 md:mb-8">
           Explore the range of services we offer to ensure you get the best experience from our company.
         </p>
 
-        {/* Carousel */}
         <div className="relative">
           <Swiper
             modules={[Navigation, Autoplay]}
@@ -64,7 +63,6 @@ export default function Servicesection() {
               ? services.map((service) => (
                 <SwiperSlide key={service.id}>
                   <div className="bg-gray-50 rounded-lg shadow-md hover:shadow-xl transition duration-300 border border-gray-200 overflow-hidden flex flex-col h-[300px] md:h-[350px]">
-                    {/* Service Image */}
                     {service.image ? (
                       <img
                         src={service.image}
@@ -77,7 +75,6 @@ export default function Servicesection() {
                       </div>
                     )}
 
-                    {/* Service Info */}
                     <div className="p-3 md:p-4 flex flex-col flex-grow">
                       <h3 className="text-lg font-semibold text-gray-800 line-clamp-1">
                         {service.title || "Service Title"}
@@ -103,7 +100,7 @@ export default function Servicesection() {
                 ))}
           </Swiper>
 
-          {/* Navigation Buttons (hidden on mobile) */}
+          {/* Navigation buttons */}
           <div className="hidden md:block custom-swiper-button-prev absolute -left-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-gray-100 shadow-md p-3 rounded-full hover:bg-gray-200 transition">
             <span className="text-gray-900 text-3xl font-bold">❮</span>
           </div>

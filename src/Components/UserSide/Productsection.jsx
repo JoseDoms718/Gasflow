@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation } from "swiper/modules";
@@ -6,7 +7,7 @@ import "swiper/css/navigation";
 import { Package } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-
+const BASE_URL = import.meta.env.VITE_BASE_URL;
 export default function Productsection() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -26,14 +27,14 @@ export default function Productsection() {
     const fetchProducts = async () => {
       try {
         const discountedRes = await axios.get(
-          "http://localhost:5000/products/public/products",
+          `${BASE_URL}/products/public/products`,
           { params: { type: "discounted" } }
         );
 
         let dataToUse = discountedRes.data;
         if (!dataToUse || dataToUse.length === 0) {
           const regularRes = await axios.get(
-            "http://localhost:5000/products/public/products",
+            `${BASE_URL}/products/public/products`,
             { params: { type: "regular" } }
           );
           dataToUse = regularRes.data;
@@ -42,7 +43,7 @@ export default function Productsection() {
         const formatted = (dataToUse || []).map((p) => {
           let imageUrl = p.image_url || null;
           if (imageUrl && !imageUrl.startsWith("http")) {
-            imageUrl = `http://localhost:5000/products/images/${imageUrl}`;
+            imageUrl = `${BASE_URL}/products/images/${imageUrl}`;
           }
           return { ...p, image_url: imageUrl };
         });

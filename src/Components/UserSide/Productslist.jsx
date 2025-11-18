@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Package } from "lucide-react";
 import { Swiper, SwiperSlide } from "swiper/react";
@@ -6,7 +7,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import "swiper/css";
 import "swiper/css/navigation";
-
+const BASE_URL = import.meta.env.VITE_BASE_URL;
 export default function Productslist() {
   const navigate = useNavigate();
 
@@ -37,8 +38,8 @@ export default function Productslist() {
       try {
         console.log("📡 Fetching regular & discounted products...");
         const [regularRes, discountedRes] = await Promise.all([
-          axios.get("http://localhost:5000/products/public/products?type=regular"),
-          axios.get("http://localhost:5000/products/public/products?type=discounted"),
+          axios.get(`${BASE_URL}/products/public/products?type=regular`),
+          axios.get(`${BASE_URL}/products/public/products?type=discounted`),
         ]);
 
         const formatProducts = (list) =>
@@ -47,7 +48,7 @@ export default function Productslist() {
             image_url: p.image_url
               ? p.image_url.startsWith("http")
                 ? p.image_url
-                : `http://localhost:5000/products/images/${p.image_url}`
+                : `${BASE_URL}/products/images/${p.image_url}`
               : null,
           }));
 
@@ -157,8 +158,8 @@ export default function Productslist() {
               onClick={() => handleBuyClick(item)}
               disabled={item.stock === 0}
               className={`mt-4 w-full py-2 rounded-lg transition ${item.stock === 0
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-blue-600 text-white hover:bg-blue-700"
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-blue-600 text-white hover:bg-blue-700"
                 }`}
             >
               {item.stock === 0 ? "Out of Stock" : "Buy Now"}

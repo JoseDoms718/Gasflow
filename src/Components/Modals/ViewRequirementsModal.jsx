@@ -1,11 +1,11 @@
-// ViewRequirementsModal.jsx
+
 import React, { useState } from "react";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation } from "swiper/modules";
 import "swiper/css";
 import "swiper/css/navigation";
 import { X } from "lucide-react";
-
+const BASE_URL = import.meta.env.VITE_BASE_URL;
 export default function ViewRequirementsModal({ show, onClose, onConfirm, onReject, retailer }) {
     const [selectedImage, setSelectedImage] = useState(null);
 
@@ -47,10 +47,10 @@ export default function ViewRequirementsModal({ show, onClose, onConfirm, onReje
                             {retailer.images.map((img) => (
                                 <SwiperSlide key={img.id}>
                                     <img
-                                        src={`http://localhost:5000/${img.image_url}`}
+                                        src={`${process.env}/${img.image_url}`}
                                         alt={img.image_url.split("/").pop()}
                                         className="w-full h-64 object-contain cursor-pointer bg-gray-100 rounded-lg"
-                                        onClick={() => setSelectedImage(`http://localhost:5000/${img.image_url}`)}
+                                        onClick={() => setSelectedImage(`${BASE_URL}/${img.image_url}`)}
                                     />
                                 </SwiperSlide>
                             ))}

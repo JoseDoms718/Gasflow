@@ -1,4 +1,4 @@
-// damagedProducts.js
+require('dotenv').config();
 const express = require("express");
 const router = express.Router();
 const db = require("../config/db"); // adjust the path to your database module

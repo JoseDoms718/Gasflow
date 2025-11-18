@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect, useCallback } from "react";
 import { X } from "lucide-react";
 import { toast } from "react-hot-toast";
 import axios from "axios";
-
+const BASE_URL = import.meta.env.VITE_BASE_URL;
 export default function OrderInfoModal({ onClose, onConfirm }) {
     const [info, setInfo] = useState({
         name: "",
@@ -27,7 +28,7 @@ export default function OrderInfoModal({ onClose, onConfirm }) {
                 return;
             }
 
-            const res = await axios.get("http://localhost:5000/auth/me", {
+            const res = await axios.get(`${BASE_URL}/auth/me`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
 
@@ -53,7 +54,7 @@ export default function OrderInfoModal({ onClose, onConfirm }) {
     // ✅ Fetch barangays & extract unique municipalities
     const fetchLocationData = useCallback(async () => {
         try {
-            const barangayRes = await axios.get("http://localhost:5000/barangays");
+            const barangayRes = await axios.get(`${BASE_URL}/barangays`);
             const barangayList = Array.isArray(barangayRes.data)
                 ? barangayRes.data
                 : barangayRes.data.barangays || [];

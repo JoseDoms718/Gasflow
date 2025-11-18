@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import OtpVerificationForm from "./OtpVerificationForm";
-
+const BASE_URL = import.meta.env.VITE_BASE_URL;
 export default function Userform({ setIsOtpActive, setOtpEmail }) {
   const [formData, setFormData] = useState({
     name: "",
@@ -33,7 +34,7 @@ export default function Userform({ setIsOtpActive, setOtpEmail }) {
       return;
     }
     axios
-      .get("http://localhost:5000/barangays", { params: { municipality: formData.municipality } })
+      .get(`${BASE_URL}/barangays`, { params: { municipality: formData.municipality } })
       .then((res) => setBarangays(res.data))
       .catch(() => toast.error("Failed to load barangays."));
   }, [formData.municipality]);
@@ -61,7 +62,7 @@ export default function Userform({ setIsOtpActive, setOtpEmail }) {
     if (sendingOtp) return;
     try {
       setSendingOtp(true);
-      const res = await axios.post("http://localhost:5000/send-otp", formData);
+      const res = await axios.post(`${BASE_URL}/send-otp`, formData);
       toast.success(res.data.message || "✅ OTP sent! Check your email.");
       setOtpSent(true);
       setIsOtpActive?.(true);
@@ -129,7 +130,7 @@ export default function Userform({ setIsOtpActive, setOtpEmail }) {
   };
 
   const handleCancelOtp = async () => {
-    await axios.post("http://localhost:5000/send-otp", { email: formData.email, action: "cancel" });
+    await axios.post(`${BASE_URL}/send-otp`, { email: formData.email, action: "cancel" });
     setOtpSent(false);
     setIsOtpActive?.(false);
     setOtpEmail?.("");
@@ -256,7 +257,7 @@ export default function Userform({ setIsOtpActive, setOtpEmail }) {
         <OtpVerificationForm
           email={formData.email}
           onVerifyOtp={async (otp) => {
-            const res = await axios.post("http://localhost:5000/verify-otp", { email: formData.email, otp });
+            const res = await axios.post(`${BASE_URL}/verify-otp`, { email: formData.email, otp });
             toast.success(res.data.message || "🎉 Account verified successfully!");
             handleOtpVerified();
           }}

@@ -14,7 +14,7 @@ export default function AddProductModal({ setShowForm, setProducts }) {
         stock_threshold: "",
         product_type: "regular",
     });
-
+    const BASE_URL = import.meta.env.VITE_BASE_URL;
     const handleChange = (e) => {
         const { name, value } = e.target;
         setNewProduct((prev) => ({ ...prev, [name]: value }));
@@ -63,7 +63,7 @@ export default function AddProductModal({ setShowForm, setProducts }) {
 
         try {
             // 🛰️ Add product
-            const res = await axios.post("http://localhost:5000/products/add", formData, {
+            const res = await axios.post(`${BASE_URL}/products/add`, formData, {
                 headers: {
                     Authorization: `Bearer ${token}`,
                     "Content-Type": "multipart/form-data",
@@ -77,14 +77,14 @@ export default function AddProductModal({ setShowForm, setProducts }) {
             let formatted;
             try {
                 const { data: fullProduct } = await axios.get(
-                    `http://localhost:5000/products/${productId}`
+                    `$/products/${productId}`
                 );
                 formatted = {
                     ...fullProduct,
                     image_url: fullProduct.image_url
                         ? fullProduct.image_url.startsWith("http")
                             ? fullProduct.image_url
-                            : `http://localhost:5000/products/images/${fullProduct.image_url}`
+                            : `${BASE_URL}/products/images/${fullProduct.image_url}`
                         : null,
                 };
             } catch {
@@ -94,7 +94,7 @@ export default function AddProductModal({ setShowForm, setProducts }) {
                     image_url: addedProduct.image_url
                         ? addedProduct.image_url.startsWith("http")
                             ? addedProduct.image_url
-                            : `http://localhost:5000/products/images/${addedProduct.image_url}`
+                            : `${BASE_URL}/products/images/${addedProduct.image_url}`
                         : null,
                 };
             }

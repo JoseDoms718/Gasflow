@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from "react";
 import { Package } from "lucide-react";
 import axios from "axios";
@@ -7,7 +8,7 @@ export default function RestockHistory({ refreshTrigger, onHistoryFetched, borde
     const [history, setHistory] = useState([]);
     const [userRole, setUserRole] = useState(null);
     const fetchedOnce = useRef(false);
-
+    const BASE_URL = import.meta.env.VITE_BASE_URL;
     const fetchHistory = async () => {
         try {
             const token = localStorage.getItem("token");
@@ -18,7 +19,7 @@ export default function RestockHistory({ refreshTrigger, onHistoryFetched, borde
                 return;
             }
 
-            const userRes = await axios.get("http://localhost:5000/auth/me", {
+            const userRes = await axios.get(`${BASE_URL}/auth/me`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
             const role = userRes.data?.user?.role?.trim().toLowerCase();
@@ -32,8 +33,8 @@ export default function RestockHistory({ refreshTrigger, onHistoryFetched, borde
 
             const endpoint =
                 role === "admin"
-                    ? "http://localhost:5000/products/admin/branch-managers-restock"
-                    : "http://localhost:5000/products/my-products-restock";
+                    ? `${BASE_URL}/products/admin/branch-managers-restock`
+                    : `${BASE_URL}/products/my-products-restock`;
 
             const res = await axios.get(endpoint, {
                 headers: { Authorization: `Bearer ${token}` },
@@ -53,7 +54,7 @@ export default function RestockHistory({ refreshTrigger, onHistoryFetched, borde
                 image_url: h.image_url
                     ? h.image_url.startsWith("http")
                         ? h.image_url
-                        : `http://localhost:5000/products/images/${h.image_url}`
+                        : `${BASE_URL}/products/images/${h.image_url}`
                     : null,
             }));
 

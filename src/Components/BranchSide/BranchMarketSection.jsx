@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Package, ShoppingCart } from "lucide-react";
 import axios from "axios";
@@ -10,7 +11,7 @@ export default function BranchMarketSection() {
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [selectedMunicipality, setSelectedMunicipality] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
-
+  const BASE_URL = import.meta.env.VITE_BASE_URL;
   const marinduqueMunicipalities = [
     "All",
     "Boac",
@@ -36,7 +37,7 @@ export default function BranchMarketSection() {
     if (!token) return;
 
     axios
-      .get("http://localhost:5000/products/public/products?role=branch_manager", {
+      .get(`${BASE_URL}/products/public/products?role=branch_manager`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       .then((res) => {
@@ -45,7 +46,7 @@ export default function BranchMarketSection() {
           image_url: p.image_url
             ? p.image_url.startsWith("http")
               ? p.image_url
-              : `http://localhost:5000/products/images/${p.image_url}`
+              : `${BASE_URL}/products/images/${p.image_url}`
             : null,
         }));
         setProducts(formatted);

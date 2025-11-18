@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { Image as ImageIcon, Pencil, Check } from "lucide-react";
 import axios from "axios";
 
+const BASE_URL = import.meta.env.VITE_BASE_URL;
+
 export default function EditBranchInfoModal({
     editBranchFields,
     setEditBranchFields,
@@ -14,7 +16,7 @@ export default function EditBranchInfoModal({
     useEffect(() => {
         const fetchMunicipalities = async () => {
             try {
-                const res = await axios.get("http://localhost:5000/barangays");
+                const res = await axios.get(`${BASE_URL}/barangays`);
                 const uniqueMunicipalities = [...new Set(res.data.map((b) => b.municipality))];
                 setMunicipalities(uniqueMunicipalities.map((m) => ({ value: m, label: m })));
             } catch (err) {
@@ -31,7 +33,7 @@ export default function EditBranchInfoModal({
         const fetchBarangays = async () => {
             try {
                 const res = await axios.get(
-                    `http://localhost:5000/barangays?municipality=${municipality}`
+                    `${BASE_URL}/barangays?municipality=${municipality}`
                 );
                 setBranchBarangays(res.data.map((b) => ({ value: b.id, label: b.name })));
             } catch (err) {
@@ -61,7 +63,7 @@ export default function EditBranchInfoModal({
         const val = editBranchFields.branch_picture;
         if (val?.preview) return val.preview;
         if (typeof val === "string")
-            return `http://localhost:5000/uploads/branch_manager/branchPhotos/${val}`;
+            return `${BASE_URL}/uploads/branch_manager/branchPhotos/${val}`;
         return null;
     };
 

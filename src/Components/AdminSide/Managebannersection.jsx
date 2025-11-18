@@ -12,7 +12,8 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import axios from "axios";
 
-const API_URL = "http://localhost:5000/banners";
+const BASE_URL = import.meta.env.VITE_BASE_URL;
+const API_URL = `${BASE_URL}/banners`;
 
 export default function Managebannersection() {
   const navigate = useNavigate();
@@ -55,7 +56,7 @@ export default function Managebannersection() {
       setPreviewUrl(url);
       return () => URL.revokeObjectURL(url);
     } else if (editingBanner.image) {
-      setPreviewUrl(`http://localhost:5000/uploads/banners/${editingBanner.image}?t=${Date.now()}`);
+      setPreviewUrl(`${BASE_URL}/uploads/banners/${editingBanner.image}?t=${Date.now()}`);
     } else {
       setPreviewUrl(null);
     }
@@ -160,7 +161,7 @@ export default function Managebannersection() {
         key={image instanceof File ? image.name : image + Date.now()}
         src={image instanceof File
           ? URL.createObjectURL(image)
-          : `http://localhost:5000/uploads/banners/${image}?t=${Date.now()}`}
+          : `${BASE_URL}/uploads/banners/${image}?t=${Date.now()}`}
         alt="Banner"
         className="w-full h-52 object-cover rounded-t-2xl"
       />
@@ -279,7 +280,7 @@ export default function Managebannersection() {
               <label className="block text-gray-700 font-semibold mb-3 text-lg">Banner Image</label>
               <input type="file" accept="image/*" onChange={e => handleImageUpload(e, "new")} className="w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-600 file:text-white hover:file:bg-green-700 mb-4" />
               {newBanner.image ? (
-                <img key={newBanner.image instanceof File ? newBanner.image.name : newBanner.image + Date.now()} src={newBanner.image instanceof File ? URL.createObjectURL(newBanner.image) : `http://localhost:5000/uploads/banners/${newBanner.image}?t=${Date.now()}`} alt="Preview" className="mt-2 w-full h-64 object-cover rounded-xl border border-gray-300" />
+                <img key={newBanner.image instanceof File ? newBanner.image.name : newBanner.image + Date.now()} src={newBanner.image instanceof File ? URL.createObjectURL(newBanner.image) : `${BASE_URL}/uploads/banners/${newBanner.image}?t=${Date.now()}`} alt="Preview" className="mt-2 w-full h-64 object-cover rounded-xl border border-gray-300" />
               ) : (
                 <div className="mt-2 flex flex-col items-center justify-center w-full h-64 bg-gray-100 rounded-xl border border-gray-300">
                   <Box className="w-12 h-12 text-gray-400 mb-2" />

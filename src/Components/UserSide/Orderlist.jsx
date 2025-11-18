@@ -13,14 +13,12 @@ import {
 import { toast } from "react-hot-toast";
 import OrderInfoModal from "./OrderInfoModal";
 
-const BASE_URL = "http://localhost:5000";
-const SOCKET_URL = "http://localhost:5000";
+const BASE_URL = import.meta.env.VITE_BASE_URL;
+const SOCKET_URL = BASE_URL;
 
-// 🔹 Normalize image URLs
-const normalizeImageUrl = (url) => {
-  if (!url) return "/placeholder.png";
-  return url.startsWith("http") ? url : `${BASE_URL}/${url.replace(/^\/+/, "")}`;
-};
+// Normalize image URLs
+const normalizeImageUrl = (url) =>
+  url ? (url.startsWith("http") ? url : `${BASE_URL}/${url.replace(/^\/+/, "")}`) : "/placeholder.png";
 
 export default function Orderlist({ role: propRole }) {
   const user = JSON.parse(localStorage.getItem("user"));
@@ -34,16 +32,15 @@ export default function Orderlist({ role: propRole }) {
   const [expandedOrder, setExpandedOrder] = useState(null);
   const [showModal, setShowModal] = useState(false);
 
+  // Get cart from localStorage
   const getUserCart = useCallback(() => {
     const token = localStorage.getItem("token");
     const cartKey = token ? `cart_${token}` : "cart_guest";
     const cart = JSON.parse(localStorage.getItem(cartKey)) || [];
-    return cart.map((item) => ({
-      ...item,
-      image_url: normalizeImageUrl(item.image_url),
-    }));
+    return cart.map((item) => ({ ...item, image_url: normalizeImageUrl(item.image_url) }));
   }, []);
 
+  // Fetch orders from backend + local cart
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
@@ -58,27 +55,25 @@ export default function Orderlist({ role: propRole }) {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      let backendOrders = [];
-      if (res.data.success && res.data.orders.length) {
-        backendOrders = res.data.orders.map((o) => ({
+      let backendOrders = (res.data.success && Array.isArray(res.data.orders))
+        ? res.data.orders.map((o) => ({
           ...o,
-          items: o.items.map((i) => ({
-            ...i,
-            image_url: normalizeImageUrl(i.image_url),
-          })),
-        }));
-      }
+          items: o.items.map((i) => ({ ...i, image_url: normalizeImageUrl(i.image_url) })),
+        }))
+        : [];
 
       if (!isRetailer) {
         const localCart = getUserCart();
         if (localCart.length) {
-          const pseudoOrder = {
-            order_id: "local_cart",
-            status: "cart",
-            items: localCart,
-            total_price: localCart.reduce((sum, i) => sum + i.price * i.quantity, 0),
-          };
-          backendOrders = [pseudoOrder, ...backendOrders];
+          backendOrders = [
+            {
+              order_id: "local_cart",
+              status: "cart",
+              items: localCart,
+              total_price: localCart.reduce((sum, i) => sum + i.price * i.quantity, 0),
+            },
+            ...backendOrders,
+          ];
         }
       }
 
@@ -91,15 +86,15 @@ export default function Orderlist({ role: propRole }) {
     }
   }, [getUserCart, isRetailer]);
 
+  // Listen for localStorage cart changes
   useEffect(() => {
     fetchOrders();
-    const handleStorageChange = (e) => {
-      if (e.key?.startsWith("cart_")) fetchOrders();
-    };
+    const handleStorageChange = (e) => e.key?.startsWith("cart_") && fetchOrders();
     window.addEventListener("storage", handleStorageChange);
     return () => window.removeEventListener("storage", handleStorageChange);
   }, [fetchOrders]);
 
+  // Socket events
   useEffect(() => {
     const socket = io(SOCKET_URL);
     socket.on("newOrder", (order) => {
@@ -113,29 +108,29 @@ export default function Orderlist({ role: propRole }) {
     return () => socket.disconnect();
   }, [fetchOrders]);
 
+  // Toggle order expand
   const toggleOrder = (id) => setExpandedOrder(expandedOrder === id ? null : id);
 
+  // Update local cart
   const updateLocalCart = (updatedCart) => {
     const token = localStorage.getItem("token");
     const cartKey = token ? `cart_${token}` : "cart_guest";
+
     if (updatedCart.length) localStorage.setItem(cartKey, JSON.stringify(updatedCart));
     else localStorage.removeItem(cartKey);
 
     setOrders((prev) => {
       const newOrders = [...prev];
-      const cartIndex = newOrders.findIndex((o) => o.order_id === "local_cart");
-      if (cartIndex !== -1) {
+      const index = newOrders.findIndex((o) => o.order_id === "local_cart");
+      if (index !== -1) {
         if (updatedCart.length === 0) {
-          newOrders.splice(cartIndex, 1);
-          setExpandedOrder((prevExpanded) => (prevExpanded === "local_cart" ? null : prevExpanded));
+          newOrders.splice(index, 1);
+          if (expandedOrder === "local_cart") setExpandedOrder(null);
         } else {
-          newOrders[cartIndex] = {
+          newOrders[index] = {
             order_id: "local_cart",
             status: "cart",
-            items: updatedCart.map((item) => ({
-              ...item,
-              image_url: normalizeImageUrl(item.image_url),
-            })),
+            items: updatedCart.map((i) => ({ ...i, image_url: normalizeImageUrl(i.image_url) })),
             total_price: updatedCart.reduce((sum, i) => sum + i.price * i.quantity, 0),
           };
         }
@@ -144,23 +139,21 @@ export default function Orderlist({ role: propRole }) {
     });
   };
 
+  // Handle order status changes
   const handleOrderAction = async (order_id, newStatus) => {
     const token = localStorage.getItem("token");
     if (!token) return toast.error("Please log in first.");
 
-    try {
-      if (order_id === "local_cart") {
-        if (newStatus === "pending") {
-          setShowModal(true);
-          return;
-        }
-        if (newStatus === "cancelled") {
-          updateLocalCart([]);
-          toast.success("🗑️ Cart cleared successfully!");
-          return;
-        }
+    // Local cart actions
+    if (order_id === "local_cart") {
+      if (newStatus === "pending") return setShowModal(true);
+      if (newStatus === "cancelled") {
+        updateLocalCart([]);
+        return toast.success("🗑️ Cart cleared successfully!");
       }
+    }
 
+    try {
       const res = await axios.put(
         `${BASE_URL}/orders/update-status/${order_id}`,
         { status: newStatus },
@@ -168,36 +161,29 @@ export default function Orderlist({ role: propRole }) {
       );
 
       if (res.data.success) {
+        toast.success(newStatus === "cancelled" ? "❌ Order cancelled!" : "✅ Order updated!");
         fetchOrders();
-        toast.success(
-          newStatus === "cancelled" ? "❌ Order cancelled!" : "✅ Order updated!"
-        );
-      } else toast.error("Failed to update order status.");
+      } else {
+        toast.error(res.data.message || "Failed to update order status.");
+      }
     } catch (err) {
       console.error("❌ Error updating order:", err);
       toast.error("Error updating order status.");
     }
   };
 
+  // Checkout confirmation
   const handleConfirmCheckout = async (info) => {
+    const token = localStorage.getItem("token");
+    const cartItems = getUserCart();
+    const cartKey = token ? `cart_${token}` : "cart_guest";
+
+    if (!cartItems.length) return toast.error("Your cart is empty.");
+
     try {
-      const token = localStorage.getItem("token");
-      const cartItems = getUserCart();
-      const cartKey = token ? `cart_${token}` : "cart_guest";
-
-      if (!cartItems.length) {
-        toast.error("Your cart is empty.");
-        return;
-      }
-
       const res = await axios.post(
         `${BASE_URL}/orders/buy`,
-        {
-          items: cartItems,
-          full_name: info.full_name,
-          contact_number: info.contact_number,
-          barangay_id: info.barangay_id,
-        },
+        { items: cartItems, full_name: info.full_name, contact_number: info.contact_number, barangay_id: info.barangay_id },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -206,7 +192,9 @@ export default function Orderlist({ role: propRole }) {
         toast.success("✅ Checkout successful!");
         setShowModal(false);
         fetchOrders();
-      } else toast.error("Checkout failed.");
+      } else {
+        toast.error(res.data.message || "Checkout failed.");
+      }
     } catch (err) {
       console.error("❌ Checkout error:", err);
       toast.error("Failed to checkout cart.");
@@ -215,66 +203,35 @@ export default function Orderlist({ role: propRole }) {
 
   const filteredOrders = orders.filter((order) => {
     if (activeTab === "cart") return order.status === "cart";
-    if (activeTab === "current")
-      return !["cart", "cancelled", "delivered"].includes(order.status);
+    if (activeTab === "current") return !["cart", "cancelled", "delivered"].includes(order.status);
     if (activeTab === "finished") return order.status === "delivered";
     return false;
   });
 
-  if (loading)
+  if (loading) {
     return (
-      <section
-        className={`${isRetailer
-          ? "bg-white text-gray-900 py-6 mt-0 min-h-[80vh]"
-          : "bg-gray-900 text-white py-12 mt-12 h-dvh"
-          } flex items-center justify-center`}
-      >
+      <section className={`${isRetailer ? "bg-white text-gray-900 py-6 mt-0 min-h-[80vh]" : "bg-gray-900 text-white py-12 mt-12 h-dvh"} flex items-center justify-center`}>
         <p>Loading your orders...</p>
       </section>
     );
+  }
 
   return (
-    <section
-      className={`${isRetailer
-        ? "text-gray-900 bg-transparent py-6 mt-0 min-h-[80vh]"
-        : "bg-gray-900 text-white py-12 mt-12 h-dvh"
-        } flex flex-col`}
-    >
+    <section className={`${isRetailer ? "text-gray-900 bg-transparent py-6 mt-0 min-h-[80vh]" : "bg-gray-900 text-white py-12 mt-12 h-dvh"} flex flex-col`}>
       <div className="container mx-auto px-4 md:px-6">
         {!isRetailer && (
           <>
             <h2 className="text-3xl font-bold text-white mb-2">My Orders</h2>
-            <p className="text-gray-300 mb-8">
-              View and manage your cart, current, and finished orders.
-            </p>
+            <p className="text-gray-300 mb-8">View and manage your cart, current, and finished orders.</p>
           </>
         )}
 
         {/* Tabs */}
-        <div
-          className={`flex flex-wrap items-center gap-3 ${isRetailer
-            ? "justify-start mb-4 border-b border-gray-200 pb-2"
-            : "justify-start mb-8"
-            }`}
-        >
-          {[...(isRetailer
-            ? []
-            : [{ key: "cart", icon: ShoppingCart, label: "Cart" }]),
-          { key: "current", icon: Clock, label: "Current" },
-          { key: "finished", icon: CheckCircle, label: "Finished" },
-          ].map((tab) => {
+        <div className={`flex flex-wrap items-center gap-3 ${isRetailer ? "justify-start mb-4 border-b border-gray-200 pb-2" : "justify-start mb-8"}`}>
+          {[...(isRetailer ? [] : [{ key: "cart", icon: ShoppingCart, label: "Cart" }]), { key: "current", icon: Clock, label: "Current" }, { key: "finished", icon: CheckCircle, label: "Finished" }].map((tab) => {
             const Icon = tab.icon;
             return (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition text-sm sm:text-base ${activeTab === tab.key
-                  ? "bg-blue-600 text-white shadow"
-                  : isRetailer
-                    ? "bg-gray-100 text-gray-800 hover:bg-gray-200"
-                    : "bg-gray-800 text-gray-300 hover:bg-gray-700"
-                  }`}
-              >
+              <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition text-sm sm:text-base ${activeTab === tab.key ? "bg-blue-600 text-white shadow" : isRetailer ? "bg-gray-100 text-gray-800 hover:bg-gray-200" : "bg-gray-800 text-gray-300 hover:bg-gray-700"}`}>
                 <Icon size={18} /> {tab.label}
               </button>
             );
@@ -282,43 +239,25 @@ export default function Orderlist({ role: propRole }) {
         </div>
 
         {/* Orders List */}
-        <div
-          className={`${isRetailer ? "bg-white border border-gray-200" : "bg-gray-800"
-            } rounded-lg shadow-md p-4 sm:p-6 flex flex-col h-[60vh] sm:h-[70vh]`}
-        >
+        <div className={`${isRetailer ? "bg-white border border-gray-200" : "bg-gray-800"} rounded-lg shadow-md p-4 sm:p-6 flex flex-col h-[60vh] sm:h-[70vh]`}>
           {filteredOrders.length ? (
-            <div
-              className={`space-y-4 overflow-y-auto pr-2 flex-1 ${isRetailer ? "text-gray-800" : "text-white"
-                }`}
-            >
+            <div className={`space-y-4 overflow-y-auto pr-2 flex-1 ${isRetailer ? "text-gray-800" : "text-white"}`}>
               {filteredOrders.map((order) => {
                 const isExpanded = expandedOrder === order.order_id;
                 const firstItem = order.items?.[0];
 
                 return (
-                  <div
-                    key={order.order_id}
-                    className={`rounded-lg overflow-hidden ${isRetailer ? "bg-gray-50 border border-gray-200" : "bg-gray-700"
-                      }`}
-                  >
+                  <div key={order.order_id} className={`rounded-lg overflow-hidden ${isRetailer ? "bg-gray-50 border border-gray-200" : "bg-gray-700"}`}>
                     {/* Header */}
-                    <button
-                      onClick={() => toggleOrder(order.order_id)}
-                      className={`w-full flex justify-between items-center p-3 sm:p-4 text-left transition ${isRetailer ? "hover:bg-gray-100" : "hover:bg-gray-600"
-                        }`}
-                    >
+                    <button onClick={() => toggleOrder(order.order_id)} className={`w-full flex justify-between items-center p-3 sm:p-4 text-left transition ${isRetailer ? "hover:bg-gray-100" : "hover:bg-gray-600"}`}>
                       <div>
                         <h3 className={`font-semibold ${isRetailer ? "text-gray-900" : "text-white"} text-sm sm:text-base`}>
                           {firstItem?.product_name || "Unnamed Product"}
                         </h3>
-                        <p className={`text-xs sm:text-sm ${isRetailer ? "text-gray-500" : "text-gray-300"}`}>
-                          Status: {order.status}
-                        </p>
+                        <p className={`text-xs sm:text-sm ${isRetailer ? "text-gray-500" : "text-gray-300"}`}>Status: {order.status}</p>
                       </div>
                       <div className="flex items-center gap-2 sm:gap-3">
-                        <p className={`font-bold text-sm sm:text-lg ${isRetailer ? "text-blue-700" : "text-blue-400"}`}>
-                          ₱{order.total_price?.toLocaleString()}
-                        </p>
+                        <p className={`font-bold text-sm sm:text-lg ${isRetailer ? "text-blue-700" : "text-blue-400"}`}>₱{order.total_price?.toLocaleString()}</p>
                         {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                       </div>
                     </button>
@@ -334,8 +273,6 @@ export default function Orderlist({ role: propRole }) {
                                   <img src={item.image_url} alt={item.product_name} className="w-full h-full object-cover" />
                                 </div>
                               )}
-
-                              {/* Item Info */}
                               <div className="flex-1 flex flex-col justify-between w-full">
                                 <div className="flex justify-between items-start flex-wrap">
                                   <div className="flex-1 min-w-0">
@@ -345,13 +282,7 @@ export default function Orderlist({ role: propRole }) {
 
                                   {order.order_id === "local_cart" && (
                                     <button
-                                      onClick={() => {
-                                        const cartKey = localStorage.getItem("token") ? `cart_${localStorage.getItem("token")}` : "cart_guest";
-                                        const cart = JSON.parse(localStorage.getItem(cartKey)) || [];
-                                        const updated = cart.filter((c) => c.product_id !== item.product_id);
-                                        updateLocalCart(updated);
-                                        toast.success(`🗑️ Removed ${item.product_name} from cart`);
-                                      }}
+                                      onClick={() => updateLocalCart(getUserCart().filter((c) => c.product_id !== item.product_id))}
                                       className="text-red-500 hover:text-red-700 transition p-1 rounded-full hover:bg-red-100"
                                       title="Remove item"
                                     >
@@ -369,10 +300,7 @@ export default function Orderlist({ role: propRole }) {
                                       value={item.quantity}
                                       onChange={(e) => {
                                         const newQty = Math.max(1, Number(e.target.value));
-                                        const cartKey = localStorage.getItem("token") ? `cart_${localStorage.getItem("token")}` : "cart_guest";
-                                        const cart = JSON.parse(localStorage.getItem(cartKey)) || [];
-                                        const updated = cart.map((c) => c.product_id === item.product_id ? { ...c, quantity: newQty } : c);
-                                        updateLocalCart(updated);
+                                        updateLocalCart(getUserCart().map((c) => c.product_id === item.product_id ? { ...c, quantity: newQty } : c));
                                       }}
                                       className="w-14 sm:w-16 px-2 py-1 rounded border border-gray-400 text-center text-[10px] sm:text-sm bg-transparent"
                                     />
@@ -417,9 +345,7 @@ export default function Orderlist({ role: propRole }) {
         </div>
       </div>
 
-      {showModal && (
-        <OrderInfoModal onClose={() => setShowModal(false)} onConfirm={handleConfirmCheckout} user={user} />
-      )}
+      {showModal && <OrderInfoModal onClose={() => setShowModal(false)} onConfirm={handleConfirmCheckout} user={user} />}
     </section>
   );
 }

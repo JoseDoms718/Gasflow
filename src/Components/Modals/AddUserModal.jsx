@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import axios from "axios";
-
+const BASE_URL = import.meta.env.VITE_BASE_URL;
 export default function AddUserModal({
     showModal,
     setShowModal,
@@ -26,7 +27,7 @@ export default function AddUserModal({
     useEffect(() => {
         const fetchMunicipalities = async () => {
             try {
-                const res = await axios.get("http://localhost:5000/barangays");
+                const res = await axios.get(`${BASE_URL}/barangays`);
                 const uniqueMunicipalities = [
                     ...new Set(res.data.map((b) => b.municipality)),
                 ];
@@ -46,7 +47,7 @@ export default function AddUserModal({
                 return;
             }
             try {
-                const res = await axios.get("http://localhost:5000/barangays", {
+                const res = await axios.get(`${BASE_URL}/barangays`, {
                     params: { municipality: formData.municipality },
                 });
                 setBarangays(res.data); // Expecting {id, name, municipality}

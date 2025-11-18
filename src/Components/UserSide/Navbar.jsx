@@ -1,3 +1,4 @@
+
 import { FaUserCircle, FaBars, FaTimes } from "react-icons/fa";
 import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
@@ -6,7 +7,8 @@ import { io } from "socket.io-client";
 import LogoBlue from "../../assets/Design/LogoBlue.png";
 import EditProfileModal from "../Modals/EditProfileModal";
 
-const SOCKET_URL = "http://localhost:5000";
+const BASE_URL = import.meta.env.VITE_BASE_URL;
+const SOCKET_URL = BASE_URL;
 
 export default function NavBar() {
   const navigate = useNavigate();
@@ -27,7 +29,7 @@ export default function NavBar() {
     const token = localStorage.getItem("token");
     if (!token) return;
     axios
-      .get("http://localhost:5000/auth/me", { headers: { Authorization: `Bearer ${token}` } })
+      .get(`${BASE_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => {
         if (res.data.success) {
           setUser(res.data.user);

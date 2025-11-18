@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
-
+const BASE_URL = import.meta.env.VITE_BASE_URL;
 export default function BusinessOwnerForm() {
   const [formData, setFormData] = useState({
     name: "",
@@ -31,7 +32,7 @@ export default function BusinessOwnerForm() {
       return;
     }
     axios
-      .get("http://localhost:5000/barangays", { params: { municipality: formData.municipality } })
+      .get(`${BASE_URL}/barangays`, { params: { municipality: formData.municipality } })
       .then((res) => setBarangays(res.data))
       .catch(() => toast.error("⚠️ Failed to load barangays."));
   }, [formData.municipality]);
@@ -108,7 +109,7 @@ export default function BusinessOwnerForm() {
         }
       });
 
-      await axios.post("http://localhost:5000/business-owner", data, {
+      await axios.post(`${BASE_URL}/business-owner`, data, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 

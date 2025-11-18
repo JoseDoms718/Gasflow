@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { Pencil, Check, Camera, Package } from "lucide-react";
 import axios from "axios";
@@ -37,7 +38,7 @@ export default function EditProductModal({ selectedProduct, setSelectedProduct, 
 
         try {
             await axios.put(
-                `http://localhost:5000/products/update/${editedProduct.product_id}`,
+                `${BASE_URL}/products/update/${editedProduct.product_id}`,
                 formData,
                 { headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" } }
             );

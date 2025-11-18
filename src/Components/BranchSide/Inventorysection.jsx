@@ -4,7 +4,7 @@ import { PlusCircle, Download } from "lucide-react";
 import * as XLSX from "xlsx-js-style";
 import { saveAs } from "file-saver";
 import { toast } from "react-hot-toast";
-
+const BASE_URL = import.meta.env.VITE_BASE_URL;
 import ProductTable from "./ProductTable";
 import AddProductModal from "./AddProductModal";
 import EditProductModal from "./EditProductModal";
@@ -39,8 +39,8 @@ export default function Inventory() {
 
         const endpoint =
           userRole === "admin"
-            ? `http://localhost:5000/products/admin/all-products?branch=${selectedBranch}`
-            : "http://localhost:5000/products/my-products";
+            ? `${BASE_URL}/products/admin/all-products?branch=${selectedBranch}`
+            : `${BASE_URL}/products/my-products`;
 
         const res = await axios.get(endpoint, {
           headers: { Authorization: `Bearer ${token}` },
@@ -51,7 +51,7 @@ export default function Inventory() {
           image_url: p.image_url
             ? p.image_url.startsWith("http")
               ? p.image_url
-              : `http://localhost:5000/products/images/${p.image_url}`
+              : `${BASE_URL}/products/images/${p.image_url}`
             : null,
         }));
 

@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useCallback } from "react";
 import { ArrowLeft, Tag, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -22,7 +23,7 @@ export default function WalkInOrders() {
   });
   const [barangays, setBarangays] = useState([]);
   const [loading, setLoading] = useState(false);
-
+  const BASE_URL = import.meta.env.VITE_BASE_URL;
   const navigate = useNavigate();
   const location = useLocation();
   const userRole = localStorage.getItem("role");
@@ -67,7 +68,7 @@ export default function WalkInOrders() {
   const fetchProducts = useCallback(async () => {
     if (!token) return;
     try {
-      const res = await axios.get("http://localhost:5000/products/my-products", {
+      const res = await axios.get(`${BASE_URL}/products/my-products`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const products = Array.isArray(res.data) ? res.data : [];
@@ -77,7 +78,7 @@ export default function WalkInOrders() {
         image_url: p.image_url
           ? p.image_url.startsWith("http")
             ? p.image_url
-            : `http://localhost:5000/products/images/${p.image_url}`
+            : `${BASE_URL}/products/images/${p.image_url}`
           : "https://via.placeholder.com/300x200",
       }));
       setRegularProducts(formatted.filter((p) => p.product_type === "regular"));
@@ -101,7 +102,7 @@ export default function WalkInOrders() {
       }
       try {
         const res = await axios.get(
-          `http://localhost:5000/barangays?municipality=${formData.municipality}`
+          `${BASE_URL}/barangays?municipality=${formData.municipality}`
         );
         setBarangays(res.data || []);
         setFormData((prev) => ({ ...prev, barangay: "" })); // reset barangay
@@ -137,7 +138,7 @@ export default function WalkInOrders() {
         total_price:
           (selectedProduct.discounted_price || selectedProduct.price) * quantity,
       };
-      const res = await axios.post("http://localhost:5000/orders/walk-in", orderData, {
+      const res = await axios.post(`${BASE_URL}/orders/walk-in`, orderData, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.status === 200 || res.status === 201) {

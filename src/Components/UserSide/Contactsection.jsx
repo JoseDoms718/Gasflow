@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { MapPin, Phone } from "lucide-react";
@@ -5,7 +6,7 @@ import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation, Autoplay } from "swiper/modules";
 import "swiper/css";
 import "swiper/css/navigation";
-
+const BASE_URL = import.meta.env.VITE_BASE_URL;
 export default function Contactsection() {
   const [showForm, setShowForm] = useState(false);
   const [selectedRecipient, setSelectedRecipient] = useState("");
@@ -19,7 +20,7 @@ export default function Contactsection() {
   useEffect(() => {
     const fetchBranches = async () => {
       try {
-        const res = await axios.get("http://localhost:5000/branchinfo/all");
+        const res = await axios.get(`${BASE_URL}/branchinfo/all`);
         const branchList = res.data.branches || [];
         setBranches(branchList);
         if (branchList.length > 0) setSelectedRecipient(branchList[0].branch_name);
@@ -82,7 +83,7 @@ export default function Contactsection() {
                   <div className="w-full h-36 overflow-hidden flex-shrink-0">
                     {branch.branch_picture ? (
                       <img
-                        src={`http://localhost:5000/uploads/branch_manager/branchPhotos/${branch.branch_picture}`}
+                        src={`${BASE_URL}/uploads/branch_manager/branchPhotos/${branch.branch_picture}`}
                         alt={`${branch.branch_name} Branch`}
                         className="w-full h-full object-cover object-center"
                       />

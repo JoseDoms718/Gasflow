@@ -1,6 +1,5 @@
-// routes/orders.js
-// Part 1/?? - Imports, helpers, inventory, walk-in and buy routes (uses barangay_id -> barangays table)
 
+require('dotenv').config();
 const express = require("express");
 const router = express.Router();
 const db = require("../config/db");
@@ -18,7 +17,7 @@ const ALLOWED_SELLER_STATUSES = [
 ];
 
 const formatImageUrl = (fileName) =>
-  fileName ? `http://localhost:5000/products/images/${fileName}` : null;
+  fileName ? `${process.env.BASE_URL}/products/images/${fileName}` : null;
 
 // Role check middleware (preserves your existing style)
 function requireRole(...allowedRoles) {
@@ -382,7 +381,7 @@ router.post("/buy", authenticateToken, async (req, res) => {
 
     // Fetch products + inventory, group by seller
     const productsMap = {};
-    const baseUrl = process.env.BASE_URL || "http://localhost:5000";
+    
 
     for (const item of orderItems) {
       const sql = `
@@ -424,7 +423,7 @@ router.post("/buy", authenticateToken, async (req, res) => {
       const imageUrl = product.image_url
         ? product.image_url.startsWith("http")
           ? product.image_url
-          : `${baseUrl}/${product.image_url.replace(/^\/+/, "")}`
+          : `${process.env.BASE_URL}/${product.image_url.replace(/^\/+/, "")}`
         : null;
 
       productsMap[seller_id].push({
@@ -474,7 +473,7 @@ router.post("/buy", authenticateToken, async (req, res) => {
           product_id,
           product_name,
           product_description,
-          image_url: image_url || `${baseUrl}/placeholder.png`,
+          image_url: image_url || `${process.env.BASE_URL}/placeholder.png`,
           quantity,
           type,
           price,
@@ -901,24 +900,25 @@ router.put(
 
         // Build JSON array manually using GROUP_CONCAT
         const [updatedOrderRows] = await db.query(
-          `SELECT o.*,
-            CONCAT('[', GROUP_CONCAT(
-              CONCAT(
-                '{"product_id":', oi.product_id,
-                ',"product_name":"', REPLACE(p.product_name, '"', '\\"'),
-                '","quantity":', oi.quantity,
-                ',"price":', oi.price,
-                ',"image_url":"http://localhost:5000/products/images/', REPLACE(p.image_url, '"', '\\"'),
-                '"}'
-              )
-            ), ']') AS items
-          FROM orders o
-          JOIN order_items oi ON o.order_id = oi.order_id
-          JOIN products p ON oi.product_id = p.product_id
-          WHERE o.order_id = ?
-          GROUP BY o.order_id`,
-          [id]
-        );
+  `SELECT o.*,
+    CONCAT('[', GROUP_CONCAT(
+      CONCAT(
+        '{"product_id":', oi.product_id,
+        ',"product_name":"', REPLACE(p.product_name, '"', '\\"'),
+        '","quantity":', oi.quantity,
+        ',"price":', oi.price,
+        ',"image_url":"', ?, '/', REPLACE(p.image_url, '"', '\\"'),
+        '"}'
+      )
+    ), ']') AS items
+  FROM orders o
+  JOIN order_items oi ON o.order_id = oi.order_id
+  JOIN products p ON oi.product_id = p.product_id
+  WHERE o.order_id = ?
+  GROUP BY o.order_id`,
+  [process.env.BASE_URL + "products/images", id]
+);
+
 
         let updatedOrder = updatedOrderRows[0];
         updatedOrder.items = updatedOrder.items ? JSON.parse(updatedOrder.items) : [];

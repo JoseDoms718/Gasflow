@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation } from "swiper/modules";
@@ -7,7 +8,8 @@ import { Package } from "lucide-react";
 import { toast } from "react-hot-toast";
 import axios from "axios";
 
-const API_URL = "http://localhost:5000/services";
+const BASE_URL = import.meta.env.VITE_BASE_URL;
+const API_URL = `${BASE_URL}/services`;
 
 export default function Servicespagesection() {
   const [modalType, setModalType] = useState(null);
@@ -27,7 +29,7 @@ export default function Servicespagesection() {
         title: s.title,
         description: s.description,
         restricted: s.restricted || false,
-        image: s.image_url ? `http://localhost:5000${s.image_url}` : null,
+        image: s.image_url ? `${BASE_URL}${s.image_url}` : null,
         action:
           s.restricted && userType !== "business"
             ? () => toast.error("Only available for Business Owners.")

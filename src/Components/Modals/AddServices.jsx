@@ -1,8 +1,9 @@
+
 import React, { useState } from "react";
 import { PlusCircle, Box } from "lucide-react";
 import { toast } from "react-hot-toast";
 import axios from "axios";
-
+const BASE_URL = import.meta.env.VITE_BASE_URL;
 export default function AddServices({ fetchServices }) {
     const [targetAudience, setTargetAudience] = useState("all");
     const [newService, setNewService] = useState({ title: "", description: "", image: null });
@@ -28,7 +29,7 @@ export default function AddServices({ fetchServices }) {
 
         try {
             const token = localStorage.getItem("token");
-            const res = await axios.post("http://localhost:5000/services", formData, {
+            const res = await axios.post(`${BASE_URL}/services`, formData, {
                 headers: {
                     "Content-Type": "multipart/form-data",
                     Authorization: `Bearer ${token}`,

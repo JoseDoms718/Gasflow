@@ -1,20 +1,21 @@
+
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { X } from "lucide-react";
 import { toast } from "react-hot-toast";
-
+const BASE_URL = import.meta.env.VITE_BASE_URL;
 export default function ManageRequestsSection() {
   const [requests, setRequests] = useState([]);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [loadingId, setLoadingId] = useState(null); // Track loading per row
-
+  const BASE_URL = import.meta.env.VITE_BASE_URL;
   const token = localStorage.getItem("token"); // Admin token
 
   // Fetch pending business_owner registrations
   const fetchRequests = async () => {
     try {
       const res = await axios.get(
-        "http://localhost:5000/business-owner/pending-registrations",
+        `${BASE_URL}/business-owner/pending-registrations`,
         {
           params: { role: "business_owner" }, // Only business_owner
           headers: { Authorization: `Bearer ${token}` },
@@ -39,7 +40,7 @@ export default function ManageRequestsSection() {
     setLoadingId(otpId);
     try {
       const res = await axios.post(
-        `http://localhost:5000/business-owner/approve/${otpId}`,
+        `${BASE_URL}/business-owner/approve/${otpId}`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -64,7 +65,7 @@ export default function ManageRequestsSection() {
     setLoadingId(otpId);
     try {
       const res = await axios.post(
-        `http://localhost:5000/business-owner/reject/${otpId}`,
+        `${BASE_URL}/business-owner/reject/${otpId}`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -188,7 +189,7 @@ export default function ManageRequestsSection() {
                   {selectedRequest.images.map((img) => (
                     <img
                       key={img.id}
-                      src={`http://localhost:5000/${img.image_url}`}
+                      src={`${BASE_URL}/${img.image_url}`}
                       alt={img.type}
                       className="w-24 h-24 object-cover rounded border"
                     />

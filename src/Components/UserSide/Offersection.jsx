@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation, Pagination, Autoplay } from "swiper/modules";
@@ -10,7 +11,8 @@ export default function Offersection() {
   const [banners, setBanners] = useState([]);
   const [selectedBanner, setSelectedBanner] = useState(null);
 
-  const API_URL = "http://localhost:5000/uploads/banners/";
+  const BASE_URL = import.meta.env.VITE_BASE_URL;
+  const API_URL = `${BASE_URL}/uploads/banners/`;
 
   useEffect(() => {
     loadBanners();
@@ -18,7 +20,7 @@ export default function Offersection() {
 
   const loadBanners = async () => {
     try {
-      const res = await axios.get("http://localhost:5000/banners");
+      const res = await axios.get(`${BASE_URL}/banners`);
       if (res.data.success) {
         setBanners(res.data.banners);
       }

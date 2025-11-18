@@ -1,4 +1,4 @@
-// RetailerReqsection.jsx
+
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
@@ -6,7 +6,7 @@ import { toast } from "react-hot-toast";
 import ScheduleModal from "../Modals/ScheduleModal";
 import ManageExamResultsModal from "../Modals/ManageExamResultsModal";
 import ViewRequirementsModal from "../Modals/ViewRequirementsModal";
-
+const BASE_URL = import.meta.env.VITE_BASE_URL;
 export default function RetailerReqsection() {
   const [status, setStatus] = useState("requirements");
   const [requests, setRequests] = useState([]);
@@ -47,7 +47,7 @@ export default function RetailerReqsection() {
       endpoints.map(async ({ url, setter }) => {
         try {
           const res = await axios.get(
-            `http://localhost:5000/retailerSignup/${url}`,
+            `${BASE_URL}/retailerSignup/${url}`,
             { headers: { Authorization: `Bearer ${token}` } }
           );
           setter(res.data.success ? res.data.data : []);
@@ -75,7 +75,7 @@ export default function RetailerReqsection() {
       const id = retailer.id || retailer.retailer_id;
 
       const res = await axios.post(
-        `http://localhost:5000/retailerSignup/init-process/${id}`,
+        `${BASE_URL}/retailerSignup/init-process/${id}`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -106,7 +106,7 @@ export default function RetailerReqsection() {
     try {
       const token = localStorage.getItem("token");
       await axios.put(
-        `http://localhost:5000/retailerSignup/schedule-exam/${examProcess.process_id}`,
+        `${BASE_URL}/retailerSignup/schedule-exam/${examProcess.process_id}`,
         {
           exam_date: data.examDate,
           exam_time: data.examTime,
@@ -140,7 +140,7 @@ export default function RetailerReqsection() {
         return toast.error("Please select an exam result file.");
 
       await axios.put(
-        `http://localhost:5000/retailerSignup/upload-exam-result/${selectedExamProcess.process_id}`,
+        `${BASE_URL}/retailerSignup/upload-exam-result/${selectedExamProcess.process_id}`,
         formData,
         {
           headers: {
@@ -172,7 +172,7 @@ export default function RetailerReqsection() {
     try {
       const token = localStorage.getItem("token");
       await axios.put(
-        `http://localhost:5000/retailerSignup/schedule-training/${trainingProcess.process_id}`,
+        `${BASE_URL}/retailerSignup/schedule-training/${trainingProcess.process_id}`,
         {
           training_date: data.examDate,
           training_time: data.examTime,
@@ -198,7 +198,7 @@ export default function RetailerReqsection() {
     try {
       const token = localStorage.getItem("token");
       await axios.put(
-        `http://localhost:5000/retailerSignup/training-result/${item.process_id}`,
+        `${BASE_URL}/retailerSignup/training-result/${item.process_id}`,
         { result },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -221,7 +221,7 @@ export default function RetailerReqsection() {
 
       const token = localStorage.getItem("token");
       await axios.post(
-        `http://localhost:5000/retailerSignup/approve/${id}`,
+        `${BASE_URL}/retailerSignup/approve/${id}`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -258,8 +258,8 @@ export default function RetailerReqsection() {
             key={stat}
             onClick={() => setStatus(stat)}
             className={`px-4 py-2 rounded-lg capitalize border transition font-medium ${status === stat
-                ? "bg-gray-900 text-white border-gray-900"
-                : "bg-white text-gray-900 border border-gray-300 hover:bg-gray-100"
+              ? "bg-gray-900 text-white border-gray-900"
+              : "bg-white text-gray-900 border border-gray-300 hover:bg-gray-100"
               }`}
           >
             {stat}

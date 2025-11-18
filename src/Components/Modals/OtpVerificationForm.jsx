@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-
+const BASE_URL = import.meta.env.VITE_BASE_URL;
 export default function OtpVerificationForm({ email, onVerifyOtp }) {
     const [otp, setOtp] = useState("");
     const [loading, setLoading] = useState(false);
@@ -43,7 +44,7 @@ export default function OtpVerificationForm({ email, onVerifyOtp }) {
 
         try {
             setLoading(true);
-            await axios.post("http://localhost:5000/verify-otp", { email, otp });
+            await axios.post(`${BASE_URL}/verify-otp`, { email, otp });
             toast.success("✅ OTP verified successfully!");
             setOtp("");
             if (onVerifyOtp) await onVerifyOtp(otp);
@@ -61,7 +62,7 @@ export default function OtpVerificationForm({ email, onVerifyOtp }) {
 
         try {
             setSendingOtp(true);
-            await axios.post("http://localhost:5000/send-otp", { email, action: "resend" });
+            await axios.post(`${BASE_URL}/send-otp`, { email, action: "resend" });
             toast.success("✅ OTP resent successfully!");
             resetTimer();
         } catch (err) {
@@ -75,7 +76,7 @@ export default function OtpVerificationForm({ email, onVerifyOtp }) {
     // Cancel OTP
     const handleCancel = async () => {
         try {
-            await axios.post("http://localhost:5000/send-otp", { email, action: "cancel" });
+            await axios.post(`${BASE_URL}/send-otp`, { email, action: "cancel" });
             toast.success("✅ OTP canceled successfully!");
             setOtp("");
             clearInterval(timerRef.current);
@@ -131,8 +132,8 @@ export default function OtpVerificationForm({ email, onVerifyOtp }) {
                 onClick={handleResend}
                 disabled={resendTimer > 0 || sendingOtp}
                 className={`mt-2 w-full text-sm font-semibold ${resendTimer > 0 || sendingOtp
-                        ? "text-gray-500 cursor-not-allowed"
-                        : "text-blue-400 hover:underline"
+                    ? "text-gray-500 cursor-not-allowed"
+                    : "text-blue-400 hover:underline"
                     }`}
             >
                 {sendingOtp ? "Sending..." : `Resend OTP ${resendTimer > 0 ? `(${resendTimer}s)` : ""}`}
