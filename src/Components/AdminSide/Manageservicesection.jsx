@@ -1,117 +1,131 @@
-import React, { useState } from "react";
-import { PlusCircle, Edit, Box, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import {
+  PlusCircle,
+  Edit,
+  Box,
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import axios from "axios";
+import AddServices from "../Modals/AddServices";
+
+const API_URL = "http://localhost:5000/services";
 
 export default function Manageservicesection() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("view");
-  const [targetAudience, setTargetAudience] = useState("all");
-  const [services, setServices] = useState([]); // keep empty
-  const [newService, setNewService] = useState({ title: "", description: "", image: null });
+  const [services, setServices] = useState([]);
   const [editingService, setEditingService] = useState(null);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [newService, setNewService] = useState({ title: "", description: "", image: null });
+  const [previewUrl, setPreviewUrl] = useState(null);
 
   const servicesPerView = 3;
-  const maxIndex = Math.max(0, services.length - servicesPerView);
+  const cardHeight = 460;
 
-  const prevSlide = () => setCurrentIndex(prev => Math.max(prev - 1, 0));
-  const nextSlide = () => setCurrentIndex(prev => Math.min(prev + 1, maxIndex));
-
-  // Add service
-  // Example: handleAddService in Manageservicesection.jsx
-  // Add service
-  const handleAddService = async () => {
-    if (!newService.title || !newService.description) {
-      toast.error("Please fill in all fields");
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append("title", newService.title);
-    formData.append("description", newService.description);
-    formData.append(
-      "type",
-      targetAudience === "all"
-        ? "all"
-        : targetAudience === "customer"
-          ? "users"
-          : "business_owner"
-    );
-    if (newService.image) formData.append("image", newService.image);
-
+  // ───────── FETCH SERVICES ─────────
+  const fetchServices = async () => {
     try {
       const token = localStorage.getItem("token");
-
-      const res = await axios.post("http://localhost:5000/services", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-          Authorization: `Bearer ${token}`,
-        },
+      const res = await axios.get(`${API_URL}/fetchServices`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
-
-      if (res.status === 201) {
-        toast.success(res.data.message || "Service added successfully!");
-        setNewService({ title: "", description: "", image: null });
-        fetchServices(); // refresh list
-      } else {
-
-      }
+      // Prepend backend URL to image
+      const normalized = (res.data.services || []).map(s => ({
+        ...s,
+        image: s.image_url ? `http://localhost:5000${s.image_url}` : null
+      }));
+      setServices(normalized);
     } catch (err) {
-      console.error(err.response?.data || err.message);
-
+      console.error(err);
+      toast.error("Failed to fetch services");
     }
   };
 
-  // Edit service
+  useEffect(() => {
+    fetchServices();
+  }, []);
+
+  // ───────── EDIT PREVIEW ─────────
+  useEffect(() => {
+    if (!editingService) return setPreviewUrl(null);
+    if (editingService.image instanceof File) {
+      const url = URL.createObjectURL(editingService.image);
+      setPreviewUrl(url);
+      return () => URL.revokeObjectURL(url);
+    } else if (editingService.image) {
+      setPreviewUrl(editingService.image);
+    } else setPreviewUrl(null);
+  }, [editingService]);
+
+  // ───────── SAVE EDIT ─────────
   const handleSaveEdit = async () => {
     if (!editingService.title || !editingService.description) {
       toast.error("Please fill in all fields");
       return;
     }
-
-    const formData = new FormData();
-    formData.append("title", editingService.title);
-    formData.append("description", editingService.description);
-    formData.append("type", editingService.type || "all");
-    if (editingService.image instanceof File) formData.append("image", editingService.image);
-
     try {
-      const token = localStorage.getItem("token");
+      const formData = new FormData();
+      formData.append("title", editingService.title);
+      formData.append("description", editingService.description);
+      if (editingService.image instanceof File) formData.append("image", editingService.image);
 
-      const res = await axios.put(`http://localhost:5000/services/${editingService.id}`, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-          Authorization: `Bearer ${token}`,
-        },
+      const token = localStorage.getItem("token");
+      await axios.put(`${API_URL}/${editingService.id}`, formData, {
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" },
       });
 
-      if (res.status === 200) {
-        toast.success(res.data.message || "Service updated successfully!");
-        // Update local state
-        setServices(prev =>
-          prev.map(s =>
-            s.id === editingService.id ? { ...s, ...editingService, image: editingService.image instanceof File ? s.image : editingService.image } : s
-          )
-        );
-        setEditingService(null);
-      } else {
-        toast.error(res.data.message || "Failed to update service");
-      }
+      // Update local state with new image URL if needed
+      const updatedServices = services.map(s =>
+        s.id === editingService.id
+          ? { ...editingService, image: editingService.image instanceof File ? previewUrl : editingService.image }
+          : s
+      );
+      setServices(updatedServices);
+      setEditingService(null);
+      toast.success("Service updated successfully!");
     } catch (err) {
-      console.error(err.response?.data || err.message);
-      toast.error(err.response?.data?.message || "Failed to update service");
+      console.error(err);
+      toast.error("Failed to update service");
     }
   };
 
-
-  // Handle image uploads
-  const handleImageUpload = (e, type = "new") => {
+  // ───────── HANDLE IMAGE UPLOAD ─────────
+  const handleImageUpload = (e, type = "edit") => {
     const file = e.target.files[0];
     if (!file) return;
-    if (type === "new") setNewService({ ...newService, image: file });
-    else setEditingService({ ...editingService, image: file });
+    if (type === "edit") setEditingService(prev => ({ ...prev, image: file }));
+    else setNewService(prev => ({ ...prev, image: file }));
+  };
+
+  // ───────── RENDER IMAGE ─────────
+  const renderImage = (image) => {
+    if (!image)
+      return (
+        <div className="w-full h-52 bg-gray-100 flex items-center justify-center rounded-t-2xl">
+          <Box className="w-10 h-10 text-gray-400" />
+        </div>
+      );
+    return (
+      <img
+        key={image instanceof File ? image.name : image}
+        src={image instanceof File ? URL.createObjectURL(image) : image}
+        alt="Service"
+        className="w-full h-52 object-cover rounded-t-2xl"
+      />
+    );
+  };
+
+  // ───────── CAROUSEL SCROLL ─────────
+  const scrollPrev = () => {
+    const container = document.querySelector(".service-carousel-inner");
+    if (container) container.scrollBy({ left: -container.clientWidth, behavior: 'smooth' });
+  };
+  const scrollNext = () => {
+    const container = document.querySelector(".service-carousel-inner");
+    if (container) container.scrollBy({ left: container.clientWidth, behavior: 'smooth' });
   };
 
   return (
@@ -130,130 +144,69 @@ export default function Manageservicesection() {
 
       {/* Tabs */}
       <div className="flex gap-6 border-b border-gray-300 mb-6">
-        <button
-          onClick={() => setActiveTab("view")}
-          className={`pb-2 text-lg font-semibold ${activeTab === "view"
-            ? "border-b-2 border-green-600 text-green-600"
-            : "text-gray-600 hover:text-gray-800"
-            }`}
-        >
-          View Services
-        </button>
-        <button
-          onClick={() => setActiveTab("add")}
-          className={`pb-2 text-lg font-semibold ${activeTab === "add"
-            ? "border-b-2 border-green-600 text-green-600"
-            : "text-gray-600 hover:text-gray-800"
-            }`}
-        >
-          Add Service
-        </button>
+        {["view", "add"].map(tab => (
+          <button
+            key={tab}
+            onClick={() => { setActiveTab(tab); if (tab === "view") fetchServices(); }}
+            className={`pb-2 text-lg font-semibold ${activeTab === tab ? "border-b-2 border-green-600 text-green-600" : "text-gray-600 hover:text-gray-800"}`}
+          >
+            {tab === "view" ? "View Services" : "Add Service"}
+          </button>
+        ))}
       </div>
 
-      <div className="w-full flex flex-col lg:flex-row gap-8">
-        {/* VIEW SERVICES */}
+      {/* Content */}
+      <div className="w-full flex flex-col lg:flex-row gap-8 min-h-[500px]">
+        {/* VIEW TAB */}
         {activeTab === "view" && (
-          <div className="flex-1 flex justify-center">
-            <div className="relative w-full max-w-6xl flex items-start gap-6">
+          <div className="flex-1 flex justify-center h-full relative">
+            <div className="relative w-full service-carousel-container flex items-start h-full">
               <button
-                onClick={prevSlide}
-                disabled={currentIndex === 0}
-                className="absolute left-0 top-1/2 transform -translate-y-1/2 z-10 p-2 bg-gray-900 text-white rounded-full shadow-md hover:bg-gray-700 disabled:opacity-50"
+                onClick={scrollPrev}
+                className="absolute left-0 top-1/2 transform -translate-y-1/2 z-10 p-2 bg-gray-900 text-white rounded-full shadow-md hover:bg-gray-700"
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
 
-              <div className="overflow-hidden w-full">
-                <div
-                  className="flex transition-transform duration-300 ease-in-out"
-                  style={{
-                    transform: `translateX(-${currentIndex * (100 / servicesPerView)}%)`,
-                    width: `${(services.length / servicesPerView) * 100}%`,
-                  }}
-                >
-                  {services.map((service) => (
-                    <div key={service.id} className="flex-shrink-0 flex-grow-0 basis-[calc(33.333%-16px)] mx-2">
-                      <div className="bg-white shadow-lg rounded-2xl border flex flex-col w-full h-full">
-                        {editingService?.id === service.id ? (
-                          <div className="p-4 flex flex-col gap-2">
-                            <input
-                              type="text"
-                              value={editingService.title}
-                              onChange={(e) => setEditingService({ ...editingService, title: e.target.value })}
-                              className="border rounded-lg p-2 w-full"
-                            />
-                            <textarea
-                              value={editingService.description}
-                              onChange={(e) => setEditingService({ ...editingService, description: e.target.value })}
-                              className="border rounded-lg p-2 w-full"
-                            />
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={(e) => handleImageUpload(e, "edit")}
-                              className="w-full text-sm"
-                            />
-                            {editingService.image && (
-                              <img
-                                src={
-                                  editingService.image instanceof File
-                                    ? URL.createObjectURL(editingService.image)
-                                    : editingService.image
-                                }
-                                alt="Preview"
-                                className="rounded border w-full h-48 object-cover mt-2"
-                              />
-                            )}
-                            <button
-                              onClick={handleSaveEdit}
-                              className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 mt-2"
-                            >
-                              Save
-                            </button>
+              <div className="service-carousel-inner flex gap-4 overflow-x-auto scrollbar-hide w-full">
+                {services.map(service => (
+                  <div key={service.id} className="flex-shrink-0" style={{ width: `calc((100% - 32px)/3)`, height: cardHeight }}>
+                    <div className="bg-white shadow-lg rounded-2xl border flex flex-col w-full h-full overflow-hidden">
+                      {editingService?.id === service.id ? (
+                        <div className="p-4 flex flex-col gap-3 h-full overflow-y-auto">
+                          <h3 className="text-lg font-semibold text-gray-800 mb-1">Edit Service</h3>
+                          {previewUrl && <img src={previewUrl} alt="Preview" className="rounded-xl border w-full h-32 object-cover mb-2" />}
+                          <input type="file" accept="image/*" onChange={e => handleImageUpload(e, "edit")} className="w-full text-sm mb-2" />
+                          <input type="text" value={editingService.title} onChange={e => setEditingService(prev => ({ ...prev, title: e.target.value }))} placeholder="Service Title" className="border rounded-lg p-2 w-full focus:ring-2 focus:ring-green-600 outline-none" />
+                          <textarea value={editingService.description} onChange={e => setEditingService(prev => ({ ...prev, description: e.target.value }))} placeholder="Service Description" className="border rounded-lg p-2 w-full resize-none focus:ring-2 focus:ring-green-600 outline-none" rows="4" />
+                          <div className="flex justify-end gap-3 mt-auto">
+                            <button onClick={() => setEditingService(null)} className="px-3 py-2 rounded-lg border text-gray-600 hover:bg-gray-100">Cancel</button>
+                            <button onClick={handleSaveEdit} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Save</button>
                           </div>
-                        ) : (
-                          <>
-                            {service.image ? (
-                              <img src={service.image} alt={service.title} className="w-full h-48 object-cover rounded-t-2xl" />
-                            ) : (
-                              <div className="w-full h-48 bg-gray-100 flex items-center justify-center rounded-t-2xl">
-                                <Box className="w-10 h-10 text-gray-400" />
-                              </div>
-                            )}
-
-                            <div className="p-4 flex flex-col">
-                              <h2 className="text-lg font-semibold truncate">{service.title}</h2>
-                              <p className="text-gray-600 mb-3 line-clamp-3">{service.description}</p>
-                              <div className="flex justify-between items-center mt-auto">
-                                <span className="text-xs text-gray-500 italic">
-                                  Target: {service.type === "User"
-                                    ? "Customer Only"
-                                    : service.type === "Business Owner"
-                                      ? "Business Owner Only"
-                                      : "All Buyers"}
-                                </span>
-                                <div className="flex gap-3">
-                                  <button
-                                    onClick={() => setEditingService(service)}
-                                    className="text-blue-500 hover:text-blue-700"
-                                  >
-                                    <Edit className="w-5 h-5" />
-                                  </button>
-                                </div>
-                              </div>
+                        </div>
+                      ) : (
+                        <>
+                          {renderImage(service.image)}
+                          <div className="p-4 flex flex-col flex-1 h-full">
+                            <h2 className="text-lg font-semibold truncate">{service.title}</h2>
+                            <p className="text-gray-600 mb-3 text-sm line-clamp-4">{service.description}</p>
+                            <span className="text-xs text-gray-500 italic">
+                              Target: {service.type === "users" ? "Customer Only" : service.type === "business_owner" ? "Business Owner Only" : "All Buyers"}
+                            </span>
+                            <div className="flex justify-end gap-3 mt-auto">
+                              <button onClick={() => setEditingService(service)} className="text-blue-500 hover:text-blue-700"><Edit className="w-5 h-5" /></button>
                             </div>
-                          </>
-                        )}
-                      </div>
+                          </div>
+                        </>
+                      )}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
 
               <button
-                onClick={nextSlide}
-                disabled={currentIndex === maxIndex}
-                className="absolute right-0 top-1/2 transform -translate-y-1/2 z-10 p-2 bg-gray-900 text-white rounded-full shadow-md hover:bg-gray-700 disabled:opacity-50"
+                onClick={scrollNext}
+                className="absolute right-0 top-1/2 transform -translate-y-1/2 z-10 p-2 bg-gray-900 text-white rounded-full shadow-md hover:bg-gray-700"
               >
                 <ChevronRight className="w-5 h-5" />
               </button>
@@ -261,71 +214,8 @@ export default function Manageservicesection() {
           </div>
         )}
 
-        {/* ADD SERVICE */}
-        {activeTab === "add" && (
-          <div className="flex-1 flex flex-col lg:flex-row gap-6">
-            {/* Image Card */}
-            <div className="w-full lg:w-1/3 flex flex-col items-center justify-center bg-white shadow-lg rounded-2xl border p-6">
-              <label className="block text-gray-700 font-semibold mb-3 text-lg">Service Image</label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => handleImageUpload(e, "new")}
-                className="w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-600 file:text-white hover:file:bg-green-700"
-              />
-              <div className="mt-4 w-full h-64 flex items-center justify-center bg-gray-100 rounded-xl border border-gray-300">
-                {newService.image ? (
-                  <img src={URL.createObjectURL(newService.image)} alt="Preview" className="w-full h-full object-cover rounded-xl" />
-                ) : (
-                  <div className="flex flex-col items-center justify-center">
-                    <Box className="w-12 h-12 text-gray-400 mb-2" />
-                    <p className="text-gray-500 text-sm">No image selected</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Form Card */}
-            <div className="w-full lg:w-2/3 flex flex-col justify-between bg-white shadow-lg rounded-2xl border p-6">
-              <div className="flex flex-col gap-4 flex-1">
-                <input
-                  type="text"
-                  value={newService.title}
-                  onChange={(e) => setNewService({ ...newService, title: e.target.value })}
-                  placeholder="Service Title"
-                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-600 focus:outline-none text-gray-800 text-base"
-                />
-                <textarea
-                  value={newService.description}
-                  onChange={(e) => setNewService({ ...newService, description: e.target.value })}
-                  placeholder="Service Description"
-                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-600 focus:outline-none text-gray-800 text-base flex-1 resize-none"
-                  rows="5"
-                ></textarea>
-              </div>
-
-              <div className="flex items-center justify-between mt-6">
-                <select
-                  value={targetAudience}
-                  onChange={(e) => setTargetAudience(e.target.value)}
-                  className="px-3 py-2 border rounded-lg text-gray-700 focus:ring-2 focus:ring-green-600"
-                >
-                  <option value="all">All Buyers</option>
-                  <option value="customer">Customer Only</option>
-                  <option value="business">Business Owner Only</option>
-                </select>
-
-                <button
-                  onClick={handleAddService}
-                  className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2 font-semibold"
-                >
-                  <PlusCircle size={20} />
-                  Add Service
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* ADD TAB */}
+        {activeTab === "add" && <AddServices fetchServices={fetchServices} />}
       </div>
     </div>
   );

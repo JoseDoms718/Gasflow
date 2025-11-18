@@ -26,7 +26,7 @@ export default function Sidebar({ role }) {
     return savedUser ? JSON.parse(savedUser) : { name: "Guest", role: "guest" };
   });
   const [showEditModal, setShowEditModal] = useState(false);
-  const [newOrdersCount, setNewOrdersCount] = useState(0); // track new orders
+  const [newOrdersCount, setNewOrdersCount] = useState(0);
 
   // Fetch latest user data
   useEffect(() => {
@@ -64,20 +64,17 @@ export default function Sidebar({ role }) {
   useEffect(() => {
     if (!token) return;
 
-    const socket = io(SOCKET_URL, {
-      auth: { token },
-    });
+    const socket = io(SOCKET_URL, { auth: { token } });
 
-    // Listen for new orders
     socket.on("newOrder", (order) => {
-      // Only increment badge if user is not on their orders page
-      const ordersPath = userRole === "admin"
-        ? "/adminorders"
-        : userRole === "branch_manager"
-          ? "/branchorder"
-          : userRole === "retailer"
-            ? "/retailerorder"
-            : "";
+      const ordersPath =
+        userRole === "admin"
+          ? "/adminorders"
+          : userRole === "branch_manager"
+            ? "/branchorder"
+            : userRole === "retailer"
+              ? "/retailerorder"
+              : "";
       if (location.pathname !== ordersPath && order.status === "pending") {
         setNewOrdersCount((prev) => prev + 1);
       }
@@ -86,15 +83,15 @@ export default function Sidebar({ role }) {
     return () => socket.disconnect();
   }, [token, location.pathname, userRole]);
 
-  // Clear badge automatically if user navigates to orders page
   useEffect(() => {
-    const ordersPath = userRole === "admin"
-      ? "/adminorders"
-      : userRole === "branch_manager"
-        ? "/branchorder"
-        : userRole === "retailer"
-          ? "/retailerorder"
-          : "";
+    const ordersPath =
+      userRole === "admin"
+        ? "/adminorders"
+        : userRole === "branch_manager"
+          ? "/branchorder"
+          : userRole === "retailer"
+            ? "/retailerorder"
+            : "";
     if (location.pathname === ordersPath) {
       setNewOrdersCount(0);
     }
@@ -106,31 +103,23 @@ export default function Sidebar({ role }) {
       { to: "/admininventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
       { to: "/adminsalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
       { to: "/adminmanageuser", label: "Manage Users", icon: <Users className="w-5 h-5" /> },
-
-      // HIDDEN ITEMS
       { to: "/adminmaintenance", label: "Maintenance & Updates", icon: <Settings className="w-5 h-5" />, hidden: true },
       { to: "/admininquiries", label: "Inquiries", icon: <FileText className="w-5 h-5" />, hidden: true },
     ],
-
     branch_manager: [
       { to: "/branchorder", label: "Orders", icon: <ShoppingCart className="w-5 h-5" />, showBadge: true },
       { to: "/branchinventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
       { to: "/branchsalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
       { to: "/branchretailer", label: "Manage Retailers", icon: <Users className="w-5 h-5" /> },
-
-      // HIDDEN
       { to: "/branchinquiries", label: "Inquiries", icon: <FileText className="w-5 h-5" />, hidden: true },
     ],
-
     retailer: [
       { to: "/retailerorder", label: "Orders", icon: <ShoppingCart className="w-5 h-5" />, showBadge: true },
       { to: "/retailerinventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
       { to: "/retailersalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
     ],
-
     guest: [],
   };
-
 
   const menuItems = roleMenus[userRole] || [];
 
@@ -153,18 +142,18 @@ export default function Sidebar({ role }) {
           <ul className="space-y-2">
             {menuItems.length > 0 ? (
               menuItems
-                .filter((item) => !item.hidden)  // Hides maintenance + inquiries
+                .filter((item) => !item.hidden || userRole === "admin" || userRole === "branch_manager") // show hidden items for admin & branch_manager
                 .map((item) => (
                   <li key={item.to} className="relative">
                     <Link
                       to={item.to}
-                      className={`flex items-center gap-3 p-3 rounded-lg transition ${isActive(item.to) ? "bg-gray-800" : "hover:bg-gray-800 hover:text-blue-400"}`}
+                      className={`flex items-center gap-3 p-3 rounded-lg transition ${isActive(item.to) ? "bg-gray-800" : "hover:bg-gray-800 hover:text-blue-400"
+                        }`}
                     >
                       {item.icon}
                       {item.label}
                     </Link>
 
-                    {/* Badge for new orders */}
                     {item.showBadge && newOrdersCount > 0 && (
                       <span className="absolute top-2 right-3 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-600 rounded-full">
                         {newOrdersCount}

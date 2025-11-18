@@ -107,4 +107,32 @@ router.put("/:id", authenticateToken, upload.single("image"), async (req, res) =
     res.status(500).json({ message: "Server error" });
   }
 });
+
+router.get("/fetchServices", authenticateToken, async (req, res) => {
+  try {
+    const { type } = req.query;
+    const userRole = req.user.role; // 'admin', 'business_owner', 'users', etc.
+
+    let query = "SELECT * FROM services WHERE type = 'all' OR type = ?";
+    const params = [userRole];
+
+    if (type) {
+      if (!allowedTypes.includes(type)) {
+        return res.status(400).json({ message: `Invalid type. Allowed: ${allowedTypes.join(", ")}` });
+      }
+      query += " AND type = ?";
+      params.push(type);
+    }
+
+    query += " ORDER BY created_at DESC";
+
+    const [services] = await pool.query(query, params);
+
+    res.json({ services });
+  } catch (err) {
+    console.error("GET /services ERROR:", err.message);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 module.exports = router;
