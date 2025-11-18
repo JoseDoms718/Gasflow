@@ -1,4 +1,3 @@
-
 import { FaUserCircle, FaBars, FaTimes } from "react-icons/fa";
 import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
@@ -82,22 +81,10 @@ export default function NavBar() {
   return (
     <nav className="fixed z-20 top-0 left-0 w-full bg-white text-gray-800 shadow-md transition-all duration-300">
       <div className="container mx-auto px-4 md:px-6 py-3 md:py-4 flex items-center justify-between">
-        {/* Mobile Hamburger */}
-        <button
-          className="md:hidden text-gray-700 mr-3 flex-shrink-0"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-        >
-          {mobileMenuOpen ? <FaTimes className="text-2xl" /> : <FaBars className="text-2xl" />}
-        </button>
-
-        {/* Logo + Desktop Links */}
-        <div className="flex items-center gap-6 flex-1">
+        {/* Left: Logo + NavLinks */}
+        <div className="flex items-center gap-8">
           <Link to="/" className="flex items-center gap-2 md:gap-3 flex-shrink-0">
-            <img
-              src={LogoBlue}
-              alt="Logo"
-              className="w-8 h-8 md:w-10 md:h-10 rounded-full"
-            />
+            <img src={LogoBlue} alt="Logo" className="w-8 h-8 md:w-10 md:h-10 rounded-full" />
             <span className="hidden md:inline text-xl font-bold tracking-wide whitespace-nowrap">
               GAS FLOW
             </span>
@@ -122,7 +109,7 @@ export default function NavBar() {
           </div>
         </div>
 
-        {/* Desktop User Dropdown */}
+        {/* Right: User Dropdown */}
         <div className="hidden md:flex items-center gap-6">
           {user ? (
             <div className="relative" ref={dropdownRef}>
@@ -171,6 +158,14 @@ export default function NavBar() {
             </Link>
           )}
         </div>
+
+        {/* Mobile Hamburger */}
+        <button
+          className="md:hidden text-gray-700 ml-3 flex-shrink-0"
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+        >
+          {mobileMenuOpen ? <FaTimes className="text-2xl" /> : <FaBars className="text-2xl" />}
+        </button>
       </div>
 
       {/* Mobile Menu */}

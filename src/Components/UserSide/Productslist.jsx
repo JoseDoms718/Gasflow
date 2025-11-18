@@ -1,13 +1,14 @@
-
 import { useState, useEffect } from "react";
-import { Package } from "lucide-react";
+import { Package, User, MapPin } from "lucide-react";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation } from "swiper/modules";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import "swiper/css";
 import "swiper/css/navigation";
+
 const BASE_URL = import.meta.env.VITE_BASE_URL;
+
 export default function Productslist() {
   const navigate = useNavigate();
 
@@ -36,7 +37,6 @@ export default function Productslist() {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        console.log("📡 Fetching regular & discounted products...");
         const [regularRes, discountedRes] = await Promise.all([
           axios.get(`${BASE_URL}/products/public/products?type=regular`),
           axios.get(`${BASE_URL}/products/public/products?type=discounted`),
@@ -50,13 +50,15 @@ export default function Productslist() {
                 ? p.image_url
                 : `${BASE_URL}/products/images/${p.image_url}`
               : null,
+            seller: {
+              name: p.seller_name || "-",
+              barangay: p.barangay || "-",
+              municipality: p.municipality || "-",
+            },
           }));
 
         setRegularProducts(formatProducts(regularRes.data));
         setDiscountedProducts(formatProducts(discountedRes.data));
-
-        console.log("✅ Regular products:", regularRes.data.length);
-        console.log("✅ Discounted products:", discountedRes.data.length);
       } catch (err) {
         console.error("❌ Failed to fetch products:", err);
       }
@@ -66,11 +68,11 @@ export default function Productslist() {
   }, []);
 
   const filteredRegular = regularProducts.filter((p) =>
-    selectedMunicipality ? p.branch === selectedMunicipality : true
+    selectedMunicipality ? p.seller.municipality === selectedMunicipality : true
   );
 
   const filteredDiscounted = discountedProducts.filter((p) =>
-    selectedMunicipality ? p.branch === selectedMunicipality : true
+    selectedMunicipality ? p.seller.municipality === selectedMunicipality : true
   );
 
   const handleBuyClick = (product) => {
@@ -112,17 +114,15 @@ export default function Productslist() {
       <div className="p-4 flex flex-col flex-grow">
         {item.placeholder ? (
           <>
-            <h3 className="text-lg font-semibold text-gray-800 mb-1">
+            <h3 className="text-lg font-semibold text-gray-800 mb-3">
               Coming Soon
             </h3>
             <p className="text-gray-600 text-sm mb-2 line-clamp-2 flex-grow">
               Placeholder product description.
             </p>
             <div className="flex items-center justify-between mt-auto">
+              <span className="text-gray-500 text-sm">Seller info</span>
               <p className="text-blue-600 font-bold text-lg">₱0.00</p>
-              <span className="text-sm font-medium px-2 py-1 rounded bg-gray-100 text-gray-400">
-                Out of stock
-              </span>
             </div>
             <button
               disabled
@@ -133,36 +133,51 @@ export default function Productslist() {
           </>
         ) : (
           <>
-            <h3 className="text-lg font-semibold text-gray-800 mb-1">
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">
               {item.product_name}
             </h3>
-            <p className="text-gray-600">{item.branch}</p>
-            <p className="text-gray-500 text-sm mb-2">Stock: {item.stock}</p>
+            <p className="text-gray-600 text-sm mb-2 line-clamp-2">
+              {item.product_description || "No description available."}
+            </p>
 
-            {item.discounted_price ? (
-              <>
-                <p className="line-through text-gray-500">
-                  ₱{formatPrice(item.price)}
-                </p>
-                <p className="text-green-600 font-bold text-lg">
-                  ₱{formatPrice(item.discounted_price)}
-                </p>
-              </>
-            ) : (
-              <p className="text-blue-600 font-bold text-lg">
-                ₱{formatPrice(item.price)}
-              </p>
-            )}
+            {/* Seller + Address + Price Row */}
+            <div className="flex items-start justify-between mt-auto mb-2">
+              <div className="flex flex-col text-gray-500 text-sm">
+                <div className="flex items-center gap-1">
+                  <User className="w-4 h-4" />
+                  <span>{item.seller.name}</span>
+                </div>
+                <div className="flex items-center gap-1 mt-1">
+                  <MapPin className="w-4 h-4" />
+                  <span>
+                    {item.seller.barangay}, {item.seller.municipality}
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-right">
+                {item.discounted_price ? (
+                  <>
+                    <p className="line-through text-gray-500 text-sm">
+                      ₱{formatPrice(item.price)}
+                    </p>
+                    <p className="text-green-600 font-bold text-lg">
+                      ₱{formatPrice(item.discounted_price)}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-blue-600 font-bold text-lg">
+                    ₱{formatPrice(item.price)}
+                  </p>
+                )}
+              </div>
+            </div>
 
             <button
               onClick={() => handleBuyClick(item)}
-              disabled={item.stock === 0}
-              className={`mt-4 w-full py-2 rounded-lg transition ${item.stock === 0
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-blue-600 text-white hover:bg-blue-700"
-                }`}
+              className="mt-4 w-full py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition"
             >
-              {item.stock === 0 ? "Out of Stock" : "Buy Now"}
+              Buy Now
             </button>
           </>
         )}
@@ -205,11 +220,11 @@ export default function Productslist() {
             key={displayDiscounted.length}
             modules={[Navigation]}
             navigation={
-              showDiscountNav
+              displayDiscounted.length > 3
                 ? { nextEl: ".discount-next", prevEl: ".discount-prev" }
                 : false
             }
-            loop={showDiscountNav}
+            loop={displayDiscounted.length > 3}
             spaceBetween={20}
             slidesPerView={1}
             breakpoints={{
@@ -223,7 +238,7 @@ export default function Productslist() {
             ))}
           </Swiper>
 
-          {showDiscountNav && (
+          {displayDiscounted.length > 3 && (
             <>
               <div className="hidden md:block discount-prev absolute -left-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full hover:bg-gray-100">
                 <span className="text-gray-900 text-3xl font-bold">❮</span>
@@ -243,11 +258,11 @@ export default function Productslist() {
             key={displayRegular.length}
             modules={[Navigation]}
             navigation={
-              showRegularNav
+              displayRegular.length > 3
                 ? { nextEl: ".products-next", prevEl: ".products-prev" }
                 : false
             }
-            loop={showRegularNav}
+            loop={displayRegular.length > 3}
             spaceBetween={20}
             slidesPerView={1}
             breakpoints={{
@@ -261,7 +276,7 @@ export default function Productslist() {
             ))}
           </Swiper>
 
-          {showRegularNav && (
+          {displayRegular.length > 3 && (
             <>
               <div className="hidden md:block products-prev absolute -left-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full hover:bg-gray-100">
                 <span className="text-gray-900 text-3xl font-bold">❮</span>

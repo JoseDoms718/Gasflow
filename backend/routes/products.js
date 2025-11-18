@@ -162,13 +162,33 @@ router.get("/public/products", async (req, res) => {
   let whereClause = "WHERE p.is_active = 1";
 
   if (type === "regular" || type === "discounted") {
-    whereClause += ` AND p.product_type = '${type}'`;
+    whereClause += ` AND p.product_type = ${db.escape(type)}`;
   }
   if (role) {
     whereClause += ` AND u.role = ${db.escape(role)}`;
   }
 
-  await fetchProducts(whereClause, res);
+  try {
+    // Example SQL joining products (p), users (u), and barangays (b)
+    const sql = `
+      SELECT 
+        p.*,
+        u.name AS seller_name,
+        b.barangay_name AS barangay,
+        b.municipality
+      FROM products p
+      LEFT JOIN users u ON p.seller_id = u.user_id
+      LEFT JOIN barangays b ON u.barangay_id = b.barangay_id
+      ${whereClause}
+      ORDER BY p.product_id DESC
+    `;
+
+    const [rows] = await db.query(sql);
+    res.json(rows);
+  } catch (err) {
+    console.error("Failed to fetch products:", err);
+    res.status(500).json({ error: "Failed to fetch products" });
+  }
 });
 
 // ==============================
