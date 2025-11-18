@@ -1,21 +1,26 @@
-
-import React from "react";
+import React, { useEffect } from "react";
 import { Box } from "lucide-react";
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 
-export default function DamagedProductsListModal({ damagedProducts }) {
-    // Calculate total loss for damaged products only
-    const damagedLoss = damagedProducts.reduce((sum, dp) => {
-        const quantity = dp.quantity || 0;
-        const unitPrice =
-            dp.product_type === "discounted"
-                ? Number(dp.discounted_price) || 0
-                : Number(dp.price) || 0;
-        return sum + unitPrice * quantity;
-    }, 0);
+export default function DamagedProductsListModal({ damagedProducts, onTotalChange }) {
+
+    // Compute total loss and send to parent
+    useEffect(() => {
+        if (onTotalChange) {
+            const totalLoss = damagedProducts.reduce((sum, dp) => {
+                const quantity = dp.quantity || 0;
+                const unitPrice =
+                    dp.product_type === "discounted"
+                        ? Number(dp.discounted_price) || 0
+                        : Number(dp.price) || 0;
+                return sum + unitPrice * quantity;
+            }, 0);
+
+            onTotalChange(totalLoss);
+        }
+    }, [damagedProducts, onTotalChange]);
 
     return (
-
         <div className="flex-1 overflow-hidden border border-gray-300 rounded-lg">
             <div className="overflow-y-auto h-full">
                 <table className="min-w-full text-sm text-center">
@@ -68,14 +73,6 @@ export default function DamagedProductsListModal({ damagedProducts }) {
                                         </tr>
                                     );
                                 })}
-
-                                {/* Total row for damaged products only */}
-                                <tr className="bg-gray-100 font-semibold text-red-700">
-                                    <td className="px-4 py-3 text-right" colSpan={2}>
-                                        Total Loss
-                                    </td>
-                                    <td className="px-4 py-3">₱{damagedLoss.toFixed(2)}</td>
-                                </tr>
                             </>
                         )}
                     </tbody>

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from "react";
 import Chart from "react-apexcharts";
 import { PlusCircle, Download } from "lucide-react";
@@ -8,7 +7,9 @@ import { saveAs } from "file-saver";
 import { toast } from "react-hot-toast";
 
 import ExpensesReportSection from "./ExpensesReportSection";
+
 const BASE_URL = import.meta.env.VITE_BASE_URL;
+
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState("sales");
   const [branch, setBranch] = useState("All");
@@ -20,7 +21,14 @@ export default function ReportsPage() {
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [expenses, setExpenses] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  const [damagedProducts, setDamagedProducts] = useState([]);
   const [newExpense, setNewExpense] = useState({ name: "", amount: "" });
+  const [damagedTotal, setDamagedTotal] = useState(0);
+
+  const handleDamagedUpdate = (updatedList, total) => {
+    setDamagedProducts(updatedList);
+    setDamagedTotal(total);
+  };
 
   const branches = ["Boac", "Mogpog", "Gasan", "Buenavista", "Torrijos", "Santa Cruz"];
 
@@ -39,47 +47,71 @@ export default function ReportsPage() {
         setUserRole(me.user.role);
         setUserMunicipality(me.user.municipality);
 
+        // Expenses
         const { data: expensesRes } = await axios.get(`${BASE_URL}/expenses`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-
         if (expensesRes.success) {
-          const formatted = expensesRes.expenses.map((e) => ({
-            id: e.expense_id,
-            name: e.expenses_details,
-            amount: parseFloat(e.expenses_cost),
-            date: toLocalDate(e.created_at),
-            branch: e.municipality || "Unknown",
-            addedBy: e.user_name || "N/A",
-          }));
-          setExpenses(formatted);
-        }
-
-        const { data: transactionsRes } = await axios.get(
-          `${BASE_URL}/orders/my-sold`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-
-        if (transactionsRes.success) {
-          const formattedTrans = transactionsRes.orders.flatMap((order) =>
-            order.items.map((item, index) => ({
-              id: `${order.order_id}-${item.product_id}-${index}`,
-              product_id: item.product_id,
-              productName: item.product_name,
-              quantity: item.quantity,
-              totalPrice: parseFloat(item.price) * parseFloat(item.quantity),
-              date: order.delivered_at
-                ? toLocalDate(order.delivered_at)
-                : toLocalDate(order.ordered_at),
-              branch: order.municipality || order.barangay || "Unknown",
-              addedBy: item.seller_name || "N/A",
-              buyer: order.full_name || "N/A",
+          setExpenses(
+            expensesRes.expenses.map((e) => ({
+              id: e.expense_id,
+              name: e.expenses_details,
+              amount: parseFloat(e.expenses_cost),
+              date: e.created_at ? toLocalDate(e.created_at) : "N/A",
+              branch: e.municipality || "Unknown",
+              addedBy: e.user_name || "N/A",
             }))
           );
-          setTransactions(formattedTrans);
+
         }
+
+        // Transactions
+        const { data: transactionsRes } = await axios.get(`${BASE_URL}/orders/my-sold`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (transactionsRes.success) {
+          setTransactions(
+            transactionsRes.orders.flatMap((order) =>
+              order.items.map((item, index) => ({
+                id: `${order.order_id}-${item.product_id}-${index}`,
+                product_id: item.product_id,
+                productName: item.product_name,
+                quantity: item.quantity,
+                totalPrice: parseFloat(item.price) * parseFloat(item.quantity),
+                date: order.delivered_at
+                  ? toLocalDate(order.delivered_at)
+                  : toLocalDate(order.ordered_at),
+                branch: order.municipality || "Unknown",
+                addedBy: item.seller_name || "N/A",
+                buyer: order.full_name || "N/A",
+              }))
+            )
+          );
+        }
+
+        // Damaged Products
+        // Damaged Products
+        const { data: damagedRes } = await axios.get(
+          `${BASE_URL}/damaged-products/my-damaged-products`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const damagedList = damagedRes.success ? damagedRes.data : [];
+        setDamagedProducts(damagedList);
+
+        // Calculate total
+        const total = damagedList.reduce((sum, dp) => {
+          const quantity = dp.quantity || 0;
+          const unitPrice =
+            dp.product_type === "discounted"
+              ? Number(dp.discounted_price) || 0
+              : Number(dp.price) || 0;
+          return sum + unitPrice * quantity;
+        }, 0);
+        setDamagedTotal(total);
+
       } catch (err) {
-        console.error(err);
+        console.error("❌ Failed to fetch reports data:", err);
+        toast.error("Failed to fetch reports data");
       }
     };
 
@@ -91,7 +123,6 @@ export default function ReportsPage() {
     if (!newExpense.name.trim() || !newExpense.amount || newExpense.amount <= 0) {
       return toast.error("Please fill all fields correctly.");
     }
-
     const token = localStorage.getItem("token");
     if (!token) return toast.error("You are not authenticated.");
 
@@ -106,19 +137,18 @@ export default function ReportsPage() {
         const refreshed = await axios.get(`${BASE_URL}/expenses`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-
         if (refreshed.data.success) {
-          const formatted = refreshed.data.expenses.map((e) => ({
-            id: e.expense_id,
-            name: e.expenses_details,
-            amount: parseFloat(e.expenses_cost),
-            date: toLocalDate(e.created_at),
-            branch: e.municipality || "Unknown",
-            addedBy: e.user_name || "N/A",
-          }));
-          setExpenses(formatted);
+          setExpenses(
+            refreshed.data.expenses.map((e) => ({
+              id: e.expense_id,
+              name: e.expenses_details,
+              amount: parseFloat(e.expenses_cost),
+              date: toLocalDate(e.created_at),
+              branch: e.municipality || "Unknown",
+              addedBy: e.user_name || "N/A",
+            }))
+          );
         }
-
         setShowExpenseModal(false);
         setNewExpense({ name: "", amount: "" });
         toast.success("Expense added successfully!");
@@ -129,15 +159,18 @@ export default function ReportsPage() {
     }
   };
 
-  // Filter by date and branch
-  const filterByDateAndBranch = (items) => {
-    return items.filter((item) => {
+  // Filters
+  const filterByDateAndBranch = (items) =>
+    items.filter((item) => {
       const date = new Date(item.date);
       const iYear = date.getFullYear();
       const iMonth = String(date.getMonth() + 1).padStart(2, "0");
       const iDay = date.getDate();
 
-      const branchMatch = userRole === "admin" ? branch === "All" || item.branch === branch : true;
+      const branchMatch =
+        userRole === "admin"
+          ? branch === "All" || item.branch === branch
+          : true; // sellers only see their own
       if (!branchMatch) return false;
 
       const today = new Date();
@@ -159,7 +192,6 @@ export default function ReportsPage() {
 
       return iMonth === month && iYear.toString() === year;
     });
-  };
 
   const filteredTransactions = useMemo(
     () => filterByDateAndBranch(transactions),
@@ -171,63 +203,119 @@ export default function ReportsPage() {
     [expenses, month, year, timeFilter, branch]
   );
 
-  // Calculate total expenses independently
-  const totalExpensesWithDamage = useMemo(() => {
-    return filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
-  }, [filteredExpenses]);
+  // Filtered damaged products (update whenever damagedProducts change)
+  const filteredDamagedProducts = useMemo(() => {
+    return filterByDateAndBranch(
+      damagedProducts.map((dp) => ({
+        ...dp,
+        date: dp.damaged_at ? new Date(dp.damaged_at) : new Date(), // <-- use damaged_at
+        branch: dp.municipality || dp.branch || "Unknown",
+        addedBy: dp.user_name || "N/A", // <-- use user_name from API
+      }))
+    );
+  }, [damagedProducts, month, year, timeFilter, branch]);
+
+
 
   const totalRevenue = filteredTransactions.reduce((sum, t) => sum + t.totalPrice, 0);
-  const totalNet = totalRevenue - totalExpensesWithDamage;
+  const totalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const totalNet = totalRevenue - (totalExpenses + damagedTotal);
 
-  // Export to Excel
+  // Export Excel
   const handleExportExcel = () => {
-    const data =
-      activeTab === "sales"
-        ? filteredTransactions.map((t) =>
-          userRole === "admin"
-            ? {
-              "Added By": t.addedBy,
-              Municipality: t.branch,
-              Product: t.productName,
-              Quantity: t.quantity,
-              "Total Price (₱)": t.totalPrice,
-              "Delivery Date": t.date,
-            }
-            : {
-              Buyer: t.buyer,
-              Product: t.productName,
-              Quantity: t.quantity,
-              "Total Price (₱)": t.totalPrice,
-              "Delivery Date": t.date,
-              Municipality: t.branch,
-            }
-        )
-        : filteredExpenses.map((e) => ({
-          "Added By": e.addedBy,
-          Municipality: e.branch,
-          "Expense Name": e.name,
-          "Amount (₱)": e.amount,
-          Date: e.date,
-        }));
-
-    if (!data.length) return toast.error("No data to export for this period.");
-
-    const ws = XLSX.utils.json_to_sheet(data);
-    const colWidths = Object.keys(data[0]).map((key) => ({
-      wch: Math.max(key.length + 2, ...data.map((r) => String(r[key]).length + 2)),
-    }));
-    ws["!cols"] = colWidths;
-
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, activeTab === "sales" ? "Sales" : "Expenses");
+    const isAdmin = userRole === "admin";
 
-    const fileName = `${activeTab === "sales" ? "Sales" : "Expenses"}_${month}-${year}.xlsx`;
+    // Sales Sheet
+    if (filteredTransactions.length > 0) {
+      const salesData = filteredTransactions.map((t) =>
+        isAdmin
+          ? {
+            "Added By": t.addedBy,
+            Municipality: t.branch,
+            Product: t.productName,
+            Quantity: t.quantity,
+            "Total Price (₱)": t.totalPrice,
+            "Delivery Date": t.date,
+            Buyer: t.buyer,
+          }
+          : {
+            Product: t.productName,
+            Quantity: t.quantity,
+            "Total Price (₱)": t.totalPrice,
+            "Delivery Date": t.date,
+            Buyer: t.buyer,
+          }
+      );
+      const wsSales = XLSX.utils.json_to_sheet(salesData);
+      wsSales["!cols"] = Object.keys(salesData[0]).map((key) => ({
+        wch: Math.max(key.length + 2, ...salesData.map((r) => String(r[key]).length + 2)),
+      }));
+      XLSX.utils.book_append_sheet(wb, wsSales, "Sales");
+    }
+
+    // Expenses Sheet
+    if (filteredExpenses.length > 0) {
+      const expensesData = filteredExpenses.map((e) =>
+        isAdmin
+          ? {
+            "Added By": e.addedBy,
+            Municipality: e.branch,
+            "Expense Name": e.name,
+            "Amount (₱)": e.amount,
+            Date: e.date,
+          }
+          : {
+            "Expense Name": e.name,
+            "Amount (₱)": e.amount,
+            Date: e.date,
+          }
+      );
+      const wsExpenses = XLSX.utils.json_to_sheet(expensesData);
+      wsExpenses["!cols"] = Object.keys(expensesData[0]).map((key) => ({
+        wch: Math.max(key.length + 2, ...expensesData.map((r) => String(r[key]).length + 2)),
+      }));
+      XLSX.utils.book_append_sheet(wb, wsExpenses, "Expenses");
+    }
+
+    // Damaged Products Sheet
+    // Damaged Products Sheet
+    // Damaged Products Sheet
+    if (damagedProducts.length > 0) {
+      const damagedData = damagedProducts.map((d) => {
+        const unitPrice =
+          d.product_type === "discounted" ? Number(d.discounted_price) || 0 : Number(d.price) || 0;
+
+        return {
+          "Added By": d.user_name || "N/A",
+          Municipality: d.municipality || "Unknown",
+          Product: d.product_name,
+          Quantity: d.quantity || 0,
+          "Total Price (₱)": unitPrice * (d.quantity || 0),
+          Date: d.damaged_at ? toLocalDate(d.damaged_at) : "Invalid date",
+        };
+      });
+
+      const wsDamaged = XLSX.utils.json_to_sheet(damagedData);
+      wsDamaged["!cols"] = Object.keys(damagedData[0]).map((key) => ({
+        wch: Math.max(
+          key.length + 2,
+          ...damagedData.map((r) => String(r[key] ?? "").length + 2)
+        ),
+      }));
+      XLSX.utils.book_append_sheet(wb, wsDamaged, "Damaged Products");
+    }
+
+
+
+    if (wb.SheetNames.length === 0) return toast.error("No data to export for this period.");
+
+    const fileName = `Report_${month}-${year}.xlsx`;
     const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-
     saveAs(new Blob([wbout], { type: "application/octet-stream" }), fileName);
   };
 
-  // Chart data
+  // Charts
   const productQuantityMap = filteredTransactions.reduce((acc, t) => {
     acc[t.productName] = (acc[t.productName] || 0) + t.quantity;
     return acc;
@@ -276,7 +364,7 @@ export default function ReportsPage() {
 
         <div className="text-lg font-semibold text-gray-800 flex gap-4">
           Revenue: <span className="text-green-600">₱{totalRevenue.toFixed(2)}</span> |{" "}
-          Expenses: <span className="text-red-600">₱{totalExpensesWithDamage.toFixed(2)}</span> |{" "}
+          Expenses: <span className="text-red-600">₱{(totalExpenses + damagedTotal).toFixed(2)}</span> |{" "}
           Net: <span className="text-blue-600">₱{totalNet.toFixed(2)}</span>
         </div>
       </div>
@@ -376,8 +464,11 @@ export default function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white">
-                  {filteredTransactions.map((t) => (
-                    <tr key={t.id} className="hover:bg-gray-50 border-t border-gray-300">
+                  {filteredTransactions.map((t, idx) => (
+                    <tr
+                      key={t.id}
+                      className={`border-t border-gray-300 ${idx % 2 === 0 ? "bg-gray-50" : "bg-white"} hover:bg-gray-100`}
+                    >
                       {userRole === "admin" && <td className="px-4 py-3">{t.branch}</td>}
                       <td className="px-4 py-3 font-semibold">{t.productName}</td>
                       <td className="px-4 py-3">{t.quantity}</td>
@@ -411,55 +502,14 @@ export default function ReportsPage() {
         <ExpensesReportSection
           filteredExpenses={filteredExpenses}
           userRole={userRole}
-          branches={branches}
+          selectedBranch={branch}
           showExpenseModal={showExpenseModal}
           setShowExpenseModal={setShowExpenseModal}
           newExpense={newExpense}
           setNewExpense={setNewExpense}
           handleAddExpense={handleAddExpense}
-          onTotalChange={() => { }} // No longer needed here
+          onDamagedTotalChange={handleDamagedUpdate}
         />
-      )}
-
-      {showExpenseModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4 text-gray-800">Add New Expense</h2>
-
-            <div className="flex flex-col gap-4">
-              <input
-                type="text"
-                placeholder="Expense Name"
-                value={newExpense.name}
-                onChange={(e) => setNewExpense({ ...newExpense, name: e.target.value })}
-                className="border border-gray-300 rounded p-2"
-              />
-              <input
-                type="number"
-                placeholder="Amount"
-                value={newExpense.amount}
-                onChange={(e) => setNewExpense({ ...newExpense, amount: e.target.value })}
-                className="border border-gray-300 rounded p-2"
-              />
-            </div>
-
-            <div className="flex justify-end mt-6 gap-3">
-              <button
-                onClick={() => setShowExpenseModal(false)}
-                className="px-4 py-2 bg-gray-400 hover:bg-gray-500 text-white rounded"
-              >
-                Cancel
-              </button>
-
-              <button
-                onClick={handleAddExpense}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded"
-              >
-                Save Expense
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

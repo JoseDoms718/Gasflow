@@ -1,11 +1,12 @@
-
 import React, { useEffect, useState, useMemo } from "react";
 import { PlusCircle, Box } from "lucide-react";
 import axios from "axios";
 import DamageModal from "../Modals/DamageModal";
 import DamagedProductsListModal from "../Modals/DamagedProductsListModal";
 import toast from "react-hot-toast";
+
 const BASE_URL = import.meta.env.VITE_BASE_URL;
+
 export default function ExpensesReportSection({
     filteredExpenses,
     userRole,
@@ -15,14 +16,16 @@ export default function ExpensesReportSection({
     newExpense,
     setNewExpense,
     handleAddExpense,
-    onTotalChange,
+    onDamagedTotalChange,
 }) {
     const [products, setProducts] = useState([]);
     const [damagedProducts, setDamagedProducts] = useState([]);
     const [showDamageModal, setShowDamageModal] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState(null);
-
     const token = localStorage.getItem("token");
+
+    const toLocalDate = (dateString) =>
+        dateString ? new Date(dateString).toLocaleDateString("en-CA") : "Invalid date";
 
     // Fetch products
     useEffect(() => {
@@ -35,7 +38,9 @@ export default function ExpensesReportSection({
                         ? `${BASE_URL}/products/admin/all-products?branch=${selectedBranch}`
                         : `${BASE_URL}/products/my-products`;
 
-                const { data } = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
+                const { data } = await axios.get(url, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
 
                 setProducts(
                     data.map((p) => ({
@@ -57,11 +62,21 @@ export default function ExpensesReportSection({
     // Fetch damaged products
     const fetchDamagedProducts = async () => {
         try {
-            const { data } = await axios.get(
-                `${BASE_URL}/damaged-products/my-damaged-products`,
-                { headers: { Authorization: `Bearer ${token}` } }
-            );
-            setDamagedProducts(data.data || []);
+            const { data } = await axios.get(`${BASE_URL}/damaged-products/my-damaged-products`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const list = data.data || [];
+
+            const formattedDamaged = list.map((dp, idx) => ({
+                ...dp,
+                id: dp.id || idx,
+                addedBy: dp.user_name || "N/A",
+                branch: dp.municipality || "Unknown",
+                date: dp.created_at ? toLocalDate(dp.created_at) : "Invalid date",
+            }));
+
+            setDamagedProducts(formattedDamaged);
+            updateDamagedParent(formattedDamaged);
         } catch (err) {
             console.error("❌ Failed to fetch damaged products:", err);
             toast.error("Failed to fetch damaged products");
@@ -100,50 +115,35 @@ export default function ExpensesReportSection({
         }
     };
 
-    const toLocalDate = (dateString) => new Date(dateString).toLocaleDateString("en-CA");
-
-    // Compute damaged expenses
-    const damagedExpenses = useMemo(
-        () =>
-            damagedProducts.map((dp) => {
+    // Helper to update parent
+    const updateDamagedParent = (list) => {
+        if (onDamagedTotalChange) {
+            const total = list.reduce((sum, dp) => {
                 const unitPrice =
-                    dp.product_type === "discounted"
-                        ? Number(dp.discounted_price) || 0
-                        : Number(dp.price) || 0;
-                const quantity = dp.quantity || 0;
-                const serverDate = dp.created_at || dp.date || new Date().toISOString();
-
-                return {
-                    id: dp.damage_id,
-                    name: `${dp.product_name} (Damaged)`,
-                    amount: unitPrice * quantity,
-                    date: toLocalDate(serverDate),
-                    branch: dp.branch || selectedBranch,
-                    addedBy: dp.added_by || "N/A",
-                };
-            }),
-        [damagedProducts, selectedBranch]
-    );
-
-    // Send total to parent
-    useEffect(() => {
-        if (onTotalChange) {
-            const total = [...filteredExpenses, ...damagedExpenses].reduce((sum, e) => sum + e.amount, 0);
-            onTotalChange(total);
+                    dp.product_type === "discounted" ? Number(dp.discounted_price) || 0 : Number(dp.price) || 0;
+                return sum + (dp.quantity || 0) * unitPrice;
+            }, 0);
+            onDamagedTotalChange(list, total);
         }
-    }, [filteredExpenses, damagedExpenses, onTotalChange]);
-
-    const handleAddNewExpense = () => {
-        if (!newExpense.name || !newExpense.amount) return;
-
-        handleAddExpense({
-            ...newExpense,
-            date: new Date().toLocaleDateString("en-CA"),
-        });
-
-        setNewExpense({ name: "", amount: 0 });
-        setShowExpenseModal(false);
     };
+
+    // Merge damaged products into expenses table
+    const combinedExpenses = useMemo(() => {
+        const mappedDamaged = damagedProducts.map((dp) => {
+            const unitPrice =
+                dp.product_type === "discounted" ? Number(dp.discounted_price) || 0 : Number(dp.price) || 0;
+            return {
+                id: `damage-${dp.damage_id}`,
+                name: `Damaged: ${dp.product_name}`,
+                amount: unitPrice * (dp.quantity || 0),
+                date: dp.date || "N/A",
+                branch: dp.branch,
+                addedBy: dp.addedBy,
+                isDamaged: true,
+            };
+        });
+        return [...filteredExpenses, ...mappedDamaged];
+    }, [filteredExpenses, damagedProducts]);
 
     return (
         <div className="flex gap-6 w-full h-[700px] overflow-hidden">
@@ -161,33 +161,27 @@ export default function ExpensesReportSection({
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredExpenses.length === 0 ? (
+                                {combinedExpenses.length === 0 ? (
                                     <tr>
                                         <td colSpan={userRole === "admin" ? 4 : 3} className="py-20 text-gray-500">
                                             No expense data available.
                                         </td>
                                     </tr>
                                 ) : (
-                                    <>
-                                        {filteredExpenses.map((e) => (
-                                            <tr key={e.id} className="border-b hover:bg-gray-50 text-center">
-                                                {userRole === "admin" && <td className="px-4 py-3">{e.branch}</td>}
-                                                <td className="px-4 py-3 font-semibold">{e.name}</td>
-                                                <td className="px-4 py-3 text-red-600 font-medium">
-                                                    ₱{e.amount.toFixed(2)}
-                                                </td>
-                                                <td className="px-4 py-3">{toLocalDate(e.date)}</td>
-                                            </tr>
-                                        ))}
-                                        <tr className="bg-gray-100 font-semibold text-red-700">
-                                            <td className="px-4 py-3 text-right" colSpan={userRole === "admin" ? 3 : 2}>
-                                                Total Expenses
+                                    combinedExpenses.map((e) => (
+                                        <tr
+                                            key={e.id}
+                                            className={`border-b hover:bg-gray-50 text-center ${e.isDamaged ? "bg-yellow-50" : ""
+                                                }`}
+                                        >
+                                            {userRole === "admin" && <td className="px-4 py-3">{e.branch || "N/A"}</td>}
+                                            <td className="px-4 py-3 font-semibold">{e.name || "N/A"}</td>
+                                            <td className="px-4 py-3 text-red-600 font-medium">
+                                                ₱{Number(e.amount || 0).toFixed(2)}
                                             </td>
-                                            <td className="px-4 py-3">
-                                                ₱{filteredExpenses.reduce((sum, e) => sum + e.amount, 0).toFixed(2)}
-                                            </td>
+                                            <td className="px-4 py-3">{e.date || "Invalid date"}</td>
                                         </tr>
-                                    </>
+                                    ))
                                 )}
                             </tbody>
                         </table>
@@ -217,7 +211,7 @@ export default function ExpensesReportSection({
                                         </tr>
                                     ) : (
                                         products.map((p) => (
-                                            <tr key={p.product_id} className="border-b hover:bg-gray-50">
+                                            <tr key={p.product_id || p.id} className="border-b hover:bg-gray-50">
                                                 <td className="px-4 py-3 flex justify-center items-center gap-3">
                                                     {p.image_url ? (
                                                         <img
@@ -228,9 +222,9 @@ export default function ExpensesReportSection({
                                                     ) : (
                                                         <Box className="w-10 h-10 text-gray-400" />
                                                     )}
-                                                    <span className="font-medium">{p.name}</span>
+                                                    <span className="font-medium">{p.name || "N/A"}</span>
                                                 </td>
-                                                <td className="px-4 py-3 font-medium">{p.stock || 0}</td>
+                                                <td className="px-4 py-3 font-medium">{p.stock ?? 0}</td>
                                                 <td className="px-4 py-3">
                                                     <button
                                                         className="px-4 py-2 bg-blue-600 text-white rounded flex items-center gap-2 mx-auto"
@@ -248,12 +242,8 @@ export default function ExpensesReportSection({
                     </div>
                 )}
 
-                <DamagedProductsListModal
-                    userRole={userRole}
-                    selectedBranch={selectedBranch}
-                    damagedProducts={damagedProducts}
-                    additionalExpenses={filteredExpenses}
-                />
+                {/* Damaged products modal/list */}
+                <DamagedProductsListModal damagedProducts={damagedProducts} />
             </div>
 
             <DamageModal

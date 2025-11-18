@@ -27,32 +27,38 @@ const notFoundResponse = (res, message = "Expense not found.") =>
 /* -----------------------------------------
    🧩 Role-based query builder
 ----------------------------------------- */
-const getExpenseQueryByRole = (role, userId, expenseId = null) => {
-  role = role?.toLowerCase();
-  const baseSelect = `
-    SELECT e.expense_id, e.expenses_details, e.expenses_cost, e.created_at,
-           u.name AS user_name, b.barangay_name AS barangay, b.municipality
+function getExpenseQueryByRole(role, userId) {
+  const BASE_SELECT = `
+    SELECT 
+      e.expense_id,
+      e.expenses_details,
+      e.expenses_cost,
+      e.created_at,
+      e.municipality,
+      u.name AS user_name
     FROM expenses e
-    JOIN users u ON e.user_id = u.user_id
-    LEFT JOIN barangays b ON u.barangay_id = b.barangay_id
+    LEFT JOIN users u ON e.added_by = u.user_id
   `;
 
-  if (role === "retailer" || role === "branch_manager") {
+  // ADMIN — sees all expenses
+  if (role === "admin") {
     return {
-      sql: `${baseSelect} WHERE e.user_id = ? ${expenseId ? "AND e.expense_id = ?" : ""} ORDER BY e.created_at DESC`,
-      params: expenseId ? [userId, expenseId] : [userId],
+      sql: `${BASE_SELECT} ORDER BY e.created_at DESC`,
+      params: []
     };
   }
 
-  if (role === "admin") {
+  // RETAILER / BUSINESS OWNER — sees only their own expenses
+  if (role === "retailer" || role === "business_owner") {
     return {
-      sql: `${baseSelect} WHERE LOWER(u.role) = 'branch_manager' ${expenseId ? "AND e.expense_id = ?" : ""} ORDER BY e.created_at DESC`,
-      params: expenseId ? [expenseId] : [],
+      sql: `${BASE_SELECT} WHERE e.added_by = ? ORDER BY e.created_at DESC`,
+      params: [userId]
     };
   }
 
   return null;
-};
+}
+
 
 // Reusable DB helper
 const queryDB = (sql, params = []) => db.query(sql, params);
@@ -86,16 +92,36 @@ router.post("/", authenticateToken, async (req, res) => {
 ----------------------------------------- */
 router.get("/", authenticateToken, async (req, res) => {
   try {
-    const queryData = getExpenseQueryByRole(req.user.role, req.user.id);
-    if (!queryData)
-      return res.status(403).json({ success: false, error: "Unauthorized role. Access denied." });
+    const sql = `
+      SELECT 
+        e.expense_id,
+        e.expenses_details,
+        e.expenses_cost,
+        e.created_at,
+        u.name AS user_name,
+        b.municipality
+      FROM expenses e
+      LEFT JOIN users u ON e.user_id = u.user_id
+      LEFT JOIN barangays b ON u.barangay_id = b.barangay_id
+      ORDER BY e.created_at DESC
+    `;
 
-    const [results] = await queryDB(queryData.sql, queryData.params);
-    res.status(200).json({ success: true, expenses: results });
+    const [rows] = await db.query(sql);
+
+    res.json({
+      success: true,
+      expenses: rows,
+    });
   } catch (err) {
-    handleDbError(res, err, "Error fetching expenses");
+    console.error("❌ SQL ERROR:", err);
+    res.status(500).json({
+      success: false,
+      error: "Database error",
+      details: err.message,
+    });
   }
 });
+
 
 /* -----------------------------------------
    ✅ GET SINGLE EXPENSE

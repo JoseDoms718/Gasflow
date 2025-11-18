@@ -61,28 +61,31 @@ router.get("/my-damaged-products", authenticateToken, async (req, res) => {
     const userId = req.user.id;
 
     const sql = `
-  SELECT 
-    dp.id AS damage_id,
-    dp.product_id,
-    p.product_name,
-    p.price,
-    p.discounted_price,
-    p.product_type,
-    p.seller_id,
-    p.image_url,
-    dp.previous_stock,
-    dp.quantity,
-    dp.new_stock,
-    dp.reported_by,
-    u.name AS reported_by_name,
-    dp.damage_description,
-    dp.damaged_at
-  FROM damaged_products dp
-  JOIN products p ON dp.product_id = p.product_id
-  LEFT JOIN users u ON dp.reported_by = u.user_id
-  ${req.user.role === "admin" ? "" : "WHERE p.seller_id = ?"}
-  ORDER BY dp.damaged_at DESC
-`;
+      SELECT 
+        dp.id AS damage_id,
+        dp.product_id,
+        p.product_name,
+        p.price,
+        p.discounted_price,
+        p.product_type,
+        p.seller_id,
+        p.image_url,
+        dp.previous_stock,
+        dp.quantity,
+        dp.new_stock,
+        dp.reported_by,
+        u.name AS user_name,
+        dp.damage_description,
+        dp.damaged_at,
+        b.municipality
+      FROM damaged_products dp
+      JOIN products p ON dp.product_id = p.product_id
+      LEFT JOIN users u ON dp.reported_by = u.user_id
+      LEFT JOIN users seller ON p.seller_id = seller.user_id
+      LEFT JOIN barangays b ON seller.barangay_id = b.barangay_id
+      ${req.user.role === "admin" ? "" : "WHERE p.seller_id = ?"}
+      ORDER BY dp.damaged_at DESC
+    `;
 
     const [rows] = req.user.role === "admin"
       ? await db.query(sql)
@@ -94,5 +97,6 @@ router.get("/my-damaged-products", authenticateToken, async (req, res) => {
     res.status(500).json({ success: false, error: "Server error" });
   }
 });
+
 
 module.exports = router;
