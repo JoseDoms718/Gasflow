@@ -113,14 +113,27 @@ router.get("/fetchServices", authenticateToken, async (req, res) => {
     const { type } = req.query;
     const userRole = req.user.role; // 'admin', 'business_owner', 'users', etc.
 
-    let query = "SELECT * FROM services WHERE type = 'all' OR type = ?";
-    const params = [userRole];
+    let query = "SELECT * FROM services";
+    const params = [];
 
-    if (type) {
+    // Only filter by type for non-admins
+    if (userRole !== "admin") {
+      query += " WHERE type = 'all' OR type = ?";
+      params.push(userRole);
+
+      if (type) {
+        if (!allowedTypes.includes(type)) {
+          return res.status(400).json({ message: `Invalid type. Allowed: ${allowedTypes.join(", ")}` });
+        }
+        query += " AND type = ?";
+        params.push(type);
+      }
+    } else if (type) {
+      // Admin can filter by type if provided
       if (!allowedTypes.includes(type)) {
         return res.status(400).json({ message: `Invalid type. Allowed: ${allowedTypes.join(", ")}` });
       }
-      query += " AND type = ?";
+      query += " WHERE type = ?";
       params.push(type);
     }
 
@@ -134,5 +147,6 @@ router.get("/fetchServices", authenticateToken, async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+
 
 module.exports = router;
