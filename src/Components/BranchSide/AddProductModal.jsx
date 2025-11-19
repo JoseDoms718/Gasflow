@@ -242,6 +242,8 @@ export default function AddProductModal({ setShowForm, setProducts }) {
                                         value={newProduct.discount_until}
                                         onChange={handleChange}
                                         className="w-full px-3 py-2 rounded bg-gray-800 text-white calendar-white"
+                                        onPaste={(e) => e.preventDefault()}  // Prevent pasting
+                                        onKeyDown={(e) => e.preventDefault()} // Prevent typing
                                     />
                                 </div>
                             </div>
