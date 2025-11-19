@@ -290,9 +290,9 @@ export default function Retailerform() {
                         </button>
 
                         {showRequirements && (
-                            <div className="mt-2 text-gray-300 text-sm space-y-2">
+                            <div className="mt-2 text-gray-300 text-sm space-y-4">
                                 {permitList.map((permit) => (
-                                    <div key={permit.key} className="flex flex-col">
+                                    <div key={permit.key} className="flex flex-col items-start gap-1">
                                         <label className="font-medium">{permit.label}</label>
                                         <input
                                             type="file"

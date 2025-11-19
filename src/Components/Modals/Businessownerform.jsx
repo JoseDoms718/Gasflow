@@ -95,6 +95,13 @@ export default function BusinessOwnerForm() {
       setLoading(false);
       return;
     }
+    // Ensure at least one picture is selected
+    if (!formData.picture || formData.picture.length === 0) {
+      toast.error("⚠️ Please upload at least one picture of your business.");
+      setLoading(false);
+      return;
+    }
+
 
     try {
       const data = new FormData();
@@ -256,7 +263,7 @@ export default function BusinessOwnerForm() {
 
           <div className="col-span-1 md:col-span-2 text-left mt-2">
             <label className="text-gray-400 text-sm mb-2 block">
-              Upload Business/Establishment Picture
+              Upload Business/Establishment Picture <span className="text-red-500">*</span>
             </label>
             <input
               type="file"
@@ -264,9 +271,11 @@ export default function BusinessOwnerForm() {
               accept=".jpg,.jpeg,.png,.heic,.heif"
               multiple
               onChange={handleChange}
+              required
               className="w-full text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#2d5ee0] file:text-white hover:file:bg-[#244bb5]"
             />
           </div>
+
 
           <button
             type="submit"

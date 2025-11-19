@@ -1,14 +1,16 @@
-
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { X } from "lucide-react";
 import { toast } from "react-hot-toast";
+
 const BASE_URL = import.meta.env.VITE_BASE_URL;
+
 export default function ManageRequestsSection() {
   const [requests, setRequests] = useState([]);
   const [selectedRequest, setSelectedRequest] = useState(null);
-  const [loadingId, setLoadingId] = useState(null); // Track loading per row
-  const BASE_URL = import.meta.env.VITE_BASE_URL;
+  const [loading, setLoading] = useState(false); // Global loading
+  const [selectedImage, setSelectedImage] = useState(null); // For lightbox
+
   const token = localStorage.getItem("token"); // Admin token
 
   // Fetch pending business_owner registrations
@@ -17,7 +19,7 @@ export default function ManageRequestsSection() {
       const res = await axios.get(
         `${BASE_URL}/business-owner/pending-registrations`,
         {
-          params: { role: "business_owner" }, // Only business_owner
+          params: { role: "business_owner" },
           headers: { Authorization: `Bearer ${token}` },
         }
       );
@@ -36,8 +38,7 @@ export default function ManageRequestsSection() {
   const handleCloseViewModal = () => setSelectedRequest(null);
 
   const handleApprove = async (otpId) => {
-    if (!window.confirm("Are you sure you want to approve this registration?")) return;
-    setLoadingId(otpId);
+    setLoading(true);
     try {
       const res = await axios.post(
         `${BASE_URL}/business-owner/approve/${otpId}`,
@@ -56,13 +57,12 @@ export default function ManageRequestsSection() {
       console.error("Approval error:", err);
       toast.error(err.response?.data?.error || "⚠️ Failed to approve registration");
     } finally {
-      setLoadingId(null);
+      setLoading(false);
     }
   };
 
   const handleReject = async (otpId) => {
-    if (!window.confirm("Are you sure you want to reject this registration?")) return;
-    setLoadingId(otpId);
+    setLoading(true);
     try {
       const res = await axios.post(
         `${BASE_URL}/business-owner/reject/${otpId}`,
@@ -81,7 +81,7 @@ export default function ManageRequestsSection() {
       console.error("Reject error:", err);
       toast.error(err.response?.data?.error || "⚠️ Failed to reject registration");
     } finally {
-      setLoadingId(null);
+      setLoading(false);
     }
   };
 
@@ -116,17 +116,17 @@ export default function ManageRequestsSection() {
                     </button>
                     <button
                       onClick={() => handleApprove(req.id)}
-                      disabled={loadingId === req.id}
+                      disabled={loading}
                       className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
                     >
-                      {loadingId === req.id ? "Approving..." : "Accept"}
+                      Accept
                     </button>
                     <button
                       onClick={() => handleReject(req.id)}
-                      disabled={loadingId === req.id}
+                      disabled={loading}
                       className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
                     >
-                      {loadingId === req.id ? "Rejecting..." : "Reject"}
+                      Reject
                     </button>
                   </td>
                 </tr>
@@ -182,23 +182,49 @@ export default function ManageRequestsSection() {
               </div>
             </div>
 
+            {/* Attachments */}
             <div>
               <strong>Attachments:</strong>
               {selectedRequest.images?.length > 0 ? (
-                <div className="flex flex-wrap gap-2 mt-2">
+                <div className="flex flex-wrap gap-4 mt-2">
                   {selectedRequest.images.map((img) => (
                     <img
                       key={img.id}
                       src={`${BASE_URL}/${img.image_url}`}
                       alt={img.type}
-                      className="w-24 h-24 object-cover rounded border"
+                      className="w-48 h-48 object-contain rounded-lg border bg-gray-100 cursor-pointer hover:scale-105 transition-transform"
+                      onClick={() => setSelectedImage(`${BASE_URL}/${img.image_url}`)}
                     />
                   ))}
                 </div>
               ) : (
                 <p className="text-gray-500 italic">None</p>
               )}
+
+              {/* Full-view Lightbox */}
+              {selectedImage && (
+                <div
+                  className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 cursor-pointer"
+                  onClick={() => setSelectedImage(null)}
+                >
+                  <img
+                    src={selectedImage}
+                    alt="Full view"
+                    className="max-w-[90%] max-h-[90%] rounded-lg shadow-xl"
+                  />
+                </div>
+              )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Global Loading Modal */}
+      {loading && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg flex items-center gap-4">
+            <div className="loader border-4 border-t-4 border-gray-200 border-t-blue-500 rounded-full w-8 h-8 animate-spin"></div>
+            <span className="font-semibold text-gray-700">Processing...</span>
           </div>
         </div>
       )}

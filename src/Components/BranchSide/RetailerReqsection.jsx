@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
@@ -6,7 +5,9 @@ import { toast } from "react-hot-toast";
 import ScheduleModal from "../Modals/ScheduleModal";
 import ManageExamResultsModal from "../Modals/ManageExamResultsModal";
 import ViewRequirementsModal from "../Modals/ViewRequirementsModal";
+
 const BASE_URL = import.meta.env.VITE_BASE_URL;
+
 export default function RetailerReqsection() {
   const [status, setStatus] = useState("requirements");
   const [requests, setRequests] = useState([]);
@@ -29,6 +30,8 @@ export default function RetailerReqsection() {
   const [selectedRequirement, setSelectedRequirement] = useState(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
 
+  const [globalLoading, setGlobalLoading] = useState(false); // ✅ Global loading modal
+
   // 🔥 Centralized fetch function
   const fetchAllData = async () => {
     const token = localStorage.getItem("token");
@@ -46,10 +49,9 @@ export default function RetailerReqsection() {
     await Promise.all(
       endpoints.map(async ({ url, setter }) => {
         try {
-          const res = await axios.get(
-            `${BASE_URL}/retailerSignup/${url}`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
+          const res = await axios.get(`${BASE_URL}/retailerSignup/${url}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
           setter(res.data.success ? res.data.data : []);
         } catch (err) {
           console.error(`❌ Failed to fetch ${url}:`, err);
@@ -61,7 +63,6 @@ export default function RetailerReqsection() {
     setLoading(false);
   };
 
-  // Fetch on mount
   useEffect(() => {
     fetchAllData();
   }, []);
@@ -71,6 +72,7 @@ export default function RetailerReqsection() {
   // -----------------------------------------
   const handleConfirm = async (retailer) => {
     try {
+      setGlobalLoading(true); // show modal
       const token = localStorage.getItem("token");
       const id = retailer.id || retailer.retailer_id;
 
@@ -82,7 +84,7 @@ export default function RetailerReqsection() {
 
       if (res.data.success) {
         toast.success("Retailer process initialized successfully.");
-        setIsViewModalOpen(false); // Close modal
+        setIsViewModalOpen(false);
         setSelectedRequirement(null);
         await fetchAllData();
       } else {
@@ -91,6 +93,44 @@ export default function RetailerReqsection() {
     } catch (err) {
       console.error("❌ Failed to initialize retailer process:", err);
       toast.error("Failed to initialize retailer process.");
+    } finally {
+      setGlobalLoading(false); // hide modal
+    }
+  };
+
+  // -----------------------------------------
+  // REQUIREMENTS -> REJECT
+  // -----------------------------------------
+  // -----------------------------------------
+  // REQUIREMENTS -> REJECT
+  // -----------------------------------------
+  const handleReject = async (retailer) => {
+    if (!retailer) return;
+
+    try {
+      setGlobalLoading(true); // show modal
+      const token = localStorage.getItem("token");
+      const id = retailer.id || retailer.retailer_id;
+
+      const res = await axios.post(
+        `${BASE_URL}/retailerSignup/reject/${id}`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (res.data.success) {
+        toast.success(res.data.message || "Retailer rejected successfully.");
+        setIsViewModalOpen(false);
+        setSelectedRequirement(null);
+        await fetchAllData();
+      } else {
+        toast.error(res.data.error || "Failed to reject retailer.");
+      }
+    } catch (err) {
+      console.error("❌ Failed to reject retailer:", err);
+      toast.error("Failed to reject retailer.");
+    } finally {
+      setGlobalLoading(false); // hide modal
     }
   };
 
@@ -104,14 +144,14 @@ export default function RetailerReqsection() {
 
   const handleExamSave = async (data) => {
     try {
+      setGlobalLoading(true);
       const token = localStorage.getItem("token");
 
-      // Ensure exam_date is YYYY-MM-DD string
-      const examDate = data.examDate instanceof Date
-        ? data.examDate.toISOString().split("T")[0]
-        : data.examDate;
+      const examDate =
+        data.examDate instanceof Date
+          ? data.examDate.toISOString().split("T")[0]
+          : data.examDate;
 
-      // Ensure exam_time is HH:MM string
       let examTime = data.examTime;
       if (examTime instanceof Date) {
         const hours = examTime.getHours().toString().padStart(2, "0");
@@ -136,9 +176,10 @@ export default function RetailerReqsection() {
     } catch (err) {
       console.error("❌ Failed to schedule exam:", err);
       toast.error("Failed to schedule exam.");
+    } finally {
+      setGlobalLoading(false);
     }
   };
-
 
   // -----------------------------------------
   // EXAM RESULT
@@ -150,6 +191,7 @@ export default function RetailerReqsection() {
 
   const handleSaveExamResult = async (formData) => {
     try {
+      setGlobalLoading(true);
       const token = localStorage.getItem("token");
 
       if (!formData.get("exam_result_image"))
@@ -167,12 +209,14 @@ export default function RetailerReqsection() {
       );
 
       toast.success("Exam result updated successfully.");
-      setIsExamResultModalOpen(false); // Close modal
+      setIsExamResultModalOpen(false);
       setSelectedExamProcess(null);
       await fetchAllData();
     } catch (err) {
       console.error("❌ Failed to upload exam result:", err);
       toast.error("Failed to upload exam result.");
+    } finally {
+      setGlobalLoading(false);
     }
   };
 
@@ -186,7 +230,9 @@ export default function RetailerReqsection() {
 
   const handleTrainingSave = async (data) => {
     try {
+      setGlobalLoading(true);
       const token = localStorage.getItem("token");
+
       await axios.put(
         `${BASE_URL}/retailerSignup/schedule-training/${trainingProcess.process_id}`,
         {
@@ -198,12 +244,14 @@ export default function RetailerReqsection() {
       );
 
       toast.success("Training scheduled successfully.");
-      setIsTrainingModalOpen(false); // Close modal
+      setIsTrainingModalOpen(false);
       setTrainingProcess(null);
       await fetchAllData();
     } catch (err) {
       console.error("❌ Failed to schedule training:", err);
       toast.error("Failed to schedule training.");
+    } finally {
+      setGlobalLoading(false);
     }
   };
 
@@ -212,7 +260,9 @@ export default function RetailerReqsection() {
   // -----------------------------------------
   const handleTrainingResult = async (item, result) => {
     try {
+      setGlobalLoading(true);
       const token = localStorage.getItem("token");
+
       await axios.put(
         `${BASE_URL}/retailerSignup/training-result/${item.process_id}`,
         { result },
@@ -224,6 +274,8 @@ export default function RetailerReqsection() {
     } catch (err) {
       console.error("❌ Failed to update training result:", err);
       toast.error("Failed to update training result.");
+    } finally {
+      setGlobalLoading(false);
     }
   };
 
@@ -232,6 +284,7 @@ export default function RetailerReqsection() {
   // -----------------------------------------
   const handleCreateAccount = async (item) => {
     try {
+      setGlobalLoading(true);
       const id = item.pending_account_id || item.id || item.retailer_id;
       if (!id) return toast.error("Could not determine pending account ID.");
 
@@ -247,6 +300,8 @@ export default function RetailerReqsection() {
     } catch (err) {
       console.error("❌ Failed to approve retailer:", err.response?.data || err);
       toast.error(err.response?.data?.error || "Failed to approve retailer.");
+    } finally {
+      setGlobalLoading(false);
     }
   };
 
@@ -414,12 +469,11 @@ export default function RetailerReqsection() {
                             {item.exam_date} {item.exam_time || ""}
                           </span>
                         )}
-                        {status === "training schedule" &&
-                          item.training_date && (
-                            <span className="text-gray-700 text-sm">
-                              {item.training_date}
-                            </span>
-                          )}
+                        {status === "training schedule" && item.training_date && (
+                          <span className="text-gray-700 text-sm">
+                            {item.training_date}
+                          </span>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -464,7 +518,18 @@ export default function RetailerReqsection() {
         onClose={() => setIsViewModalOpen(false)}
         retailer={selectedRequirement}
         onConfirm={handleConfirm}
+        onReject={handleReject} // ✅ Added Reject
       />
+
+      {/* --- Global Loading Modal --- */}
+      {globalLoading && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg flex items-center gap-4">
+            <div className="w-8 h-8 border-4 border-t-4 border-gray-200 border-t-blue-500 rounded-full animate-spin"></div>
+            <span className="font-semibold text-gray-700">Processing...</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -183,10 +183,6 @@ router.post("/approve/:pendingId", authenticateToken, async (req, res) => {
             </p>
 
             <p style="margin-bottom: 15px;">
-              <a href="${FRONTEND_URL}/login" 
-                 style="display: inline-block; padding: 10px 20px; background-color: #0047ab; color: #fff; text-decoration: none; border-radius: 5px;">
-                Log In Now
-              </a>
             </p>
 
             <p style="margin-bottom: 0;">Thank you for being part of Gasflow.</p>
@@ -281,9 +277,6 @@ router.post("/init-process/:pendingId", authenticateToken, async (req, res) => {
               </p>
               <p style="margin-bottom: 15px;">
                 You can log in to your account to track your application status:
-              </p>
-              <p style="margin-bottom: 15px;">
-                <a href="${process.env.FRONTEND_URL}/login" style="display: inline-block; padding: 10px 20px; background-color: #0047ab; color: #fff; text-decoration: none; border-radius: 5px;">Log In Now</a>
               </p>
               <p style="margin-bottom: 0;">Thank you for submitting your requirements to Gasflow.</p>
               <p style="margin-top: 5px; color: #777;">The Gasflow Team</p>
@@ -392,14 +385,6 @@ router.put("/training-result/:processId", authenticateToken, async (req, res) =>
             </p>
 
             <p style="margin-bottom: 15px;">
-              You may log in to your Gasflow account to view more details:
-            </p>
-
-            <p style="margin-bottom: 15px;">
-              <a href="${FRONTEND_URL}/login" 
-              style="display: inline-block; padding: 10px 20px; background-color: #0047ab; color: #fff; text-decoration: none; border-radius: 5px;">
-                Log In Now
-              </a>
             </p>
 
             <p style="margin-bottom: 0;">Thank you for your continued cooperation.</p>
@@ -441,24 +426,72 @@ router.post("/reject/:pendingId", authenticateToken, async (req, res) => {
 
     const { pendingId } = req.params;
 
-    const [pendingRecords] = await db.query("SELECT * FROM pending_accounts WHERE id = ?", [pendingId]);
-    if (pendingRecords.length === 0) return res.status(404).json({ error: "Pending registration not found." });
+    // Fetch pending account
+    const [pendingRecords] = await db.query(
+      "SELECT * FROM pending_accounts WHERE id = ?",
+      [pendingId]
+    );
+    if (pendingRecords.length === 0)
+      return res.status(404).json({ error: "Pending registration not found." });
 
-    const [images] = await db.query("SELECT * FROM otp_images WHERE otp_id = ?", [pendingId]);
+    const data = pendingRecords[0]; // Contains name, email, etc.
+
+    // Delete attached images
+    const [images] = await db.query(
+      "SELECT * FROM otp_images WHERE otp_id = ?",
+      [pendingId]
+    );
     for (let img of images) {
       const filePath = path.join(__dirname, "../", img.image_url);
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
 
+    // Delete image records and pending account
     await db.query("DELETE FROM otp_images WHERE otp_id = ?", [pendingId]);
     await db.query("DELETE FROM pending_accounts WHERE id = ?", [pendingId]);
 
-    res.json({ success: true, message: "❌ Retailer registration rejected successfully." });
+    // Send rejection email
+    await sendEmail(
+      data.email,
+      "❌ Gasflow Retailer Registration Rejected",
+      {
+        html: `
+          <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; max-width: 600px; margin: auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+            <!-- Header -->
+            <div style="background-color: #ab0000; padding: 20px; text-align: center;">
+              <img src="cid:logoWhite" width="120" alt="Gasflow Logo" style="display: block; margin: auto;" />
+              <h1 style="color: #fff; font-size: 22px; margin: 10px 0 0;">Gasflow</h1>
+            </div>
+
+            <!-- Body -->
+            <div style="padding: 30px;">
+              <h2 style="color: #ab0000; font-size: 20px; margin-bottom: 15px;">Dear ${data.name},</h2>
+              <p style="margin-bottom: 15px;">
+                We regret to inform you that your Gasflow retailer registration has been <strong>rejected</strong>.
+              </p>
+              <p style="margin-bottom: 15px;">
+                If you have any questions or need clarification regarding the reason for rejection, please contact our support team.
+              </p>
+              <p style="margin-bottom: 0;">Thank you for your interest in Gasflow.</p>
+              <p style="margin-top: 5px; color: #777;">The Gasflow Team</p>
+            </div>
+
+            <!-- Footer -->
+            <div style="background-color: #f0f0f0; text-align: center; padding: 15px; font-size: 12px; color: #555;">
+              &copy; ${new Date().getFullYear()} Gasflow. All rights reserved.
+            </div>
+          </div>
+        `,
+      }
+    );
+
+    res.json({ success: true, message: "❌ Retailer registration rejected successfully and email sent." });
   } catch (err) {
     console.error("❌ Reject retailer error:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 // -----------------------------
 // Fetch endpoints (cleaned)
@@ -617,7 +650,6 @@ router.put("/schedule-exam/:processId", authenticateToken, async (req, res) => {
               You can log in to your account to view your application status:
             </p>
             <p style="margin-bottom: 15px;">
-              <a href="${process.env.FRONTEND_URL}/login" style="display: inline-block; padding: 10px 20px; background-color: #0047ab; color: #fff; text-decoration: none; border-radius: 5px;">Log In Now</a>
             </p>
             <p style="margin-bottom: 0;">Thank you for being part of Gasflow.</p>
             <p style="margin-top: 5px; color: #777;">The Gasflow Team</p>
@@ -720,10 +752,6 @@ router.put("/schedule-training/:processId", authenticateToken, async (req, res) 
             </p>
 
             <p style="margin-bottom: 15px;">
-              <a href="${process.env.FRONTEND_URL}/login" 
-              style="display: inline-block; padding: 10px 20px; background-color: #0047ab; color: #fff; text-decoration: none; border-radius: 5px;">
-                Log In Now
-              </a>
             </p>
 
             <p style="margin-bottom: 0;">Thank you and good luck!</p>
@@ -844,17 +872,6 @@ router.put(
 
             <p style="margin-bottom: 15px;">
               A copy of the official exam result document has been included as an attachment in this email.
-            </p>
-
-            <p style="margin-bottom: 15px;">
-              You may log in to your Gasflow account to continue with the next steps in your application:
-            </p>
-
-            <p style="margin-bottom: 15px;">
-              <a href="${process.env.FRONTEND_URL}/login" 
-              style="display: inline-block; padding: 10px 20px; background-color: #0047ab; color: #fff; text-decoration: none; border-radius: 5px;">
-                Log In Now
-              </a>
             </p>
 
             <p style="margin-bottom: 0;">Thank you for your continued cooperation.</p>
