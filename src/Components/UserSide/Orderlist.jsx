@@ -16,7 +16,6 @@ import OrderInfoModal from "./OrderInfoModal";
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 const SOCKET_URL = BASE_URL;
 
-// Normalize image URLs
 const normalizeImageUrl = (url) =>
   url ? (url.startsWith("http") ? url : `${BASE_URL}/${url.replace(/^\/+/, "")}`) : "/placeholder.png";
 
@@ -31,8 +30,8 @@ export default function Orderlist({ role: propRole }) {
   const [loading, setLoading] = useState(true);
   const [expandedOrder, setExpandedOrder] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [checkoutItem, setCheckoutItem] = useState(null); // For individual item checkout
 
-  // Get cart from localStorage
   const getUserCart = useCallback(() => {
     const token = localStorage.getItem("token");
     const cartKey = token ? `cart_${token}` : "cart_guest";
@@ -40,7 +39,6 @@ export default function Orderlist({ role: propRole }) {
     return cart.map((item) => ({ ...item, image_url: normalizeImageUrl(item.image_url) }));
   }, []);
 
-  // Fetch orders from backend + local cart
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
@@ -86,7 +84,6 @@ export default function Orderlist({ role: propRole }) {
     }
   }, [getUserCart, isRetailer]);
 
-  // Listen for localStorage cart changes
   useEffect(() => {
     fetchOrders();
     const handleStorageChange = (e) => e.key?.startsWith("cart_") && fetchOrders();
@@ -94,7 +91,6 @@ export default function Orderlist({ role: propRole }) {
     return () => window.removeEventListener("storage", handleStorageChange);
   }, [fetchOrders]);
 
-  // Socket events
   useEffect(() => {
     const socket = io(SOCKET_URL);
     socket.on("newOrder", (order) => {
@@ -108,10 +104,8 @@ export default function Orderlist({ role: propRole }) {
     return () => socket.disconnect();
   }, [fetchOrders]);
 
-  // Toggle order expand
   const toggleOrder = (id) => setExpandedOrder(expandedOrder === id ? null : id);
 
-  // Update local cart
   const updateLocalCart = (updatedCart) => {
     const token = localStorage.getItem("token");
     const cartKey = token ? `cart_${token}` : "cart_guest";
@@ -139,17 +133,30 @@ export default function Orderlist({ role: propRole }) {
     });
   };
 
-  // Handle order status changes
-  const handleOrderAction = async (order_id, newStatus) => {
+  const handleOrderAction = async (order_id, newStatus, singleItem = null) => {
     const token = localStorage.getItem("token");
     if (!token) return toast.error("Please log in first.");
 
-    // Local cart actions
     if (order_id === "local_cart") {
-      if (newStatus === "pending") return setShowModal(true);
+      const currentCart = getUserCart();
+      let itemsToCheckout = singleItem ? [singleItem] : currentCart;
+
+      if (!itemsToCheckout.length) return toast.error("Your cart is empty.");
+
+      if (newStatus === "pending") {
+        setCheckoutItem(singleItem || null);
+        setShowModal(true);
+        return;
+      }
+
       if (newStatus === "cancelled") {
-        updateLocalCart([]);
-        return toast.success("🗑️ Cart cleared successfully!");
+        if (singleItem) {
+          const newCart = currentCart.filter((c) => c.product_id !== singleItem.product_id);
+          updateLocalCart(newCart);
+        } else {
+          updateLocalCart([]);
+        }
+        return toast.success(singleItem ? "🗑️ Item removed!" : "🗑️ Cart cleared!");
       }
     }
 
@@ -172,10 +179,9 @@ export default function Orderlist({ role: propRole }) {
     }
   };
 
-  // Checkout confirmation
   const handleConfirmCheckout = async (info) => {
     const token = localStorage.getItem("token");
-    const cartItems = getUserCart();
+    const cartItems = checkoutItem ? [checkoutItem] : getUserCart();
     const cartKey = token ? `cart_${token}` : "cart_guest";
 
     if (!cartItems.length) return toast.error("Your cart is empty.");
@@ -183,14 +189,24 @@ export default function Orderlist({ role: propRole }) {
     try {
       const res = await axios.post(
         `${BASE_URL}/orders/buy`,
-        { items: cartItems, full_name: info.full_name, contact_number: info.contact_number, barangay_id: info.barangay_id },
+        {
+          items: cartItems,
+          full_name: info.full_name,
+          contact_number: info.contact_number,
+          barangay_id: info.barangay_id,
+        },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
       if (res.data.success) {
-        localStorage.removeItem(cartKey);
+        // Remove checked-out items from local cart
+        const currentCart = getUserCart();
+        const remainingCart = currentCart.filter((c) => !cartItems.some((ci) => ci.product_id === c.product_id));
+        updateLocalCart(remainingCart);
+
         toast.success("✅ Checkout successful!");
         setShowModal(false);
+        setCheckoutItem(null);
         fetchOrders();
       } else {
         toast.error(res.data.message || "Checkout failed.");
@@ -226,19 +242,26 @@ export default function Orderlist({ role: propRole }) {
           </>
         )}
 
-        {/* Tabs */}
         <div className={`flex flex-wrap items-center gap-3 ${isRetailer ? "justify-start mb-4 border-b border-gray-200 pb-2" : "justify-start mb-8"}`}>
           {[...(isRetailer ? [] : [{ key: "cart", icon: ShoppingCart, label: "Cart" }]), { key: "current", icon: Clock, label: "Current" }, { key: "finished", icon: CheckCircle, label: "Finished" }].map((tab) => {
             const Icon = tab.icon;
             return (
-              <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition text-sm sm:text-base ${activeTab === tab.key ? "bg-blue-600 text-white shadow" : isRetailer ? "bg-gray-100 text-gray-800 hover:bg-gray-200" : "bg-gray-800 text-gray-300 hover:bg-gray-700"}`}>
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition text-sm sm:text-base ${activeTab === tab.key
+                  ? "bg-blue-600 text-white shadow"
+                  : isRetailer
+                    ? "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                    : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+                  }`}
+              >
                 <Icon size={18} /> {tab.label}
               </button>
             );
           })}
         </div>
 
-        {/* Orders List */}
         <div className={`${isRetailer ? "bg-white border border-gray-200" : "bg-gray-800"} rounded-lg shadow-md p-4 sm:p-6 flex flex-col h-[60vh] sm:h-[70vh]`}>
           {filteredOrders.length ? (
             <div className={`space-y-4 overflow-y-auto pr-2 flex-1 ${isRetailer ? "text-gray-800" : "text-white"}`}>
@@ -248,8 +271,10 @@ export default function Orderlist({ role: propRole }) {
 
                 return (
                   <div key={order.order_id} className={`rounded-lg overflow-hidden ${isRetailer ? "bg-gray-50 border border-gray-200" : "bg-gray-700"}`}>
-                    {/* Header */}
-                    <button onClick={() => toggleOrder(order.order_id)} className={`w-full flex justify-between items-center p-3 sm:p-4 text-left transition ${isRetailer ? "hover:bg-gray-100" : "hover:bg-gray-600"}`}>
+                    <button
+                      onClick={() => toggleOrder(order.order_id)}
+                      className={`w-full flex justify-between items-center p-3 sm:p-4 text-left transition ${isRetailer ? "hover:bg-gray-100" : "hover:bg-gray-600"}`}
+                    >
                       <div>
                         <h3 className={`font-semibold ${isRetailer ? "text-gray-900" : "text-white"} text-sm sm:text-base`}>
                           {firstItem?.product_name || "Unnamed Product"}
@@ -257,12 +282,13 @@ export default function Orderlist({ role: propRole }) {
                         <p className={`text-xs sm:text-sm ${isRetailer ? "text-gray-500" : "text-gray-300"}`}>Status: {order.status}</p>
                       </div>
                       <div className="flex items-center gap-2 sm:gap-3">
-                        <p className={`font-bold text-sm sm:text-lg ${isRetailer ? "text-blue-700" : "text-blue-400"}`}>₱{order.total_price?.toLocaleString()}</p>
+                        <p className={`font-bold text-sm sm:text-lg ${isRetailer ? "text-blue-700" : "text-blue-400"}`}>
+                          ₱{order.total_price?.toLocaleString()}
+                        </p>
                         {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                       </div>
                     </button>
 
-                    {/* Expanded content */}
                     {isExpanded && (
                       <div className={`p-2 sm:p-4 border-t space-y-2 sm:space-y-3 ${isRetailer ? "border-gray-200 bg-gray-50" : "border-gray-600 bg-gray-800"}`}>
                         <div className="max-h-[250px] sm:max-h-[300px] overflow-y-auto space-y-2 sm:space-y-3 pr-1">
@@ -277,12 +303,14 @@ export default function Orderlist({ role: propRole }) {
                                 <div className="flex justify-between items-start flex-wrap">
                                   <div className="flex-1 min-w-0">
                                     <h4 className="font-semibold text-xs sm:text-sm md:text-base truncate">{item.product_name}</h4>
-                                    <p className="text-[10px] sm:text-xs italic text-gray-400 mt-1 truncate">{item.product_description || "No description"}</p>
+                                    <p className="text-[10px] sm:text-xs italic text-gray-400 mt-1 truncate">
+                                      {item.product_description || "No description"}
+                                    </p>
                                   </div>
 
                                   {order.order_id === "local_cart" && (
                                     <button
-                                      onClick={() => updateLocalCart(getUserCart().filter((c) => c.product_id !== item.product_id))}
+                                      onClick={() => handleOrderAction(order.order_id, "cancelled", item)}
                                       className="text-red-500 hover:text-red-700 transition p-1 rounded-full hover:bg-red-100"
                                       title="Remove item"
                                     >
@@ -300,33 +328,77 @@ export default function Orderlist({ role: propRole }) {
                                       value={item.quantity}
                                       onChange={(e) => {
                                         const newQty = Math.max(1, Number(e.target.value));
-                                        updateLocalCart(getUserCart().map((c) => c.product_id === item.product_id ? { ...c, quantity: newQty } : c));
+                                        updateLocalCart(
+                                          getUserCart().map((c) =>
+                                            c.product_id === item.product_id ? { ...c, quantity: newQty } : c
+                                          )
+                                        );
                                       }}
                                       className="w-14 sm:w-16 px-2 py-1 rounded border border-gray-400 text-center text-[10px] sm:text-sm bg-transparent"
                                     />
+                                    <button
+                                      onClick={() => handleOrderAction(order.order_id, "pending", item)}
+                                      className="bg-blue-600 hover:bg-blue-700 text-white px-2 sm:px-3 py-1 rounded text-[10px] sm:text-xs"
+                                    >
+                                      Checkout Item
+                                    </button>
                                   </div>
                                 )}
 
                                 <div className="mt-1 sm:mt-2">
-                                  <p className="font-medium text-xs sm:text-sm md:text-base">₱{item.price?.toLocaleString()} each</p>
-                                  <p className="text-[10px] sm:text-xs text-gray-500 truncate">{isRetailer ? `Buyer: ${item.buyer_name || "Unknown"}` : `Seller: ${item.seller_name || "Unknown"}`}</p>
+                                  <p className="font-medium text-xs sm:text-sm md:text-base">
+                                    ₱{item.price?.toLocaleString()} each
+                                  </p>
+                                  <p className="text-[10px] sm:text-xs text-gray-500 truncate">
+                                    {isRetailer
+                                      ? `Buyer: ${item.buyer_name || "Unknown"}`
+                                      : `Seller: ${item.seller_name || "Unknown"}`}
+                                  </p>
                                 </div>
                               </div>
                             </div>
                           ))}
                         </div>
 
-                        {/* Actions */}
+                        {/* Cart buttons */}
                         {order.order_id === "local_cart" && !isRetailer && (
                           <div className="flex flex-wrap justify-end gap-2 sm:gap-3 pt-2 sm:pt-3 border-t border-gray-600">
-                            <button onClick={() => handleOrderAction(order.order_id, "pending")} className="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-1 sm:py-2 rounded text-xs sm:text-sm">Checkout All</button>
-                            <button onClick={() => handleOrderAction(order.order_id, "cancelled")} className="bg-red-500 hover:bg-red-600 text-white px-3 sm:px-4 py-1 sm:py-2 rounded text-xs sm:text-sm">Cancel All</button>
+                            <button
+                              onClick={() => handleOrderAction(order.order_id, "pending")}
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-1 sm:py-2 rounded text-xs sm:text-sm"
+                            >
+                              Checkout All
+                            </button>
+                            <button
+                              onClick={() => handleOrderAction(order.order_id, "cancelled")}
+                              className="bg-red-500 hover:bg-red-600 text-white px-3 sm:px-4 py-1 sm:py-2 rounded text-xs sm:text-sm"
+                            >
+                              Cancel All
+                            </button>
                           </div>
                         )}
 
+                        {/* Cancel button for pending */}
                         {activeTab === "current" && order.status === "pending" && (
                           <div className="flex justify-end pt-2 sm:pt-3 border-t border-gray-600">
-                            <button onClick={() => handleOrderAction(order.order_id, "cancelled")} className="bg-red-500 hover:bg-red-600 text-white px-3 sm:px-4 py-1 sm:py-2 rounded text-xs sm:text-sm">Cancel Order</button>
+                            <button
+                              onClick={() => handleOrderAction(order.order_id, "cancelled")}
+                              className="bg-red-500 hover:bg-red-600 text-white px-3 sm:px-4 py-1 sm:py-2 rounded text-xs sm:text-sm"
+                            >
+                              Cancel Order
+                            </button>
+                          </div>
+                        )}
+
+                        {/* ✅ Confirm Delivery button */}
+                        {activeTab === "current" && order.status === "on_delivery" && (
+                          <div className="flex justify-end pt-2 sm:pt-3 border-t border-gray-600">
+                            <button
+                              onClick={() => handleOrderAction(order.order_id, "delivered")}
+                              className="bg-green-600 hover:bg-green-700 text-white px-3 sm:px-4 py-1 sm:py-2 rounded text-xs sm:text-sm"
+                            >
+                              Confirm Order
+                            </button>
                           </div>
                         )}
                       </div>
@@ -345,7 +417,16 @@ export default function Orderlist({ role: propRole }) {
         </div>
       </div>
 
-      {showModal && <OrderInfoModal onClose={() => setShowModal(false)} onConfirm={handleConfirmCheckout} user={user} />}
+      {showModal && (
+        <OrderInfoModal
+          onClose={() => {
+            setShowModal(false);
+            setCheckoutItem(null);
+          }}
+          onConfirm={handleConfirmCheckout}
+          user={user}
+        />
+      )}
     </section>
   );
 }

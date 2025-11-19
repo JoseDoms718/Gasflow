@@ -1,9 +1,11 @@
+// backend/server.js
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 const path = require("path");
 const http = require("http");
 const { Server } = require("socket.io");
+const db = require("./config/db"); // your database connection
 
 /* -----------------------------------------
    ✅ Import Routes
@@ -22,7 +24,7 @@ const branchInfoRoutes = require("./routes/branchinfo"); // branch routes
 const bannersRoutes = require("./routes/banners");
 const retailerRoutes = require("./routes/retailerSignup");
 const damagedProductsRoute = require("./routes/damagedProducts");
-const chatRoutes = require("./routes/chat");
+const chatRoutes = require("./routes/chat"); // renamed to match chat.js
 const servicesRoutes = require("./routes/services");
 
 /* -----------------------------------------
@@ -36,7 +38,7 @@ const server = http.createServer(app);
 ----------------------------------------- */
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL, // frontend URL
+    origin: process.env.FRONTEND_URL,
     methods: ["GET", "POST"],
   },
 });
@@ -44,13 +46,40 @@ const io = new Server(server, {
 // Make io accessible in routes
 app.set("io", io);
 
+// Socket connection
 io.on("connection", (socket) => {
   console.log("⚡ New client connected:", socket.id);
 
-  // Join room for private chats (optional)
+  // Join room for private chats
   socket.on("joinRoom", (conversationId) => {
     socket.join(`room_${conversationId}`);
     console.log(`Socket ${socket.id} joined room_${conversationId}`);
+  });
+
+  // Listen for new messages
+  socket.on("sendMessage", async (data) => {
+    const { conversationId, senderId, text } = data;
+    try {
+      // Save message to DB
+      const [result] = await db.query(
+        "INSERT INTO messages (conversationId, senderId, text) VALUES (?, ?, ?)",
+        [conversationId, senderId, text]
+      );
+
+      // Fetch saved message with sender info
+      const [messages] = await db.query(
+        `SELECT m.*, u.user_id, u.name AS senderName
+         FROM messages m
+         JOIN users u ON m.senderId = u.user_id
+         WHERE m.id = ?`,
+        [result.insertId]
+      );
+
+      // Broadcast to everyone in the room
+      io.to(`room_${conversationId}`).emit("receiveMessage", messages[0]);
+    } catch (err) {
+      console.error("Error sending message:", err);
+    }
   });
 
   socket.on("disconnect", () => {
@@ -98,9 +127,9 @@ app.use("/damaged-products", damagedProductsRoute);
 app.use("/services", servicesRoutes);
 
 /* -----------------------------------------
-   ✅ Chat Routes
+   ✅ Chat Routes (no /api prefix)
 ----------------------------------------- */
-app.use("/api/chat", chatRoutes);
+app.use("/chat", chatRoutes);
 
 /* -----------------------------------------
    ✅ Test Route

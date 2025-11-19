@@ -846,6 +846,8 @@ router.put(
       const { status } = req.body;
       const user_id = req.user.id;
 
+      // Allowed buyer-side statuses
+      const ALLOWED_BUYER_STATUSES = ["cancelled", "delivered"];
       if (!ALLOWED_BUYER_STATUSES.includes(status)) {
         return res.status(400).json({ success: false, error: "Invalid status update." });
       }
@@ -862,6 +864,11 @@ router.put(
       const currentStatus = rows[0].status;
       const inventoryDeducted = rows[0].inventory_deducted ?? 0;
 
+      // Only allow marking 'on_delivery' → 'delivered'
+      if (status === "delivered" && currentStatus !== "on_delivery") {
+        return res.status(400).json({ success: false, error: "You can only mark orders as delivered if they are on delivery." });
+      }
+
       if (currentStatus === status) {
         return res.json({ success: false, message: `Order is already marked as ${status}.` });
       }
@@ -870,67 +877,57 @@ router.put(
       try {
         await connection.beginTransaction();
 
-        // If cancelling and inventory was deducted, restore stock
+        // Cancel order: restore inventory if deducted
         if (status === "cancelled" && inventoryDeducted) {
           const [items] = await connection.query(
             "SELECT product_id, quantity FROM order_items WHERE order_id = ?",
             [id]
           );
-          if (!items.length) {
-            await connection.rollback();
-            connection.release();
-            return res.status(404).json({ success: false, error: "No items found for this order." });
-          }
-
           for (const item of items) {
             await adjustInventory(item.product_id, Number(item.quantity), connection);
           }
-
           await connection.query("UPDATE orders SET inventory_deducted = 0 WHERE order_id = ?", [id]);
         }
 
-        // Update order status
+        // Update status in DB
         await updateOrderStatus(id, status, connection);
 
         await connection.commit();
         connection.release();
 
-        // ───────── Emit Socket.IO event ─────────
+        // Emit Socket.IO event
         const io = req.app.get("io");
-
-        // Build JSON array manually using GROUP_CONCAT
         const [updatedOrderRows] = await db.query(
-  `SELECT o.*,
-    CONCAT('[', GROUP_CONCAT(
-      CONCAT(
-        '{"product_id":', oi.product_id,
-        ',"product_name":"', REPLACE(p.product_name, '"', '\\"'),
-        '","quantity":', oi.quantity,
-        ',"price":', oi.price,
-        ',"image_url":"', ?, '/', REPLACE(p.image_url, '"', '\\"'),
-        '"}'
-      )
-    ), ']') AS items
-  FROM orders o
-  JOIN order_items oi ON o.order_id = oi.order_id
-  JOIN products p ON oi.product_id = p.product_id
-  WHERE o.order_id = ?
-  GROUP BY o.order_id`,
-  [process.env.BASE_URL + "products/images", id]
-);
-
+          `SELECT o.*,
+            CONCAT('[', GROUP_CONCAT(
+              CONCAT(
+                '{"product_id":', oi.product_id,
+                ',"product_name":"', REPLACE(p.product_name, '"', '\\"'),
+                '","quantity":', oi.quantity,
+                ',"price":', oi.price,
+                ',"image_url":"', ?, '/', REPLACE(p.image_url, '"', '\\"'),
+                '"}'
+              )
+            ), ']') AS items
+          FROM orders o
+          JOIN order_items oi ON o.order_id = oi.order_id
+          JOIN products p ON oi.product_id = p.product_id
+          WHERE o.order_id = ?
+          GROUP BY o.order_id`,
+          [process.env.BASE_URL + "products/images", id]
+        );
 
         let updatedOrder = updatedOrderRows[0];
         updatedOrder.items = updatedOrder.items ? JSON.parse(updatedOrder.items) : [];
 
-        io.emit("order-updated", updatedOrder);
+        if (io) io.emit("order-updated", updatedOrder);
 
         return res.json({
           success: true,
           message:
             status === "cancelled"
               ? "✅ Order cancelled and stock restored (if previously deducted)."
-              : "✅ Order status updated successfully.",
+              : "✅ Order marked as delivered successfully.",
         });
       } catch (errTx) {
         await connection.rollback();
@@ -944,7 +941,6 @@ router.put(
     }
   }
 );
-
 
 /* -------------------------------------------------------------------
    SELLER: UPDATE ORDER STATUS

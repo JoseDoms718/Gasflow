@@ -224,6 +224,7 @@ router.get("/all", async (req, res) => {
     const [branches] = await db.query(`
       SELECT 
         br.branch_id,
+        br.user_id,          -- branch manager ID
         br.branch_name,
         br.branch_contact,
         br.branch_picture,
