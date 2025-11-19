@@ -47,7 +47,7 @@ export default function ViewRequirementsModal({ show, onClose, onConfirm, onReje
                             {retailer.images.map((img) => (
                                 <SwiperSlide key={img.id}>
                                     <img
-                                        src={`${process.env}/${img.image_url}`}
+                                        src={`${BASE_URL}/${img.image_url}`}
                                         alt={img.image_url.split("/").pop()}
                                         className="w-full h-64 object-contain cursor-pointer bg-gray-100 rounded-lg"
                                         onClick={() => setSelectedImage(`${BASE_URL}/${img.image_url}`)}

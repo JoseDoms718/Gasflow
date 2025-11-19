@@ -6,6 +6,7 @@ const bcrypt = require("bcrypt");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const sendEmail = require("../utils/sendEmail")
 const authenticateToken = require("../middleware/authtoken");
 
 // Build the upload path
@@ -77,6 +78,9 @@ router.post("/", upload.array("picture"), async (req, res) => {
 /* -----------------------------------------
    ✅ Approve Business Owner Route
 ----------------------------------------- */
+/* -----------------------------------------
+   ✅ Approve Business Owner Route with Email
+----------------------------------------- */
 router.post("/approve/:pendingId", authenticateToken, async (req, res) => {
   try {
     if (req.user.role.toLowerCase() !== "admin") {
@@ -89,6 +93,7 @@ router.post("/approve/:pendingId", authenticateToken, async (req, res) => {
 
     const data = records[0];
 
+    // Insert into users table
     await db.query(
       `INSERT INTO users 
         (name, email, contact_number, barangay_id, password, role, type) 
@@ -99,6 +104,48 @@ router.post("/approve/:pendingId", authenticateToken, async (req, res) => {
     // Delete the pending account but keep images
     await db.query("DELETE FROM pending_accounts WHERE id = ?", [pendingId]);
 
+    // Send approval email
+    try {
+      await sendEmail(
+        data.email,
+        "✅ Gasflow Business Owner Registration Approved",
+        {
+          html: `
+          <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; max-width: 600px; margin: auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+            <!-- Header -->
+            <div style="background-color: #0047ab; padding: 20px; text-align: center;">
+              <img src="cid:logoWhite" width="120" alt="Gasflow Logo" style="display: block; margin: auto;" />
+              <h1 style="color: #fff; font-size: 22px; margin: 10px 0 0;">Gasflow</h1>
+            </div>
+
+            <!-- Body -->
+            <div style="padding: 30px;">
+              <h2 style="color: #0047ab; font-size: 20px; margin-bottom: 15px;">Dear ${data.name},</h2>
+              <p style="margin-bottom: 15px;">
+                We are pleased to inform you that your Business Owner registration with Gasflow has been <strong>approved</strong>.
+              </p>
+              <p style="margin-bottom: 15px;">
+                You can now log in to your account and access all the features available to business owners.
+              </p>
+              <p style="margin-bottom: 15px;">
+                <a href="${process.env.FRONTEND_URL}/login" style="display: inline-block; padding: 10px 20px; background-color: #0047ab; color: #fff; text-decoration: none; border-radius: 5px;">Log In Now</a>
+              </p>
+              <p style="margin-bottom: 0;">Thank you for choosing Gasflow.</p>
+              <p style="margin-top: 5px; color: #777;">The Gasflow Team</p>
+            </div>
+
+            <!-- Footer -->
+            <div style="background-color: #f0f0f0; text-align: center; padding: 15px; font-size: 12px; color: #555;">
+              &copy; ${new Date().getFullYear()} Gasflow. All rights reserved.
+            </div>
+          </div>
+          `,
+        }
+      );
+    } catch (emailErr) {
+      console.error("❌ Failed to send approval email:", emailErr.message);
+    }
+
     res.json({ success: true, message: "✅ Business owner approved successfully." });
   } catch (err) {
     console.error("❌ Approve business owner error:", err);
@@ -107,7 +154,7 @@ router.post("/approve/:pendingId", authenticateToken, async (req, res) => {
 });
 
 /* -----------------------------------------
-   ✅ Reject Business Owner Route
+   ❌ Reject Business Owner Route with Email
 ----------------------------------------- */
 router.post("/reject/:pendingId", authenticateToken, async (req, res) => {
   try {
@@ -120,8 +167,9 @@ router.post("/reject/:pendingId", authenticateToken, async (req, res) => {
     const [records] = await db.query("SELECT * FROM pending_accounts WHERE id = ?", [pendingId]);
     if (records.length === 0) return res.status(404).json({ error: "Pending registration not found." });
 
-    const [images] = await db.query("SELECT * FROM otp_images WHERE otp_id = ?", [pendingId]);
+    const data = records[0];
 
+    const [images] = await db.query("SELECT * FROM otp_images WHERE otp_id = ?", [pendingId]);
     for (let img of images) {
       const filePath = path.join(__dirname, "../", img.image_url);
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
@@ -130,13 +178,61 @@ router.post("/reject/:pendingId", authenticateToken, async (req, res) => {
     await db.query("DELETE FROM otp_images WHERE otp_id = ?", [pendingId]);
     await db.query("DELETE FROM pending_accounts WHERE id = ?", [pendingId]);
 
+    // Send rejection email
+      try {
+        await sendEmail(
+          data.email,
+          "❌ Gasflow Business Owner Registration Rejected",
+          {
+            html: `
+            <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: auto; border: 1px solid #ddd; border-radius: 10px; overflow: hidden;">
+              
+              <!-- Header -->
+              <div style="background-color: #0047ab; padding: 25px; text-align: center;">
+                <img src="cid:logoWhite" width="100" alt="Gasflow Logo" style="margin-bottom: 10px;" />
+                <h1 style="color: #fff; font-size: 24px; margin: 0;">Gasflow</h1>
+              </div>
+
+              <!-- Body -->
+              <div style="padding: 30px; background-color: #f9f9f9; color: #333;">
+                <h2 style="color: #0047ab; font-size: 22px; margin-bottom: 20px;">Hello, ${data.name}</h2>
+                <p style="font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+                  We regret to inform you that your <strong>Business Owner registration</strong> with Gasflow has been <span style="color: #d32f2f; font-weight: bold;">rejected</span>.
+                </p>
+                <p style="font-size: 16px; line-height: 1.6; margin-bottom: 25px;">
+                  If you have any questions or would like to reapply, please contact our support team.
+                </p>
+
+                <!-- Button -->
+                <div style="text-align: center; margin-bottom: 20px;">
+                  <a href="mailto:support@gasflow.com" style="background-color: #0047ab; color: #fff; text-decoration: none; padding: 12px 25px; border-radius: 6px; font-size: 16px; display: inline-block;">
+                    Contact Support
+                  </a>
+                </div>
+
+                <p style="font-size: 14px; color: #555; text-align: center; margin-top: 20px;">
+                  Thank you for your interest in Gasflow. We hope to see you join us in the future.
+                </p>
+              </div>
+
+              <!-- Footer -->
+              <div style="background-color: #eee; padding: 15px; text-align: center; font-size: 12px; color: #777;">
+                &copy; ${new Date().getFullYear()} Gasflow. All rights reserved.
+              </div>
+            </div>
+            `,
+          }
+        );
+      } catch (emailErr) {
+        console.error("❌ Failed to send rejection email:", emailErr.message);
+      }
+
     res.json({ success: true, message: "❌ Business owner registration rejected successfully." });
   } catch (err) {
     console.error("❌ Reject business owner error:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
-
 /* -----------------------------------------
    ✅ Get All Pending Registrations (Admin Only)
 ----------------------------------------- */

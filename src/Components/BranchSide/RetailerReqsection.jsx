@@ -105,17 +105,32 @@ export default function RetailerReqsection() {
   const handleExamSave = async (data) => {
     try {
       const token = localStorage.getItem("token");
+
+      // Ensure exam_date is YYYY-MM-DD string
+      const examDate = data.examDate instanceof Date
+        ? data.examDate.toISOString().split("T")[0]
+        : data.examDate;
+
+      // Ensure exam_time is HH:MM string
+      let examTime = data.examTime;
+      if (examTime instanceof Date) {
+        const hours = examTime.getHours().toString().padStart(2, "0");
+        const minutes = examTime.getMinutes().toString().padStart(2, "0");
+        examTime = `${hours}:${minutes}`;
+      }
+
       await axios.put(
         `${BASE_URL}/retailerSignup/schedule-exam/${examProcess.process_id}`,
         {
-          exam_date: data.examDate,
-          exam_time: data.examTime,
+          exam_date: examDate,
+          exam_time: examTime,
           exam_location: data.examLocation,
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+
       toast.success("Exam scheduled successfully.");
-      setIsExamModalOpen(false); // Close modal
+      setIsExamModalOpen(false);
       setExamProcess(null);
       await fetchAllData();
     } catch (err) {
@@ -123,6 +138,7 @@ export default function RetailerReqsection() {
       toast.error("Failed to schedule exam.");
     }
   };
+
 
   // -----------------------------------------
   // EXAM RESULT

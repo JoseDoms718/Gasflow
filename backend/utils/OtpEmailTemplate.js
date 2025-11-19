@@ -1,85 +1,33 @@
 const OtpEmailTemplate = ({ name, otpCode }) => `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gasflow - OTP Verification</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #f9f9f9;
-      margin: 0;
-      padding: 0;
-    }
-    .container {
-      max-width: 600px;
-      margin: 40px auto;
-      background-color: #ffffff;
-      padding: 30px;
-      border-radius: 8px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-    }
-    .header {
-      display: flex;
-      flex-direction: column; /* stack logo above text */
-      align-items: center;    /* center horizontally */
-      gap: 10px;
-      margin-bottom: 30px;
-    }
-    .header img {
-      height: 50px;
-    }
-    .header h1 {
-      color: #0d6efd;
-      margin: 0;
-      font-size: 28px;
-    }
-    .content {
-      font-size: 16px;
-      line-height: 1.6;
-      color: #333333;
-      text-align: center;
-    }
-    .otp {
-      display: inline-block;
-      margin: 20px 0;
-      padding: 15px 40px;
-      font-size: 28px;
-      font-weight: bold;
-      letter-spacing: 4px;
-      background-color: #0d6efd;
-      color: #ffffff;
-      border-radius: 8px;
-    }
-    .footer {
-      font-size: 12px;
-      color: #777777;
-      margin-top: 30px;
-      text-align: center;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <img src="cid:logo" alt="Gasflow Logo" />
-      <h1>Gasflow</h1>
-    </div>
-    <div class="content">
-      <p>Hi ${name},</p>
-      <p>We received a request to verify your Gasflow customer account.</p>
-      <p>To complete the verification, please use the following One-Time Password (OTP):</p>
-      <div class="otp">${otpCode}</div>
-      <p>This OTP will expire in 5 minutes.</p>
-      <p>If you did not request this verification, please ignore this email.</p>
-    </div>
-    <div class="footer">
-      &copy; ${new Date().getFullYear()} Gasflow. All rights reserved.
-    </div>
+<div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; max-width: 600px; margin: auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+  
+  <!-- Header -->
+  <div style="background-color: #0047ab; padding: 20px; text-align: center;">
+    <img src="cid:logoWhite" alt="Gasflow Logo" style="height: 50px; display: block; margin: auto;" />
+    <h1 style="color: #fff; font-size: 22px; margin: 10px 0 0;">Gasflow</h1>
   </div>
-</body>
-</html>
+
+  <!-- Body -->
+  <div style="padding: 30px; text-align: center;">
+    <h2 style="color: #0047ab; font-size: 20px; margin-bottom: 15px;">Hi ${name},</h2>
+
+    <p style="margin-bottom: 15px;">
+      We received a request to verify your Gasflow account. Use the OTP below to complete verification:
+    </p>
+
+    <div style="display: inline-block; margin: 20px 0; padding: 15px 40px; font-size: 28px; font-weight: bold; letter-spacing: 4px; background-color: #0d6efd; color: #fff; border-radius: 8px;">
+      ${otpCode}
+    </div>
+
+    <p style="margin-bottom: 15px;">This OTP will expire in 5 minutes.</p>
+    <p style="margin-bottom: 0;">If you did not request this verification, please ignore this email.</p>
+  </div>
+
+  <!-- Footer -->
+  <div style="background-color: #f0f0f0; text-align: center; padding: 15px; font-size: 12px; color: #555;">
+    &copy; ${new Date().getFullYear()} Gasflow. All rights reserved.
+  </div>
+</div>
 `;
 
 module.exports = OtpEmailTemplate;

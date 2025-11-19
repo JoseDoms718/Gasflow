@@ -1,8 +1,7 @@
-require('dotenv').config();
+require("dotenv").config();
 const nodemailer = require("nodemailer");
-const path = require("path"); // ✅ Missing import
+const path = require("path");
 
-// 🧩 Create transporter using Gmail + App Password
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
@@ -12,19 +11,26 @@ const transporter = nodemailer.createTransport({
 });
 
 /**
- * Sends an email using the configured transporter
- * @param {string} to - Recipient email address
- * @param {string} subject - Email subject line
- * @param {object} options - { text, html }
+ * @param {string} to
+ * @param {string} subject
+ * @param {object} options { text, html, attachments }
  */
-async function sendEmail(to, subject, { text, html }) {
+async function sendEmail(to, subject, { text, html, attachments = [] }) {
   try {
     if (!to || !subject || (!text && !html)) {
-      throw new Error("Missing email fields (to, subject, or body).");
+      throw new Error("Missing required email fields.");
     }
 
     await transporter.verify();
-    console.log("✅ Email transporter verified successfully.");
+
+    // Always include logoWhite if the HTML uses it
+    if (html && html.includes("cid:logoWhite")) {
+      attachments.push({
+        filename: "logoWhite.png",
+        path: path.join(__dirname, "../../src/assets/design/LogoWhite.png"),
+        cid: "logoWhite",
+      });
+    }
 
     const info = await transporter.sendMail({
       from: `"Gasflow" <${process.env.EMAIL_USER}>`,
@@ -32,27 +38,13 @@ async function sendEmail(to, subject, { text, html }) {
       subject,
       text,
       html,
-      attachments: [
-        {
-          filename: "LogoBlue.png",
-          path: path.join(__dirname, "../../src/assets/design/LogoBlue.png"),
-          cid: "logo", // ✅ must match <img src="cid:logo">
-        },
-      ],
+      attachments, // <-- NOW USING PASSED ATTACHMENTS
     });
 
-    console.log(`📧 Email sent successfully to ${to}`);
-    console.log(`🆔 Message ID: ${info.messageId}`);
+    console.log("📧 Email sent:", info.messageId);
     return info;
   } catch (err) {
-    console.error("❌ Email sending failed:", err.message);
-
-    if (err.code === "EAUTH") {
-      console.error("⚠️ Gmail authentication failed. Check EMAIL_USER and EMAIL_PASS in .env.");
-    } else if (err.code === "ENOTFOUND") {
-      console.error("⚠️ Network issue: Unable to reach Gmail SMTP servers.");
-    }
-
+    console.error("❌ Email sending failed:", err);
     throw err;
   }
 }
