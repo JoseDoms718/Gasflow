@@ -1,8 +1,6 @@
-
 import React, { useState, useEffect } from "react";
-import { Package, ShoppingCart } from "lucide-react";
+import { Package } from "lucide-react";
 import axios from "axios";
-import { toast } from "react-hot-toast";
 import BranchMarketBuy from "../Modals/BranchMarketBuy";
 
 export default function BranchMarketSection() {
@@ -11,7 +9,9 @@ export default function BranchMarketSection() {
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [selectedMunicipality, setSelectedMunicipality] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
+
   const BASE_URL = import.meta.env.VITE_BASE_URL;
+
   const marinduqueMunicipalities = [
     "All",
     "Boac",
@@ -105,8 +105,7 @@ export default function BranchMarketSection() {
               <tr>
                 <th className="px-4 py-3">Image</th>
                 <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Branch</th>
-                <th className="px-4 py-3">Stock</th>
+                <th className="px-4 py-3">Seller</th>
                 <th className="px-4 py-3">Price</th>
                 <th className="px-4 py-3">Action</th>
               </tr>
@@ -116,7 +115,7 @@ export default function BranchMarketSection() {
                 filteredProducts.map((p) => (
                   <tr
                     key={p.product_id}
-                    className={`hover:bg-gray-50 ${p.branch === user?.municipality ? "bg-green-50" : ""}`}
+                    className={`hover:bg-gray-50`}
                   >
                     <td className="px-4 py-3">
                       {p.image_url ? (
@@ -132,8 +131,7 @@ export default function BranchMarketSection() {
                       )}
                     </td>
                     <td className="px-4 py-3 font-semibold">{p.product_name}</td>
-                    <td className="px-4 py-3">{p.branch || "—"}</td>
-                    <td className="px-4 py-3">{p.stock}</td>
+                    <td className="px-4 py-3">{p.seller_name || "—"}</td>
                     <td className="px-4 py-3">₱{formatPrice(p.discounted_price || p.price)}</td>
                     <td className="px-4 py-3 flex justify-center gap-2">
                       <button
@@ -147,7 +145,7 @@ export default function BranchMarketSection() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="6" className="py-6 text-gray-500 italic">
+                  <td colSpan="5" className="py-6 text-gray-500 italic">
                     No branch managers or products in this municipality.
                   </td>
                 </tr>

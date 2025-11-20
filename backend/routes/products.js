@@ -159,26 +159,35 @@ router.get("/my-products", authenticateToken, async (req, res) => {
 // ==============================
 router.get("/public/products", async (req, res) => {
   const { type, role } = req.query;
-  let whereClause = "WHERE p.is_active = 1";
 
+  // Base where clause: active products only, exclude retailers
+  let whereClause = "WHERE p.is_active = 1 AND u.role != 'retailer'";
+
+  // Optional type filter
   if (type === "regular" || type === "discounted") {
     whereClause += ` AND p.product_type = ${db.escape(type)}`;
   }
+
+  // Optional role filter (if provided, e.g., only business_owner or users)
   if (role) {
     whereClause += ` AND u.role = ${db.escape(role)}`;
   }
 
   try {
-    // Example SQL joining products (p), users (u), and barangays (b)
     const sql = `
       SELECT 
         p.*,
         u.name AS seller_name,
+        u.role AS seller_role,
         b.barangay_name AS barangay,
-        b.municipality
+        b.municipality,
+        i.stock,
+        i.stock_threshold,
+        i.updated_at AS stock_updated_at
       FROM products p
       LEFT JOIN users u ON p.seller_id = u.user_id
       LEFT JOIN barangays b ON u.barangay_id = b.barangay_id
+      LEFT JOIN inventory i ON p.product_id = i.product_id
       ${whereClause}
       ORDER BY p.product_id DESC
     `;
@@ -190,6 +199,7 @@ router.get("/public/products", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch products" });
   }
 });
+
 
 // ==============================
 // Restock History - Admin & Seller

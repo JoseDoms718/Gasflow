@@ -35,7 +35,7 @@ export default function Loginsection() {
           navigate("/branchorder");
           break;
         case "retailer":
-          navigate("/retailerorder");
+          navigate("/retailerinventory");
           break;
         case "admin":
           navigate("/admininventory");
@@ -91,7 +91,7 @@ export default function Loginsection() {
           navigate("/branchorder");
           break;
         case "retailer":
-          navigate("/retailerorder");
+          navigate("/retailerinventory");
           break;
         case "admin":
           navigate("/admininventory");
