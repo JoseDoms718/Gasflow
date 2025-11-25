@@ -138,14 +138,10 @@ async function fetchBarangay(barangay_id) {
 }
 
 /* -------------------------------------------------------------------
-   Ensure orders.inventory_deducted column exists (best-effort)
-   This mirrors your earlier behavior so the code won't crash if column
-   is not present; advisable to add the column manually in prod.
+   Ensure orders.inventory_deducted column exists
 ------------------------------------------------------------------- */
 (async function ensureInventoryFlag() {
   try {
-    // Some MySQL versions don't support IF NOT EXISTS for ADD COLUMN.
-    // This will attempt the safe form first, then fallback.
     await db.query(
       "ALTER TABLE orders ADD COLUMN IF NOT EXISTS inventory_deducted TINYINT(1) DEFAULT 0"
     );
@@ -160,9 +156,6 @@ async function fetchBarangay(barangay_id) {
 
 /* -------------------------------------------------------------------
    WALK-IN ORDER (auto-delivered)
-   - expects: product_id/quantity OR products array
-   - uses barangay_id (foreign key) instead of barangay+municipality strings
-   - deducts inventory immediately and marks inventory_deducted = 1
 ------------------------------------------------------------------- */
 router.post("/walk-in", authenticateToken, async (req, res) => {
   try {
@@ -216,7 +209,6 @@ router.post("/walk-in", authenticateToken, async (req, res) => {
       return res.status(404).json({ success: false, error: "Barangay not found." });
     }
 
-    // Validate phone format
     if (!PH_PHONE_REGEX.test(contact_number)) {
       return res.status(400).json({
         success: false,
@@ -224,7 +216,6 @@ router.post("/walk-in", authenticateToken, async (req, res) => {
       });
     }
 
-    // Check availability for every item first
     for (const it of items) {
       const product = await fetchProductWithInventory(it.product_id);
       if (!product) {
@@ -243,15 +234,9 @@ router.post("/walk-in", authenticateToken, async (req, res) => {
     let computedTotal = total_price;
     if (!computedTotal) {
       computedTotal = items.reduce((sum, it) => {
-        // get product price (discounted or regular)
-        // synchronous lookup would be better to avoid double queries; but keeping simple here
-        // fetch product price
-        // (we already fetched product above in the loop but didn't store — fetch again or refactor)
-        // For clarity, re-fetch price here:
-        // NOTE: small performance hit; could be optimized by mapping earlier.
         return sum;
       }, 0);
-      // We'll compute below properly by fetching each product's price
+
       computedTotal = 0;
       for (const it of items) {
         const p = await fetchProductWithInventory(it.product_id);
@@ -260,7 +245,6 @@ router.post("/walk-in", authenticateToken, async (req, res) => {
       }
     }
 
-    // Begin transaction: insert order, insert items, deduct inventory
     const connection = await db.getConnection();
     try {
       await connection.beginTransaction();
@@ -700,9 +684,6 @@ function groupOrders(rows, mapItem) {
 
 /* -------------------------------------------------------------------
    RETAILER DASHBOARD: /retailer-orders
-   - Returns all orders related to the logged-in retailer (seller_id)
-   - Joins barangays for barangay_name and municipality
-   - Includes buyer info
 ------------------------------------------------------------------- */
 router.get(
   "/retailer-orders",
@@ -771,70 +752,8 @@ router.get(
   }
 );
 
-
-/* -------------------------------------------------------------------
-   ADMIN / HEAD OFFICE VIEW: /all
-   Fetches all orders in the system with barangay + municipality info
-------------------------------------------------------------------- */
-router.get("/all", authenticateToken, requireRole("admin"), async (req, res) => {
-  try {
-    const [rows] = await db.query(
-      `
-      SELECT
-        o.order_id,
-        o.full_name,
-        o.contact_number,
-        o.status,
-        o.total_price,
-        o.ordered_at,
-        o.delivered_at,
-        o.inventory_deducted,
-        b.barangay_name AS barangay,
-        b.municipality AS municipality,
-        oi.quantity,
-        oi.price,
-        p.product_id,
-        p.product_name,
-        p.image_url AS image_url,
-        s.name AS seller_name,
-        u.name AS buyer_name,
-        u.email AS buyer_email
-      FROM orders o
-      JOIN order_items oi ON o.order_id = oi.order_id
-      JOIN products p ON oi.product_id = p.product_id
-      LEFT JOIN users s ON p.seller_id = s.user_id
-      LEFT JOIN users u ON o.buyer_id = u.user_id
-      LEFT JOIN barangays b ON o.barangay_id = b.barangay_id
-      ORDER BY o.ordered_at DESC
-      `
-    );
-
-    if (!rows.length) {
-      return res.status(200).json({ success: true, orders: [] });
-    }
-
-    const grouped = groupOrders(rows, (row) => ({
-      product_id: row.product_id,
-      product_name: row.product_name,
-      image_url: formatImageUrl(row.image_url),
-      quantity: row.quantity,
-      price: row.price,
-      seller_name: row.seller_name,
-      buyer_name: row.buyer_name,
-      buyer_email: row.buyer_email,
-    }));
-
-    return res.status(200).json({ success: true, orders: grouped });
-  } catch (err) {
-    console.error("❌ Error fetching all orders (admin):", err);
-    return res.status(500).json({ success: false, error: "Failed to fetch all orders." });
-  }
-});
 /* -------------------------------------------------------------------
    BUYER: UPDATE ORDER STATUS (cancel)
-   - Endpoint: PUT /update-status/:id
-   - Only buyer can cancel their own order.
-   - Restores inventory ONLY if inventory_deducted was true.
 ------------------------------------------------------------------- */
 router.put(
   "/update-status/:id",
@@ -944,12 +863,6 @@ router.put(
 
 /* -------------------------------------------------------------------
    SELLER: UPDATE ORDER STATUS
-   - Endpoint: PUT /retailer/update-status/:id
-   - Roles allowed: retailer, branch_manager
-   - Strict status flow: pending -> preparing -> on_delivery -> delivered
-   - Deduct inventory when moving to 'preparing' (only once). If inventory already
-     deducted, skip deduction.
-   - If cancelling from 'preparing' and inventory was deducted, restore stock.
 ------------------------------------------------------------------- */
 router.put(
   "/retailer/update-status/:id",
@@ -1163,18 +1076,12 @@ router.put(
    UTILITY FUNCTIONS
 ------------------------------------------------------------------- */
 
-/**
- * Note: The helpers below are the canonical single definitions used
- * by the routes above. Duplicates were removed to avoid "Identifier
- * already declared" errors.
- */
 
-/* Helper: adjust inventory stock (transaction connection expected) */
 async function adjustInventory(productId, delta, connection) {
-  // This helper is used with a transaction connection in some routes.
+
   const q = connection ? connection.query.bind(connection) : db.query.bind(db);
 
-  // When called with connection (transaction), expect connection.query response structure.
+
   const [rows] = await q("SELECT stock FROM inventory WHERE product_id = ?", [productId]);
 
   if (!rows.length) {
@@ -1191,16 +1098,15 @@ async function adjustInventory(productId, delta, connection) {
   await q("UPDATE inventory SET stock = ? WHERE product_id = ?", [newStock, productId]);
 }
 
-/* Helper: update order status and timestamp if delivered */
+
 async function updateOrderStatus(order_id, status, conn = null) {
   const query = "UPDATE orders SET status = ? WHERE order_id = ?";
   if (conn) {
-    await conn.query(query, [status, order_id]); // use transaction connection
+    await conn.query(query, [status, order_id]);
   } else {
-    await db.query(query, [status, order_id]); // fallback for normal updates
+    await db.query(query, [status, order_id]); 
   }
 }
-
 
 /* -------------------------------------------------------------------
    EXPORT ROUTER

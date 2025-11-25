@@ -4,7 +4,6 @@ import { User, MessageSquare, Send, X } from "lucide-react";
 import { toast } from "react-hot-toast";
 import axios from "axios";
 import { io } from "socket.io-client";
-import { useLocation } from "react-router-dom";
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 
@@ -30,13 +29,14 @@ export default function InquiriesSection({ currentUser }) {
     const [newMessage, setNewMessage] = useState("");
 
     const socketRef = useRef();
-    const location = useLocation();
 
     // ------------------------
     // Initialize Socket.IO
     // ------------------------
     useEffect(() => {
-        socketRef.current = io(BASE_URL);
+        if (!currentUser?.token) return;
+
+        socketRef.current = io(BASE_URL, { auth: { token: currentUser.token } });
 
         socketRef.current.on("receiveMessage", (message) => {
             if (selectedConversation?.conversation_id === message.conversationId) {
@@ -45,40 +45,40 @@ export default function InquiriesSection({ currentUser }) {
         });
 
         return () => socketRef.current.disconnect();
-    }, [selectedConversation]);
+    }, [selectedConversation, currentUser]);
 
     // ------------------------
     // Fetch conversations
     // ------------------------
-    const fetchConversations = async () => {
-        try {
-            const res = await axios.get(`${BASE_URL}/chat`, {
-                headers: { Authorization: `Bearer ${currentUser.token}` },
-            });
-            const convs = res.data.conversations || [];
-            setConversations(convs);
-
-            // Auto-select conversation if location.state has conversationId
-            if (location.state?.conversationId) {
-                const conv = convs.find(
-                    (c) => c.conversation_id === location.state.conversationId
-                );
-                if (conv) handleSelectConversation(conv);
-            }
-        } catch (err) {
-            console.error("Failed to fetch conversations:", err);
-        }
-    };
-
     useEffect(() => {
+        const fetchConversations = async () => {
+            if (!currentUser?.token) return;
+
+            try {
+                const res = await axios.get(`${BASE_URL}/chat`, {
+                    headers: { Authorization: `Bearer ${currentUser.token}` },
+                });
+
+                const convs = res.data.conversations || [];
+                console.log("Fetched conversations:", convs);
+                setConversations(convs);
+            } catch (err) {
+                console.error("Failed to fetch conversations:", err);
+                toast.error("Failed to load inquiries.");
+            }
+        };
+
         fetchConversations();
-    }, []);
+    }, [currentUser]);
 
     // ------------------------
     // Select conversation
     // ------------------------
     const handleSelectConversation = async (conversation) => {
         setSelectedConversation(conversation);
+
+        if (!currentUser?.token) return;
+
         try {
             const res = await axios.get(
                 `${BASE_URL}/chat/${conversation.conversation_id}/messages`,
@@ -90,6 +90,7 @@ export default function InquiriesSection({ currentUser }) {
             socketRef.current.emit("joinRoom", conversation.conversation_id);
         } catch (err) {
             console.error("Failed to fetch messages:", err);
+            toast.error("Failed to load messages.");
         }
     };
 
@@ -138,24 +139,32 @@ export default function InquiriesSection({ currentUser }) {
                     </div>
 
                     <div className="flex-1 overflow-y-auto space-y-2">
-                        {conversations.map((conv) => (
-                            <div
-                                key={conv.conversation_id}
-                                onClick={() => handleSelectConversation(conv)}
-                                className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all border border-transparent ${selectedConversation?.conversation_id === conv.conversation_id ? colors.selected : colors.hover
-                                    }`}
-                            >
-                                <div className="flex items-center gap-3">
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${colors.listIconBg}`}>
-                                        <User className={`w-5 h-5 ${colors.listIconColor}`} />
-                                    </div>
-                                    <div className="overflow-hidden">
-                                        <p className={`font-semibold ${colors.text}`}>{conv.otherUserName}</p>
-                                        <p className={`text-xs truncate max-w-[140px] ${colors.subtext}`}>{conv.lastMessage || "No messages yet"}</p>
+                        {conversations.length > 0 ? (
+                            conversations.map((conv) => (
+                                <div
+                                    key={conv.conversation_id}
+                                    onClick={() => handleSelectConversation(conv)}
+                                    className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all border border-transparent ${selectedConversation?.conversation_id === conv.conversation_id ? colors.selected : colors.hover
+                                        }`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${colors.listIconBg}`}>
+                                            <User className={`w-5 h-5 ${colors.listIconColor}`} />
+                                        </div>
+                                        <div className="overflow-hidden">
+                                            <p className={`font-semibold ${colors.text}`}>{conv.otherUserName}</p>
+                                            <p className={`text-xs truncate max-w-[140px] ${colors.subtext}`}>
+                                                {conv.lastMessage || "No messages yet"}
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            ))
+                        ) : (
+                            <p className="text-sm text-gray-400 mt-2">
+                                {currentUser ? "No inquiries yet." : "Loading inquiries..."}
+                            </p>
+                        )}
                     </div>
                 </div>
 
@@ -171,31 +180,44 @@ export default function InquiriesSection({ currentUser }) {
                                     </div>
                                     <div>
                                         <p className={`font-bold text-lg ${colors.text}`}>{selectedConversation.otherUserName}</p>
-                                        <p className="text-xs text-green-500 flex items-center gap-1">
-                                            <span className="w-2 h-2 bg-green-500 rounded-full"></span> Online
-                                        </p>
                                     </div>
                                 </div>
-                                <button onClick={() => setSelectedConversation(null)} className={`p-2 rounded-full ${colors.hover}`}>
+                                <button
+                                    onClick={() => setSelectedConversation(null)}
+                                    className={`p-2 rounded-full ${colors.hover}`}
+                                >
                                     <X className={`w-5 h-5 ${colors.subtext}`} />
                                 </button>
                             </div>
 
                             {/* MESSAGES */}
                             <div className={`flex-1 overflow-y-auto p-4 rounded-xl border ${colors.border} bg-white`}>
-                                {chatMessages.map((msg, idx) => (
-                                    <div key={idx} className={`flex mb-3 ${msg.senderId === currentUser.user_id ? "justify-end" : "justify-start"}`}>
+                                {chatMessages.length > 0 ? (
+                                    chatMessages.map((msg, idx) => (
                                         <div
-                                            className={`p-3 max-w-md rounded-2xl shadow-sm text-sm ${msg.senderId === currentUser.user_id ? `${colors.adminBubble} rounded-br-none` : `${colors.userBubble} rounded-bl-none`
+                                            key={idx}
+                                            className={`flex mb-3 ${msg.senderId === currentUser.user_id ? "justify-end" : "justify-start"
                                                 }`}
                                         >
-                                            <p>{msg.text}</p>
-                                            <p className="text-[10px] opacity-70 text-right mt-1">
-                                                {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                                            </p>
+                                            <div
+                                                className={`p-3 max-w-md rounded-2xl shadow-sm text-sm ${msg.senderId === currentUser.user_id
+                                                        ? `${colors.adminBubble} rounded-br-none`
+                                                        : `${colors.userBubble} rounded-bl-none`
+                                                    }`}
+                                            >
+                                                <p>{msg.text}</p>
+                                                <p className="text-[10px] opacity-70 text-right mt-1">
+                                                    {new Date(msg.createdAt).toLocaleTimeString([], {
+                                                        hour: "2-digit",
+                                                        minute: "2-digit",
+                                                    })}
+                                                </p>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    ))
+                                ) : (
+                                    <p className="text-gray-400 mt-2">No messages yet.</p>
+                                )}
                             </div>
 
                             {/* INPUT */}

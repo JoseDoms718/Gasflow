@@ -35,12 +35,12 @@ router.put("/damage/:id", authenticateToken, async (req, res) => {
     // Update inventory
     await db.query("UPDATE inventory SET stock = ?, updated_at = NOW() WHERE product_id = ?", [newStock, id]);
 
-    // Insert into damaged_products
+    // Insert into inventory_logs
     await db.query(
-      `INSERT INTO damaged_products 
-        (product_id, quantity, previous_stock, new_stock, reported_by, damage_description, damaged_at)
-       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
-      [id, qty, previousStock, newStock, userId, damage_description]
+      `INSERT INTO inventory_logs 
+        (product_id, state, user_id, type, quantity, previous_stock, new_stock, description, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [id, 'n/a', userId, 'damage', qty, previousStock, newStock, damage_description]
     );
 
     res.status(200).json({ 
@@ -62,29 +62,30 @@ router.get("/my-damaged-products", authenticateToken, async (req, res) => {
 
     const sql = `
       SELECT 
-        dp.id AS damage_id,
-        dp.product_id,
+        il.log_id AS damage_id,
+        il.product_id,
         p.product_name,
         p.price,
         p.discounted_price,
         p.product_type,
         p.seller_id,
         p.image_url,
-        dp.previous_stock,
-        dp.quantity,
-        dp.new_stock,
-        dp.reported_by,
+        il.previous_stock,
+        il.quantity,
+        il.new_stock,
+        il.user_id AS reported_by,
         u.name AS user_name,
-        dp.damage_description,
-        dp.damaged_at,
+        il.description AS damage_description,
+        il.created_at AS damaged_at,
         b.municipality
-      FROM damaged_products dp
-      JOIN products p ON dp.product_id = p.product_id
-      LEFT JOIN users u ON dp.reported_by = u.user_id
+      FROM inventory_logs il
+      JOIN products p ON il.product_id = p.product_id
+      LEFT JOIN users u ON il.user_id = u.user_id
       LEFT JOIN users seller ON p.seller_id = seller.user_id
       LEFT JOIN barangays b ON seller.barangay_id = b.barangay_id
-      ${req.user.role === "admin" ? "" : "WHERE p.seller_id = ?"}
-      ORDER BY dp.damaged_at DESC
+      WHERE il.type = 'damage'
+      ${req.user.role === "admin" ? "" : "AND p.seller_id = ?"}
+      ORDER BY il.created_at DESC
     `;
 
     const [rows] = req.user.role === "admin"
@@ -97,6 +98,5 @@ router.get("/my-damaged-products", authenticateToken, async (req, res) => {
     res.status(500).json({ success: false, error: "Server error" });
   }
 });
-
 
 module.exports = router;

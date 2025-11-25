@@ -396,35 +396,6 @@ router.put("/restock/:id", authenticateToken, async (req, res) => {
 });
 
 // ==============================
-// Delete Product
-// ==============================
-router.delete("/delete/:id", authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const seller_id = req.user.id;
-
-    const [result] = await db.query(
-      "SELECT image_url FROM products WHERE product_id = ? AND seller_id = ?",
-      [id, seller_id]
-    );
-
-    if (result.length === 0) return res.status(404).json({ error: "Product not found or not owned by you." });
-
-    const imagePath = result[0].image_url ? path.join(uploadPath, result[0].image_url) : null;
-
-    await db.query("DELETE FROM products WHERE product_id = ? AND seller_id = ?", [id, seller_id]);
-    await db.query("DELETE FROM inventory WHERE product_id = ?", [id]);
-
-    deleteImageIfExists(imagePath);
-
-    res.status(200).json({ message: "✅ Product deleted successfully!" });
-  } catch (err) {
-    console.error("❌ Error deleting product:", err);
-    res.status(500).json({ error: "Failed to delete product." });
-  }
-});
-
-// ==============================
 // Single Product (dynamic, LAST)
 // ==============================
 router.get("/:id", async (req, res) => {

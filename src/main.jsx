@@ -31,6 +31,7 @@ import BranchInquirypage from "./Pages/BranchManager/BranchInquirypage";
 // Retailer
 import RetailerSalesReportpage from "./Pages/Retailer/RetailerSalesReportpage";
 import RetailerInventorypage from "./Pages/Retailer/RetailerInventorypage";
+import RetailerInquirypage from "./Pages/Retailer/RetailerInquirypage";
 
 // Admin
 import AdminInventorypage from "./Pages/Admin/AdminInventorypage";
@@ -69,12 +70,12 @@ createRoot(document.getElementById("root")).render(
         <Route path="/branchretailer" element={<BranchRetailerpage />} />
         <Route path="/walkinorder" element={<WalkinOrderpage />} />
         <Route path="/retailerreq" element={<RetailerReqPage />} />
-        <Route path="//branchinquiries" element={<BranchInquirypage />} />
+        <Route path="/branchinquiries" element={<BranchInquirypage />} />
 
         {/* RETAILER */}
         <Route path="/retailerinventory" element={<RetailerInventorypage />} />
         <Route path="/retailersalesreport" element={<RetailerSalesReportpage />} />
-
+        <Route path="/retailerinquiries" element={<RetailerInquirypage />} />
         {/* ADMIN */}
         <Route path="/admininventory" element={<AdminInventorypage />} />
         <Route path="/adminsalesreport" element={<AdminSalesReportPage />} />

@@ -7,6 +7,7 @@ import {
   Users,
   Settings,
   User,
+  MessageCircle,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import axios from "axios";
@@ -66,7 +67,7 @@ export default function Sidebar({ role }) {
       ? "/adminorders"
       : userRole === "branch_manager"
         ? "/branchorder"
-        : ""; // retailer removed completely
+        : ""; // retailer ignored for notifications
 
   // ───────── SOCKET SETUP FOR NEW ORDERS ─────────
   useEffect(() => {
@@ -75,7 +76,7 @@ export default function Sidebar({ role }) {
     const socket = io(SOCKET_URL, { auth: { token } });
 
     socket.on("newOrder", (order) => {
-      if (!ordersPath) return; // retailers ignored
+      if (!ordersPath) return;
 
       if (location.pathname !== ordersPath && order.status === "pending") {
         setNewOrdersCount((prev) => prev + 1);
@@ -93,13 +94,12 @@ export default function Sidebar({ role }) {
   }, [location.pathname]);
 
   // ───────── ROLE-BASED MENU ITEMS ─────────
-  // ───────── ROLE-BASED MENU ITEMS ─────────
   const roleMenus = {
     admin: [
       { to: "/admininventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
       { to: "/adminsalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
       { to: "/adminmanageuser", label: "Manage Users", icon: <Users className="w-5 h-5" /> },
-      { to: "/adminorders", label: "Orders", icon: <ShoppingCart className="w-5 h-5" />, showBadge: true },
+      { to: "/admininquiries", label: "Inquiries", icon: <MessageCircle className="w-5 h-5" /> }, // added
     ],
 
     branch_manager: [
@@ -107,19 +107,17 @@ export default function Sidebar({ role }) {
       { to: "/branchinventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
       { to: "/branchsalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
       { to: "/branchretailer", label: "Manage Retailers", icon: <Users className="w-5 h-5" /> },
+      { to: "/branchinquiries", label: "Inquiries", icon: <MessageCircle className="w-5 h-5" /> }, // added
     ],
 
     retailer: [
       { to: "/retailerinventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
       { to: "/retailersalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
-
-      // ✅ ADDED INQUIRIES TAB FOR RETAILER
-      { to: "/retailerinquiry", label: "Inquiries", icon: <FileText className="w-5 h-5" /> },
+      { to: "/retailerinquiries", label: "Inquiries", icon: <MessageCircle className="w-5 h-5" /> },
     ],
 
     guest: [],
   };
-
 
   const menuItems = roleMenus[userRole] || [];
 

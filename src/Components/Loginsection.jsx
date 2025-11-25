@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -6,17 +5,18 @@ import LogoWhite from "../assets/Design/LogoWhite.png";
 import Model from "../assets/Design/Model.png";
 import Userform from "./Modals/Userform";
 import Businessownerform from "./Modals/Businessownerform";
-import Retailerform from "./Modals/Retailerform";
 import OtpVerificationForm from "./Modals/OtpVerificationForm";
 import { toast } from "react-hot-toast";
+
 const BASE_URL = import.meta.env.VITE_BASE_URL;
+
 export default function Loginsection() {
   const [isLogin, setIsLogin] = useState(true);
-  const [userType, setUserType] = useState("normal"); // normal, business, retailer
+  const [userType, setUserType] = useState("normal"); // normal, business
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isOtpActive, setIsOtpActive] = useState(false); // OTP form control
-  const [otpEmail, setOtpEmail] = useState(""); // email passed to OTP form
+  const [isOtpActive, setIsOtpActive] = useState(false);
+  const [otpEmail, setOtpEmail] = useState("");
   const navigate = useNavigate();
 
   // Auto-login if token exists
@@ -107,7 +107,7 @@ export default function Loginsection() {
 
   return (
     <section className="min-h-screen w-full flex flex-col md:flex-row bg-gray-900 overflow-hidden">
-      {/* LEFT SIDE - HIDE IMAGE ON MOBILE WHEN SIGNUP */}
+      {/* LEFT SIDE */}
       <div
         className={`flex-1 flex flex-col justify-start items-center md:items-start p-6 md:p-12 transition-all duration-300
           ${!isLogin ? "hidden sm:flex" : "flex"}
@@ -134,7 +134,6 @@ export default function Loginsection() {
                 placeholder="Enter Your Email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                required
                 className="w-full p-4 rounded-full bg-gray-100 text-gray-700 placeholder-gray-500 focus:outline-none"
               />
               <input
@@ -142,7 +141,6 @@ export default function Loginsection() {
                 placeholder="Enter Your Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                required
                 className="w-full p-4 rounded-full bg-gray-100 text-gray-700 placeholder-gray-500 focus:outline-none"
               />
               <button
@@ -158,29 +156,34 @@ export default function Loginsection() {
           {/* SIGNUP FORMS */}
           {!isLogin && !isOtpActive && (
             <div className="mt-6 md:mt-10">
-              <div className="flex flex-wrap gap-4 justify-center mb-4">
-                {["normal", "business", "retailer"].map((type) => (
-                  <label key={type} className="flex items-center gap-2 text-white">
+              {/* ⭐ TABS CENTERED HERE ⭐ */}
+              <div className="flex justify-center items-center gap-6 mb-6">
+                {["normal", "business"].map((type) => (
+                  <label key={type} className="flex items-center gap-2 text-white text-lg cursor-pointer">
                     <input
                       type="radio"
                       name="userType"
                       value={type}
                       checked={userType === type}
                       onChange={() => setUserType(type)}
-                      className="accent-[#2d5ee0]"
+                      className="accent-[#2d5ee0] scale-110"
                     />
-                    {type === "normal" ? "Customer" : type === "business" ? "Business Owner" : "Retailer"}
+                    {type === "normal" ? "Customer" : "Business Owner"}
                   </label>
                 ))}
               </div>
 
-              {userType === "normal" && <Userform setIsOtpActive={setIsOtpActive} setOtpEmail={setOtpEmail} />}
-              {userType === "business" && <Businessownerform setIsOtpActive={setIsOtpActive} />}
-              {userType === "retailer" && <Retailerform setIsOtpActive={setIsOtpActive} />}
+              {userType === "normal" && (
+                <Userform setIsOtpActive={setIsOtpActive} setOtpEmail={setOtpEmail} />
+              )}
+
+              {userType === "business" && (
+                <Businessownerform setIsOtpActive={setIsOtpActive} />
+              )}
             </div>
           )}
 
-          {/* OTP VERIFICATION FORM */}
+          {/* OTP FORM */}
           {isOtpActive && (
             <div className="max-h-[60vh] overflow-y-auto">
               <OtpVerificationForm

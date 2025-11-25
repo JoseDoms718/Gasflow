@@ -13,13 +13,13 @@ export default function ManageRequestsSection() {
 
   const token = localStorage.getItem("token"); // Admin token
 
-  // Fetch pending business_owner registrations
+  // Fetch only pending business_owner registrations
   const fetchRequests = async () => {
     try {
       const res = await axios.get(
         `${BASE_URL}/business-owner/pending-registrations`,
         {
-          params: { role: "business_owner" },
+          params: { role: "business_owner" }, // Only business_owner
           headers: { Authorization: `Bearer ${token}` },
         }
       );
