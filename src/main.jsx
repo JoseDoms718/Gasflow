@@ -25,7 +25,6 @@ import BranchInventorypage from "./Pages/BranchManager/branchinventorypage";
 import BranchSalesReportPage from "./Pages/BranchManager/BranchSalesReportpage";
 import WalkinOrderpage from "./Pages/BranchManager/WalkinOrderPage";
 import BranchRetailerpage from "./Pages/BranchManager/BranchRetailerpage";
-import RetailerReqPage from "./Pages/BranchManager/RetailerReqpage";
 import BranchInquirypage from "./Pages/BranchManager/BranchInquirypage";
 
 // Retailer
@@ -69,7 +68,6 @@ createRoot(document.getElementById("root")).render(
         <Route path="/branchsalesreport" element={<BranchSalesReportPage />} />
         <Route path="/branchretailer" element={<BranchRetailerpage />} />
         <Route path="/walkinorder" element={<WalkinOrderpage />} />
-        <Route path="/retailerreq" element={<RetailerReqPage />} />
         <Route path="/branchinquiries" element={<BranchInquirypage />} />
 
         {/* RETAILER */}

@@ -1,11 +1,10 @@
-// ---- FULL COMPONENT START ----
-
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronDown, ChevronUp, ShoppingCart } from "lucide-react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import { io } from "socket.io-client";
+
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 const API_BASE = BASE_URL;
 const SOCKET_URL = BASE_URL;
@@ -93,7 +92,11 @@ export default function IncomingOrderSection() {
     const token = localStorage.getItem("token");
     if (!token) return toast.error("Please log in first.");
 
-    const loadingToast = toast.loading(`Updating to ${statusLabels[newStatus]}...`);
+    const loadingToast = toast.loading(
+      newStatus === "cancelled"
+        ? "Cancelling order..."
+        : `Updating to ${statusLabels[newStatus]}...`
+    );
 
     const snapshot = [...orders];
     setOrders((prev) =>
@@ -117,12 +120,20 @@ export default function IncomingOrderSection() {
         return;
       }
 
-      toast.success("Order updated");
+      toast.success(
+        newStatus === "cancelled"
+          ? "Order cancelled and stock restored!"
+          : "Order updated"
+      );
     } catch (err) {
       console.error(err);
       setOrders(snapshot);
       toast.dismiss(loadingToast);
-      toast.error("Failed to update order");
+      toast.error(
+        newStatus === "cancelled"
+          ? "Failed to cancel order"
+          : "Failed to update order"
+      );
     }
   };
 
@@ -144,7 +155,6 @@ export default function IncomingOrderSection() {
 
   return (
     <div className="p-6 w-full flex flex-col min-h-[80vh]">
-
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Order Management</h2>
@@ -221,8 +231,6 @@ export default function IncomingOrderSection() {
                 {open && (
                   <div className="p-5 border-t border-gray-200 bg-gray-50">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-
                       {/* LEFT SIDE — FIXED LAYOUT */}
                       <div className="w-full h-[350px] overflow-y-auto rounded-xl bg-white shadow-md p-4 scroll-smooth snap-y snap-mandatory space-y-4">
                         {order.items?.map((item, idx) => (
@@ -239,12 +247,13 @@ export default function IncomingOrderSection() {
 
                             {/* TEXT INFO */}
                             <div className="flex flex-col justify-between">
-                              <h3 className="text-lg font-semibold text-gray-900">{item.product_name}</h3>
-
+                              <h3 className="text-lg font-semibold text-gray-900">
+                                {item.product_name}
+                              </h3>
                               <p className="text-sm text-gray-700 mt-1">
-                                Qty: <span className="font-bold">{item.quantity}</span> × ₱{item.price.toLocaleString()}
+                                Qty: <span className="font-bold">{item.quantity}</span> × ₱
+                                {item.price.toLocaleString()}
                               </p>
-
                               <p className="text-blue-600 font-semibold mt-1">
                                 Subtotal: ₱{(item.quantity * item.price).toLocaleString()}
                               </p>
@@ -256,12 +265,8 @@ export default function IncomingOrderSection() {
                       {/* RIGHT SIDE — ORDER DETAILS */}
                       <div className="bg-white rounded-xl shadow-md border p-6 text-sm text-gray-800 space-y-4">
                         <div>
-                          <p className="font-semibold text-gray-900">
-                            Delivery Address
-                          </p>
-                          <p className="text-gray-700">
-                            {order.barangay}, {order.municipality}
-                          </p>
+                          <p className="font-semibold text-gray-900">Delivery Address</p>
+                          <p className="text-gray-700">{order.barangay}, {order.municipality}</p>
                         </div>
 
                         <div>
@@ -270,29 +275,21 @@ export default function IncomingOrderSection() {
                         </div>
 
                         <div>
-                          <p className="font-semibold text-gray-900">
-                            Contact Number
-                          </p>
+                          <p className="font-semibold text-gray-900">Contact Number</p>
                           <p className="text-gray-700">{order.contact_number}</p>
                         </div>
 
                         <div>
-                          <p className="font-semibold text-gray-900">
-                            Ordered At
-                          </p>
+                          <p className="font-semibold text-gray-900">Ordered At</p>
                           <p className="text-gray-700">
-                            {order.ordered_at
-                              ? new Date(order.ordered_at).toLocaleString()
-                              : "—"}
+                            {order.ordered_at ? new Date(order.ordered_at).toLocaleString() : "—"}
                           </p>
                         </div>
 
                         <hr className="border-gray-300" />
 
                         <div>
-                          <p className="font-semibold text-gray-900">
-                            Total Amount
-                          </p>
+                          <p className="font-semibold text-gray-900">Total Amount</p>
                           <p className="text-xl font-bold text-blue-700">
                             ₱{order.total_price?.toLocaleString()}
                           </p>
@@ -330,5 +327,3 @@ export default function IncomingOrderSection() {
     </div>
   );
 }
-
-// ---- FULL COMPONENT END ----

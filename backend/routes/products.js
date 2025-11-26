@@ -212,23 +212,23 @@ router.get("/admin/branch-managers-restock", authenticateToken, async (req, res)
     // Fetch restock history for products owned by branch managers
     const [rows] = await db.query(`
       SELECT 
-        rh.id AS restock_id,
-        rh.product_id,
+        il.log_id AS restock_id,
+        il.product_id,
         p.product_name,
         p.seller_id,
         p.image_url,
-        rh.previous_stock,
-        rh.quantity,
-        rh.new_stock,
-        rh.restocked_by,
+        il.previous_stock,
+        il.quantity,
+        il.new_stock,
+        il.user_id AS restocked_by,
         u.name AS restocked_by_name,
-        rh.restocked_at
-      FROM restock_history rh
-      JOIN products p ON rh.product_id = p.product_id
-      JOIN users u ON rh.restocked_by = u.user_id
+        il.created_at AS restocked_at
+      FROM inventory_logs il
+      JOIN products p ON il.product_id = p.product_id
+      JOIN users u ON il.user_id = u.user_id
       JOIN users u1 ON p.seller_id = u1.user_id
-      WHERE u1.role = 'branch_manager'
-      ORDER BY rh.restocked_at DESC
+      WHERE il.type = 'restock' AND il.state = 'full' AND u1.role = 'branch_manager'
+      ORDER BY il.created_at DESC
     `);
 
     res.json({ success: true, data: rows });
@@ -244,22 +244,22 @@ router.get("/my-products-restock", authenticateToken, async (req, res) => {
     const userId = req.user.id;
     const [rows] = await db.query(`
       SELECT 
-        rh.id AS restock_id,
-        rh.product_id,
+        il.log_id AS restock_id,
+        il.product_id,
         p.product_name,
         p.seller_id,
         p.image_url,
-        rh.previous_stock,
-        rh.quantity,
-        rh.new_stock,
-        rh.restocked_by,
+        il.previous_stock,
+        il.quantity,
+        il.new_stock,
+        il.user_id AS restocked_by,
         u.name AS restocked_by_name,
-        rh.restocked_at
-      FROM restock_history rh
-      JOIN products p ON rh.product_id = p.product_id
-      LEFT JOIN users u ON rh.restocked_by = u.user_id
-      WHERE p.seller_id = ?
-      ORDER BY rh.restocked_at DESC
+        il.created_at AS restocked_at
+      FROM inventory_logs il
+      JOIN products p ON il.product_id = p.product_id
+      LEFT JOIN users u ON il.user_id = u.user_id
+      WHERE il.type = 'restock' AND il.state = 'full' AND p.seller_id = ?
+      ORDER BY il.created_at DESC
     `, [userId]);
 
     res.json({ success: true, data: rows });
@@ -268,6 +268,7 @@ router.get("/my-products-restock", authenticateToken, async (req, res) => {
     res.status(500).json({ success: false, error: "Server error" });
   }
 });
+
 
 // ==============================
 // Admin Products
@@ -371,7 +372,9 @@ router.put("/restock/:id", authenticateToken, async (req, res) => {
     const sqlCheck =
       req.user.role === "admin"
         ? "SELECT * FROM inventory WHERE product_id = ?"
-        : `SELECT i.* FROM inventory i JOIN products p ON i.product_id = p.product_id WHERE i.product_id = ? AND p.seller_id = ?`;
+        : `SELECT i.* FROM inventory i 
+           JOIN products p ON i.product_id = p.product_id 
+           WHERE i.product_id = ? AND p.seller_id = ?`;
 
     const [rows] =
       req.user.role === "admin" ? await db.query(sqlCheck, [id]) : await db.query(sqlCheck, [id, userId]);
@@ -381,11 +384,15 @@ router.put("/restock/:id", authenticateToken, async (req, res) => {
     const previousStock = Number(rows[0].stock) || 0;
     const newStock = previousStock + qty;
 
+    // Update inventory
     await db.query("UPDATE inventory SET stock = ?, updated_at = NOW() WHERE product_id = ?", [newStock, id]);
+
+    // Log into inventory_logs (state = 'full' since it's a restock)
     await db.query(
-      `INSERT INTO restock_history (product_id, restocked_by, quantity, previous_stock, new_stock, restocked_at)
-       VALUES (?, ?, ?, ?, ?, NOW())`,
-      [id, userId, qty, previousStock, newStock]
+      `INSERT INTO inventory_logs 
+        (product_id, state, user_id, type, quantity, previous_stock, new_stock, description, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [id, 'full', userId, 'restock', qty, previousStock, newStock, 'Restocked']
     );
 
     res.status(200).json({ success: true, message: "Product restocked successfully.", previousStock, newStock });
@@ -394,6 +401,7 @@ router.put("/restock/:id", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Failed to restock product." });
   }
 });
+
 
 // ==============================
 // Single Product (dynamic, LAST)
