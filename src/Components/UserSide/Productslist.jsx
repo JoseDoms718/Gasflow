@@ -24,6 +24,7 @@ export default function Productslist() {
   const [selectedMunicipality, setSelectedMunicipality] = useState("");
   const [regularProducts, setRegularProducts] = useState([]);
   const [discountedProducts, setDiscountedProducts] = useState([]);
+  const [discountTimers, setDiscountTimers] = useState({});
 
   const formatPrice = (value) => {
     const num = Number(value);
@@ -34,6 +35,7 @@ export default function Productslist() {
     });
   };
 
+  // ───────── FETCH PRODUCTS ─────────
   useEffect(() => {
     const fetchProducts = async () => {
       try {
@@ -67,6 +69,34 @@ export default function Productslist() {
     fetchProducts();
   }, []);
 
+  // ───────── DISCOUNT TIMERS ─────────
+  useEffect(() => {
+    const updateTimers = () => {
+      const newTimers = {};
+      discountedProducts.forEach((p) => {
+        if (!p.discount_until) return;
+
+        const now = new Date();
+        const end = new Date(p.discount_until);
+        const diff = end - now;
+
+        if (diff <= 0) newTimers[p.product_id] = "Discount expired";
+        else {
+          const hours = Math.floor(diff / (1000 * 60 * 60));
+          const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+          const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+          newTimers[p.product_id] = `${hours}h ${minutes}m ${seconds}s`;
+        }
+      });
+      setDiscountTimers(newTimers);
+    };
+
+    updateTimers();
+    const interval = setInterval(updateTimers, 1000);
+    return () => clearInterval(interval);
+  }, [discountedProducts]);
+
+  // ───────── FILTERED PRODUCTS ─────────
   const filteredRegular = regularProducts.filter((p) =>
     selectedMunicipality ? p.seller.municipality === selectedMunicipality : true
   );
@@ -91,9 +121,6 @@ export default function Productslist() {
 
   const displayDiscounted = addPlaceholders(filteredDiscounted);
   const displayRegular = addPlaceholders(filteredRegular);
-
-  const showDiscountNav = displayDiscounted.length > 3;
-  const showRegularNav = displayRegular.length > 3;
 
   const renderCard = (item) => (
     <div className="bg-white rounded-lg shadow-md hover:shadow-xl transition duration-300 border border-gray-200 overflow-hidden flex flex-col h-[450px]">
@@ -164,6 +191,11 @@ export default function Productslist() {
                     <p className="text-green-600 font-bold text-lg">
                       ₱{formatPrice(item.discounted_price)}
                     </p>
+                    {item.discount_until && discountTimers[item.product_id] && (
+                      <p className="text-red-500 text-xs mt-1">
+                        Ends in: {discountTimers[item.product_id]}
+                      </p>
+                    )}
                   </>
                 ) : (
                   <p className="text-blue-600 font-bold text-lg">

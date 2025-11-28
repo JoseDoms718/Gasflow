@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -33,6 +32,7 @@ export default function Buysection() {
   const [selectedBarangayId, setSelectedBarangayId] = useState("");
   const [loading, setLoading] = useState(true);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [remainingTime, setRemainingTime] = useState("");
 
   const municipalities = ["Boac", "Mogpog", "Gasan", "Buenavista", "Torrijos", "Santa Cruz"];
 
@@ -66,7 +66,15 @@ export default function Buysection() {
       try {
         if (!id) throw new Error("No product ID provided.");
         const res = await axios.get(`${BASE_URL}/products/${id}`);
-        setProduct(res.data);
+        const p = res.data;
+
+        // Auto-select discounted if currently active
+        const now = new Date();
+        if (p.discounted_price && p.discount_until && new Date(p.discount_until) > now) {
+          setProductType("discounted");
+        }
+
+        setProduct(p);
       } catch (err) {
         console.error(err);
         toast.error("Failed to load product information.");
@@ -76,6 +84,33 @@ export default function Buysection() {
     };
     fetchProduct();
   }, [id]);
+
+  // ───────── DISCOUNT TIMER ─────────
+  useEffect(() => {
+    if (!product?.discount_until) return;
+
+    const updateTimer = () => {
+      const now = new Date();
+      const end = new Date(product.discount_until);
+      const diff = end - now;
+
+      if (diff <= 0) {
+        setRemainingTime("Discount expired");
+        if (productType === "discounted") setProductType("regular");
+        return;
+      }
+
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      setRemainingTime(`${hours}h ${minutes}m ${seconds}s`);
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [product?.discount_until, productType]);
 
   // ───────── FETCH USER ─────────
   useEffect(() => {
@@ -155,7 +190,6 @@ export default function Buysection() {
 
   const handleQuantityChange = (e) => {
     const val = e.target.value;
-    // Allow empty string
     if (val === "") {
       setQuantity(null);
       return;
@@ -177,7 +211,12 @@ export default function Buysection() {
     const cartKey = getUserCartKey();
     const cart = JSON.parse(localStorage.getItem(cartKey)) || [];
 
-    const price = productType === "refill" ? product.refill_price : product.discounted_price || product.price;
+    const price =
+      productType === "refill"
+        ? product.refill_price
+        : productType === "discounted"
+          ? product.discounted_price
+          : product.price;
 
     const existingIndex = cart.findIndex(
       (item) => item.product_id === product.product_id && item.type === productType
@@ -255,7 +294,12 @@ export default function Buysection() {
   if (loading) return <p className="text-white">Loading product...</p>;
   if (!product) return <p className="text-white">Product not found.</p>;
 
-  const pricePerUnit = productType === "refill" ? product.refill_price : product.discounted_price || product.price;
+  const pricePerUnit =
+    productType === "refill"
+      ? product.refill_price
+      : productType === "discounted"
+        ? product.discounted_price
+        : product.price;
   const totalPrice = (quantity || 0) * pricePerUnit;
   const outOfStock = product.stock <= 0;
 
@@ -278,8 +322,13 @@ export default function Buysection() {
             <p className="text-gray-300 mb-4">{product.product_description || "No description available."}</p>
             {outOfStock && <p className="text-red-400 font-semibold mb-4">⚠️ Out of stock.</p>}
 
-            {/* Price Above Inputs */}
-            <p className="text-2xl font-semibold mb-4">₱{totalPrice.toLocaleString()}.00</p>
+            {/* Price & Discount Timer */}
+            <p className="text-2xl font-semibold mb-2">₱{totalPrice.toLocaleString()}.00</p>
+            {product.discounted_price && product.discount_until && (
+              <p className="text-green-400 font-semibold mb-4">
+                Discount ends in: {remainingTime}
+              </p>
+            )}
 
             {/* Type & Quantity */}
             <div className="flex flex-col mb-6 gap-2">
@@ -291,6 +340,9 @@ export default function Buysection() {
                   className="px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg"
                 >
                   <option value="regular">Regular</option>
+                  {product.discounted_price && product.discount_until && (
+                    <option value="discounted">Discounted</option>
+                  )}
                   <option value="refill">Refill</option>
                 </select>
 

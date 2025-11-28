@@ -340,7 +340,7 @@ router.post("/walk-in", authenticateToken, async (req, res) => {
 router.post("/buy", authenticateToken, async (req, res) => {
   const connection = await db.getConnection();
   try {
-    const io = req.app.get("io"); // get Socket.IO instance
+    const io = req.app.get("io"); // Socket.IO instance
     let { items, product_id, quantity, full_name, contact_number, barangay_id } = req.body;
     const buyer_id = req.user.id;
 
@@ -357,13 +357,9 @@ router.post("/buy", authenticateToken, async (req, res) => {
 
     if (!PH_PHONE_REGEX.test(contact_number)) {
       connection.release();
-      return res.status(400).json({
-        success: false,
-        error: "Invalid Philippine contact number format (+639XXXXXXXXX).",
-      });
+      return res.status(400).json({ success: false, error: "Invalid Philippine contact number format (+639XXXXXXXXX)." });
     }
 
-    // Normalize items input
     const orderItems = Array.isArray(items)
       ? items.filter((i) => i.product_id && i.quantity && i.type)
       : [];
@@ -373,20 +369,18 @@ router.post("/buy", authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, error: "No valid items provided." });
     }
 
-    // Validate barangay exists
     const barangayRow = await fetchBarangay(barangay_id);
     if (!barangayRow) {
       connection.release();
       return res.status(404).json({ success: false, error: "Barangay not found." });
     }
 
-    // Fetch products + inventory, group by seller
     const productsMap = {};
 
+    // Fetch products and validate stock
     for (const item of orderItems) {
       const sql = `
-        SELECT p.product_id, p.product_name, p.product_description, p.price, p.discounted_price, p.refill_price,
-               p.seller_id, p.image_url, i.stock
+        SELECT p.product_id, p.price, p.discounted_price, p.refill_price, p.seller_id, i.stock
         FROM products p
         LEFT JOIN inventory i ON p.product_id = i.product_id
         WHERE p.product_id = ?
@@ -404,53 +398,34 @@ router.post("/buy", authenticateToken, async (req, res) => {
         connection.release();
         return res.status(400).json({
           success: false,
-          error: `Insufficient stock for ${product.product_name}. Only ${availableStock} left.`,
+          error: `Insufficient stock for product ${item.product_id}. Only ${availableStock} left.`,
         });
       }
 
-      const seller_id = product.seller_id;
-
-      // Determine final price & type for logs
-      let price = product.price;
-      let type = "full"; // default
+      // Determine final price and type
+      let finalPrice = product.price;
+      let type = item.type;
 
       if (item.type === "refill") {
-        price = product.refill_price;
-        type = "refill";
-      } else if (product.discounted_price != null) {
-        price = product.discounted_price;
-        type = "full"; // discounted counts as full for inventory logs
+        finalPrice = product.refill_price ?? 0;
+      } else if (item.type === "discounted" && product.discounted_price != null) {
+        finalPrice = product.discounted_price;
       }
 
-      const subtotal = price * item.quantity;
-
-      if (!productsMap[seller_id]) productsMap[seller_id] = [];
-
-      const imageUrl = product.image_url
-        ? product.image_url.startsWith("http")
-          ? product.image_url
-          : `${process.env.BASE_URL}/${product.image_url.replace(/^\/+/, "")}`
-        : null;
-
-      productsMap[seller_id].push({
-        seller_id,
+      if (!productsMap[product.seller_id]) productsMap[product.seller_id] = [];
+      productsMap[product.seller_id].push({
         product_id: product.product_id,
-        product_name: product.product_name,
-        product_description: product.product_description,
-        image_url: imageUrl,
         quantity: item.quantity,
-        type, // this will be used for inventory logs
-        price,
-        subtotal,
+        price: finalPrice,
+        type,
       });
     }
 
-    // Begin transaction
     await connection.beginTransaction();
     const createdOrders = [];
 
     for (const [seller_id, sellerItems] of Object.entries(productsMap)) {
-      const totalSellerPrice = sellerItems.reduce((sum, i) => sum + i.subtotal, 0);
+      const totalSellerPrice = sellerItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
       const [orderResult] = await connection.query(
         `INSERT INTO orders (
@@ -462,45 +437,45 @@ router.post("/buy", authenticateToken, async (req, res) => {
 
       const order_id = orderResult.insertId;
 
-      // Insert items into order_items
       for (const item of sellerItems) {
+        // Insert only the columns that exist in order_items
         await connection.query(
-          `INSERT INTO order_items (order_id, product_id, quantity, price, type) VALUES (?, ?, ?, ?, ?)`,
+          `INSERT INTO order_items (order_id, product_id, quantity, price, type)
+           VALUES (?, ?, ?, ?, ?)`,
           [order_id, item.product_id, item.quantity, item.price, item.type]
         );
+
+        // Deduct stock
+        await connection.query(
+          `UPDATE inventory SET stock = stock - ? WHERE product_id = ?`,
+          [item.quantity, item.product_id]
+        );
+
+        const [inventoryRows] = await connection.query(
+          `SELECT stock FROM inventory WHERE product_id = ?`,
+          [item.product_id]
+        );
+        const updatedStock = inventoryRows[0]?.stock ?? 0;
+
+        io.emit("stock-updated", { product_id: item.product_id, stock: updatedStock });
       }
 
-      const orderObj = {
+      createdOrders.push({
         order_id,
         seller_id,
         total_price: totalSellerPrice,
         status: "pending",
-        items: sellerItems.map(({ product_id, product_name, product_description, image_url, quantity, price, subtotal, type }) => ({
-          product_id,
-          product_name,
-          product_description,
-          image_url: image_url || `${process.env.BASE_URL}/placeholder.png`,
-          quantity,
-          type, // this will be full/refill
-          price,
-          subtotal,
-        })),
-      };
+        items: sellerItems,
+      });
 
-      createdOrders.push(orderObj);
-
-      // Emit real-time order event
-      io.emit("newOrder", orderObj);
+      io.emit("newOrder", createdOrders[createdOrders.length - 1]);
     }
 
     await connection.commit();
     connection.release();
 
-    return res.status(201).json({
-      success: true,
-      message: "✅ Orders created successfully.",
-      orders: createdOrders,
-    });
+    return res.status(201).json({ success: true, message: "✅ Orders created successfully.", orders: createdOrders });
+
   } catch (err) {
     try { await connection.rollback(); connection.release(); } catch (e) {}
     console.error("❌ Error (buy):", err);
@@ -862,6 +837,9 @@ router.put(
           );
 
           for (const item of items) {
+            // Skip refill if inventory was not deducted
+            if (item.type === "refill") continue;
+
             await adjustInventory(item.product_id, Number(item.quantity), connection);
 
             const [inv] = await connection.query(
@@ -892,9 +870,20 @@ router.put(
         }
 
         // --------------------------
-        // Update order status
+        // DELIVERED → Update delivered_at
         // --------------------------
-        await updateOrderStatus(id, status, connection);
+        if (status === "delivered") {
+          await connection.query(
+            "UPDATE orders SET status = ?, delivered_at = NOW() WHERE order_id = ?",
+            [status, id]
+          );
+        } else {
+          await connection.query(
+            "UPDATE orders SET status = ? WHERE order_id = ?",
+            [status, id]
+          );
+        }
+
         await connection.commit();
         connection.release();
 
@@ -1018,16 +1007,17 @@ router.put(
         );
 
         for (const item of items) {
-          const state = item.type === "refill" ? "refill" : "full";
+          // Skip refill items entirely for logging
+          if (item.type === "refill") continue;
 
           const [invRows] = await connection.query(
             "SELECT stock FROM inventory WHERE product_id = ?",
             [item.product_id]
           );
           const prev = invRows[0]?.stock ?? 0;
+          let newStock = prev;
 
           // Deduct stock only when moving to on_delivery and not yet deducted
-          let newStock = prev;
           if (currentStatus === "preparing" && status === "on_delivery" && !inventoryDeducted) {
             if (prev < item.quantity) {
               await connection.rollback();
@@ -1044,7 +1034,7 @@ router.put(
             await connection.query("UPDATE orders SET inventory_deducted = 1 WHERE order_id = ?", [id]);
           }
 
-          // Log pending_order
+          const state = "full"; // since refill is excluded
           await connection.query(
             `INSERT INTO inventory_logs
               (product_id, state, user_id, type, quantity, previous_stock, new_stock, description)
@@ -1063,8 +1053,7 @@ router.put(
       }
 
       // ============================================================
-      // 2️⃣ delivered → delivery log (No stock change)
-      // Type: delivery
+      // 2️⃣ delivered → delivery log (No stock change) + delivered_at timestamp
       // ============================================================
       if (status === "delivered") {
         const [items] = await connection.query(
@@ -1073,7 +1062,7 @@ router.put(
         );
 
         for (const item of items) {
-          const state = item.type === "refill" ? "refill" : "full";
+          if (item.type === "refill") continue; // skip refill items
 
           const [invRows] = await connection.query(
             "SELECT stock FROM inventory WHERE product_id = ?",
@@ -1087,7 +1076,7 @@ router.put(
              VALUES (?, ?, ?, 'delivery', ?, ?, ?, ?)`,
             [
               item.product_id,
-              state,
+              "full",
               user_id,
               item.quantity,
               prev,
@@ -1096,11 +1085,21 @@ router.put(
             ]
           );
         }
+
+        // Update delivered_at timestamp
+        await connection.query(
+          "UPDATE orders SET status = ?, delivered_at = NOW() WHERE order_id = ?",
+          [status, id]
+        );
+      } else {
+        await connection.query(
+          "UPDATE orders SET status = ? WHERE order_id = ?",
+          [status, id]
+        );
       }
 
       // ============================================================
       // 3️⃣ cancelled → restore stock + log
-      // Type: order_cancelled
       // ============================================================
       if (status === "cancelled" && inventoryDeducted) {
         const [items] = await connection.query(
@@ -1109,7 +1108,7 @@ router.put(
         );
 
         for (const item of items) {
-          const state = item.type === "refill" ? "refill" : "full";
+          if (item.type === "refill") continue; // skip refill items
 
           const [invRows] = await connection.query(
             "SELECT stock FROM inventory WHERE product_id = ?",
@@ -1125,7 +1124,7 @@ router.put(
              VALUES (?, ?, ?, 'order_cancelled', ?, ?, ?, ?)`,
             [
               item.product_id,
-              state,
+              "full",
               user_id,
               item.quantity,
               prev,
@@ -1138,9 +1137,6 @@ router.put(
         await connection.query("UPDATE orders SET inventory_deducted = 0 WHERE order_id = ?", [id]);
       }
 
-      // Update order status
-      await updateOrderStatus(id, status, connection);
-
       await connection.commit();
       connection.release();
 
@@ -1151,6 +1147,7 @@ router.put(
     }
   }
 );
+
 
 /* -------------------------------------------------------------------
    UTILITY FUNCTIONS

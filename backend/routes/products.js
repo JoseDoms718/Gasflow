@@ -168,7 +168,7 @@ router.get("/public/products", async (req, res) => {
     whereClause += ` AND p.product_type = ${db.escape(type)}`;
   }
 
-  // Optional role filter (if provided, e.g., only business_owner or users)
+  // Optional role filter
   if (role) {
     whereClause += ` AND u.role = ${db.escape(role)}`;
   }
@@ -176,7 +176,18 @@ router.get("/public/products", async (req, res) => {
   try {
     const sql = `
       SELECT 
-        p.*,
+        p.product_id,
+        p.seller_id,
+        p.image_url,
+        p.product_type,
+        p.product_name,
+        p.product_description,
+        p.price,
+        p.discounted_price,
+        p.refill_price,
+        p.discount_until,
+        p.is_active,
+        p.created_at,
         u.name AS seller_name,
         u.role AS seller_role,
         b.barangay_name AS barangay,
@@ -199,7 +210,6 @@ router.get("/public/products", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch products" });
   }
 });
-
 
 // ==============================
 // Restock History - Admin & Seller
