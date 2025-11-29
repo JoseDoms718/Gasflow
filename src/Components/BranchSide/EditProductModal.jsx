@@ -1,8 +1,10 @@
-
 import React, { useState } from "react";
 import { Pencil, Check, Camera, Package } from "lucide-react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
+
+const BASE_URL = import.meta.env.VITE_BASE_URL;
+
 export default function EditProductModal({ selectedProduct, setSelectedProduct, setProducts }) {
     const [editedProduct, setEditedProduct] = useState(selectedProduct);
     const [editedImage, setEditedImage] = useState(null);
@@ -10,7 +12,20 @@ export default function EditProductModal({ selectedProduct, setSelectedProduct, 
     const [hasEdits, setHasEdits] = useState(false);
 
     const handleEditChange = (field, value) => {
-        setEditedProduct((prev) => ({ ...prev, [field]: value }));
+        let numValue = value;
+
+        if (field === "discounted_price" || field === "refill_price") {
+            numValue = Number(value);
+            const price = Number(editedProduct.price);
+            if (!isNaN(numValue) && numValue >= price) {
+                numValue = price - 1;
+                toast.error(
+                    `${field === "discounted_price" ? "Discounted" : "Refill"} price cannot exceed regular price. Automatically set to ₱${numValue}`
+                );
+            }
+        }
+
+        setEditedProduct((prev) => ({ ...prev, [field]: numValue }));
         setHasEdits(true);
     };
 
@@ -28,6 +43,21 @@ export default function EditProductModal({ selectedProduct, setSelectedProduct, 
 
     const handleSaveEdits = async () => {
         if (!editedProduct) return;
+
+        // Clamp discounted and refill prices before sending
+        if (editedProduct.discounted_price && Number(editedProduct.discounted_price) >= Number(editedProduct.price)) {
+            editedProduct.discounted_price = Number(editedProduct.price) - 1;
+            toast.error(
+                `Discounted price adjusted to ₱${editedProduct.discounted_price} because it cannot exceed the regular price.`
+            );
+        }
+        if (editedProduct.refill_price && Number(editedProduct.refill_price) >= Number(editedProduct.price)) {
+            editedProduct.refill_price = Number(editedProduct.price) - 1;
+            toast.error(
+                `Refill price adjusted to ₱${editedProduct.refill_price} because it cannot exceed the regular price.`
+            );
+        }
+
         const token = localStorage.getItem("token");
         const formData = new FormData();
 
@@ -117,7 +147,9 @@ export default function EditProductModal({ selectedProduct, setSelectedProduct, 
                             ) : (
                                 editedProduct.product_name
                             )}
-                            <button onClick={() => toggleEdit("product_name")}>{isEditing.product_name ? <Check size={18} /> : <Pencil size={18} />}</button>
+                            <button onClick={() => toggleEdit("product_name")}>
+                                {isEditing.product_name ? <Check size={18} /> : <Pencil size={18} />}
+                            </button>
                         </h2>
 
                         <hr className="border-gray-700 mb-5" />
@@ -145,10 +177,10 @@ export default function EditProductModal({ selectedProduct, setSelectedProduct, 
                                 <span className="font-semibold text-white w-32">Stock:</span>
                                 <span
                                     className={`inline-block px-3 py-1 text-sm font-semibold rounded-lg shadow-sm ${editedProduct.stock <= editedProduct.stock_threshold
-                                        ? "bg-red-600 text-white"
-                                        : editedProduct.stock <= editedProduct.stock_threshold + 5
-                                            ? "bg-yellow-400 text-gray-800"
-                                            : "bg-green-600 text-white"
+                                            ? "bg-red-600 text-white"
+                                            : editedProduct.stock <= editedProduct.stock_threshold + 5
+                                                ? "bg-yellow-400 text-gray-800"
+                                                : "bg-green-600 text-white"
                                         }`}
                                 >
                                     {editedProduct.stock}
@@ -167,7 +199,9 @@ export default function EditProductModal({ selectedProduct, setSelectedProduct, 
                                 ) : (
                                     editedProduct.stock_threshold
                                 )}
-                                <button onClick={() => toggleEdit("stock_threshold")}>{isEditing.stock_threshold ? <Check size={16} /> : <Pencil size={16} />}</button>
+                                <button onClick={() => toggleEdit("stock_threshold")}>
+                                    {isEditing.stock_threshold ? <Check size={16} /> : <Pencil size={16} />}
+                                </button>
                             </p>
 
                             {/* Type */}
@@ -185,23 +219,29 @@ export default function EditProductModal({ selectedProduct, setSelectedProduct, 
                                 ) : (
                                     <span className="capitalize">{editedProduct.product_type}</span>
                                 )}
-                                <button onClick={() => toggleEdit("product_type")}>{isEditing.product_type ? <Check size={16} /> : <Pencil size={16} />}</button>
+                                <button onClick={() => toggleEdit("product_type")}>
+                                    {isEditing.product_type ? <Check size={16} /> : <Pencil size={16} />}
+                                </button>
                             </p>
 
                             {/* Price */}
                             <div className="flex items-center gap-2">
                                 <span className="font-semibold text-white w-32">Price:</span>
-                                {isEditing.price ? (
-                                    <input
-                                        type="number"
-                                        value={editedProduct.price}
-                                        onChange={(e) => handleEditChange("price", e.target.value)}
-                                        className="bg-gray-800 px-2 py-1 rounded w-32"
-                                    />
-                                ) : (
-                                    <span>₱{formatPrice(editedProduct.price)}</span>
-                                )}
-                                <button onClick={() => toggleEdit("price")}>{isEditing.price ? <Check size={16} /> : <Pencil size={16} />}</button>
+                                <>
+                                    {isEditing.price ? (
+                                        <input
+                                            type="number"
+                                            value={editedProduct.price}
+                                            onChange={(e) => handleEditChange("price", e.target.value)}
+                                            className="bg-gray-800 px-2 py-1 rounded w-32"
+                                        />
+                                    ) : (
+                                        <span>₱{formatPrice(editedProduct.price)}</span>
+                                    )}
+                                    <button onClick={() => toggleEdit("price")}>
+                                        {isEditing.price ? <Check size={16} /> : <Pencil size={16} />}
+                                    </button>
+                                </>
                             </div>
 
                             {/* Refill Price */}
@@ -217,7 +257,9 @@ export default function EditProductModal({ selectedProduct, setSelectedProduct, 
                                 ) : (
                                     <span>{editedProduct.refill_price ? `₱${formatPrice(editedProduct.refill_price)}` : "—"}</span>
                                 )}
-                                <button onClick={() => toggleEdit("refill_price")}>{isEditing.refill_price ? <Check size={16} /> : <Pencil size={16} />}</button>
+                                <button onClick={() => toggleEdit("refill_price")}>
+                                    {isEditing.refill_price ? <Check size={16} /> : <Pencil size={16} />}
+                                </button>
                             </div>
 
                             {/* Discounted Section */}
@@ -231,6 +273,7 @@ export default function EditProductModal({ selectedProduct, setSelectedProduct, 
                                                 value={editedProduct.discounted_price}
                                                 onChange={(e) => handleEditChange("discounted_price", e.target.value)}
                                                 className="bg-gray-800 px-2 py-1 rounded w-32"
+                                                max={editedProduct.price - 1}
                                             />
                                         ) : (
                                             <span className="text-green-400 font-semibold">₱{formatPrice(editedProduct.discounted_price)}</span>

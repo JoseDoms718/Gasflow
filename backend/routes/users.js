@@ -26,21 +26,21 @@ function normalizePHNumber(number) {
 }
 // ✅ Add new user
 router.post("/", async (req, res) => {
-  const conn = await db.getConnection(); // use a connection to handle transactions
+  const conn = await db.getConnection();
   try {
     const { name, email, contact_number, password, role, type, barangay_id } = req.body;
 
-    // 🔸 Validate required fields
+    // Required fields
     if (!name || !email || !password || !role) {
       return res.status(400).json({ error: "Name, email, password, and role are required." });
     }
 
-    // 🔸 Validate email format
+    // Email validation
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: "Invalid email format." });
     }
 
-    // 🔸 Normalize and validate contact number
+    // Normalize / validate PH number
     let normalizedContact = null;
     if (contact_number) {
       normalizedContact = normalizePHNumber(contact_number);
@@ -51,13 +51,13 @@ router.post("/", async (req, res) => {
       }
     }
 
-    // 🔸 Check duplicate email
+    // Check duplicate email
     const [existing] = await conn.query("SELECT email FROM users WHERE email = ?", [email]);
     if (existing.length > 0) {
       return res.status(400).json({ error: "Email already exists." });
     }
 
-    // 🔸 Validate barangay_id if provided
+    // Validate barangay
     if (barangay_id) {
       const [barangay] = await conn.query(
         "SELECT * FROM barangays WHERE barangay_id = ?",
@@ -68,14 +68,13 @@ router.post("/", async (req, res) => {
       }
     }
 
-    // 🔸 Hash password
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
     const userType = type || "pending";
 
-    // 🔸 Start transaction
     await conn.beginTransaction();
 
-    // Insert user
+    // Create user
     const [result] = await conn.query(
       `INSERT INTO users (name, email, contact_number, password, role, type, barangay_id)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -84,16 +83,10 @@ router.post("/", async (req, res) => {
 
     const userId = result.insertId;
 
-    // 🔸 If role is branch_manager, create branch entry
-    if (role === "branch_manager") {
-      await conn.query(
-        `INSERT INTO branches (user_id, branch_name, branch_contact, barangay_id)
-         VALUES (?, ?, ?, ?)`,
-        [userId, `${name}'s Branch`, normalizedContact, barangay_id || null]
-      );
-    }
+    // 🔥 IMPORTANT:
+    // You said: “make sure that you wouldn't need to make a branches when the added user is branch_manager”
+    // So we REMOVE the branch creation block completely.
 
-    // 🔸 Commit transaction
     await conn.commit();
 
     res.status(201).json({
@@ -101,6 +94,7 @@ router.post("/", async (req, res) => {
       message: "User created successfully.",
       user_id: userId,
     });
+
   } catch (error) {
     console.error("❌ Error adding user:", error);
     await conn.rollback();
@@ -109,6 +103,7 @@ router.post("/", async (req, res) => {
     conn.release();
   }
 });
+
 // --------------------
 // Fetch all users
 // --------------------

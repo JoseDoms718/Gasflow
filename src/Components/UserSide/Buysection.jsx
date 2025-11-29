@@ -339,11 +339,13 @@ export default function Buysection() {
                   onChange={(e) => setProductType(e.target.value)}
                   className="px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg"
                 >
-                  <option value="regular">Regular</option>
-                  {product.discounted_price && product.discount_until && (
+                  {product.discounted_price && product.discount_until && new Date(product.discount_until) > new Date() ? (
                     <option value="discounted">Discounted</option>
+                  ) : (
+                    <option value="regular">Regular</option>
                   )}
-                  <option value="refill">Refill</option>
+
+                  {product.refill_price && product.refill_price > 0 && <option value="refill">Refill</option>}
                 </select>
 
                 <input

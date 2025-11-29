@@ -30,7 +30,7 @@ export default function Orderlist({ role: propRole }) {
   const [loading, setLoading] = useState(true);
   const [expandedOrder, setExpandedOrder] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  const [checkoutItem, setCheckoutItem] = useState(null); // For individual item checkout
+  const [checkoutItem, setCheckoutItem] = useState(null);
 
   const getUserCart = useCallback(() => {
     const token = localStorage.getItem("token");
@@ -45,7 +45,6 @@ export default function Orderlist({ role: propRole }) {
       const token = localStorage.getItem("token");
       let backendOrders = [];
 
-      // If we have a token, fetch backend orders. If not, skip but still show local cart.
       if (token) {
         try {
           const res = await axios.get(`${BASE_URL}/orders/my-orders`, {
@@ -64,7 +63,6 @@ export default function Orderlist({ role: propRole }) {
         }
       }
 
-      // Always include local cart (for guests, customers, and retailers)
       const localCart = getUserCart();
       if (localCart.length) {
         backendOrders = [
@@ -140,7 +138,6 @@ export default function Orderlist({ role: propRole }) {
   const handleOrderAction = async (order_id, newStatus, singleItem = null) => {
     const token = localStorage.getItem("token");
 
-    // Local cart actions (available to everyone, including retailers)
     if (order_id === "local_cart") {
       const currentCart = getUserCart();
       let itemsToCheckout = singleItem ? [singleItem] : currentCart;
@@ -164,7 +161,6 @@ export default function Orderlist({ role: propRole }) {
       }
     }
 
-    // For backend orders, require token
     if (!token) return toast.error("Please log in first.");
 
     try {
@@ -192,7 +188,6 @@ export default function Orderlist({ role: propRole }) {
 
     if (!cartItems.length) return toast.error("Your cart is empty.");
 
-    // Check stock before checkout
     for (let item of cartItems) {
       if (item.stock != null && item.quantity > item.stock) {
         return toast.error(
@@ -201,7 +196,6 @@ export default function Orderlist({ role: propRole }) {
       }
     }
 
-    // Require login to complete checkout; prompt for login if missing
     if (!token) {
       toast.error("Please log in to complete checkout.");
       return;
@@ -220,7 +214,6 @@ export default function Orderlist({ role: propRole }) {
       );
 
       if (res.data.success) {
-        // Remove checked-out items from local cart
         const currentCart = getUserCart();
         const remainingCart = currentCart.filter(
           (c) => !cartItems.some((ci) => ci.product_id === c.product_id)
@@ -288,10 +281,10 @@ export default function Orderlist({ role: propRole }) {
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
                 className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition text-sm sm:text-base ${activeTab === tab.key
-                  ? "bg-blue-600 text-white shadow"
-                  : isRetailer
-                    ? "bg-gray-100 text-gray-800 hover:bg-gray-200"
-                    : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+                    ? "bg-blue-600 text-white shadow"
+                    : isRetailer
+                      ? "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                      : "bg-gray-800 text-gray-300 hover:bg-gray-700"
                   }`}
               >
                 <Icon size={18} /> {tab.label}
@@ -300,18 +293,25 @@ export default function Orderlist({ role: propRole }) {
           })}
         </div>
 
-        <div className={`${isRetailer ? "bg-white border border-gray-200" : "bg-gray-800"} rounded-lg shadow-md p-4 sm:p-6 flex flex-col h-[60vh] sm:h-[70vh]`}>
+        <div
+          className={`${isRetailer ? "bg-white border border-gray-200" : "bg-gray-800"
+            } rounded-lg shadow-md flex flex-col h-[55vh] sm:h-[60vh] overflow-y-auto p-4 sm:p-6`}
+        >
           {filteredOrders.length ? (
-            <div className={`space-y-4 overflow-y-auto pr-2 flex-1 ${isRetailer ? "text-gray-800" : "text-white"}`}>
+            <div className={`space-y-4 pr-2 flex-1 ${isRetailer ? "text-gray-800" : "text-white"}`}>
               {filteredOrders.map((order) => {
                 const isExpanded = expandedOrder === order.order_id;
                 const firstItem = order.items?.[0];
 
                 return (
-                  <div key={order.order_id} className={`rounded-lg overflow-hidden ${isRetailer ? "bg-gray-50 border border-gray-200" : "bg-gray-700"}`}>
+                  <div
+                    key={order.order_id}
+                    className={`rounded-lg overflow-hidden ${isRetailer ? "bg-gray-50 border border-gray-200" : "bg-gray-700"}`}
+                  >
                     <button
                       onClick={() => toggleOrder(order.order_id)}
-                      className={`w-full flex justify-between items-center p-3 sm:p-4 text-left transition ${isRetailer ? "hover:bg-gray-100" : "hover:bg-gray-600"}`}
+                      className={`w-full flex justify-between items-center p-3 sm:p-4 text-left transition ${isRetailer ? "hover:bg-gray-100" : "hover:bg-gray-600"
+                        }`}
                     >
                       <div>
                         <h3 className={`font-semibold ${isRetailer ? "text-gray-900" : "text-white"} text-sm sm:text-base`}>
@@ -320,16 +320,25 @@ export default function Orderlist({ role: propRole }) {
                         <p className={`text-xs sm:text-sm ${isRetailer ? "text-gray-500" : "text-gray-300"}`}>Status: {order.status}</p>
                       </div>
                       <div className="flex items-center gap-2 sm:gap-3">
-                        <p className={`font-bold text-sm sm:text-lg ${isRetailer ? "text-blue-700" : "text-blue-400"}`}>₱{order.total_price?.toLocaleString()}</p>
+                        <p className={`font-bold text-sm sm:text-lg ${isRetailer ? "text-blue-700" : "text-blue-400"}`}>
+                          ₱{order.total_price?.toLocaleString()}
+                        </p>
                         {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                       </div>
                     </button>
 
                     {isExpanded && (
-                      <div className={`p-2 sm:p-4 border-t space-y-2 sm:space-y-3 ${isRetailer ? "border-gray-200 bg-gray-50" : "border-gray-600 bg-gray-800"}`}>
+                      <div
+                        className={`p-2 sm:p-4 border-t space-y-2 sm:space-y-3 ${isRetailer ? "border-gray-200 bg-gray-50" : "border-gray-600 bg-gray-800"
+                          }`}
+                      >
                         <div className="max-h-[250px] sm:max-h-[300px] overflow-y-auto space-y-2 sm:space-y-3 pr-1">
                           {order.items.map((item, index) => (
-                            <div key={index} className={`flex flex-col sm:flex-row items-start gap-2 sm:gap-4 rounded-md p-2 sm:p-3 ${isRetailer ? "bg-white border border-gray-200" : "bg-gray-700"}`}>
+                            <div
+                              key={index}
+                              className={`flex flex-col sm:flex-row items-start gap-2 sm:gap-4 rounded-md p-2 sm:p-3 ${isRetailer ? "bg-white border border-gray-200" : "bg-gray-700"
+                                }`}
+                            >
                               {item.image_url && (
                                 <div className="flex-shrink-0 w-full sm:w-24 h-24 rounded-md overflow-hidden border border-gray-300">
                                   <img src={item.image_url} alt={item.product_name} className="w-full h-full object-cover" />
@@ -388,7 +397,6 @@ export default function Orderlist({ role: propRole }) {
                           ))}
                         </div>
 
-                        {/* Cart buttons — available to everyone */}
                         {order.order_id === "local_cart" && (
                           <div className="flex flex-wrap justify-end gap-2 sm:gap-3 pt-2 sm:pt-3 border-t border-gray-600">
                             <button
@@ -406,7 +414,6 @@ export default function Orderlist({ role: propRole }) {
                           </div>
                         )}
 
-                        {/* Cancel button for pending */}
                         {activeTab === "current" && order.status === "pending" && (
                           <div className="flex justify-end pt-2 sm:pt-3 border-t border-gray-600">
                             <button
@@ -418,7 +425,6 @@ export default function Orderlist({ role: propRole }) {
                           </div>
                         )}
 
-                        {/* ✅ Confirm Delivery button */}
                         {activeTab === "current" && order.status === "on_delivery" && (
                           <div className="flex justify-end pt-2 sm:pt-3 border-t border-gray-600">
                             <button
@@ -436,7 +442,7 @@ export default function Orderlist({ role: propRole }) {
               })}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center text-center flex-1 text-gray-500">
+            <div className="flex flex-col items-center justify-center text-center flex-1 min-h-[50px]">
               <PackageOpen size={48} className="mb-4" />
               <h3 className="text-lg font-semibold">No Orders Found</h3>
               <p className="text-sm">Your {activeTab.replace("-", " ")} list is empty for now.</p>

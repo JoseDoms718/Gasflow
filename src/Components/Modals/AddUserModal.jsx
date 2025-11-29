@@ -1,8 +1,9 @@
-
 import React, { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import axios from "axios";
+
 const BASE_URL = import.meta.env.VITE_BASE_URL;
+
 export default function AddUserModal({
     showModal,
     setShowModal,
@@ -14,16 +15,17 @@ export default function AddUserModal({
     const [municipalities, setMunicipalities] = useState([]);
     const [barangays, setBarangays] = useState([]);
 
-    // Role display mapping
+    // Add the new role "branch"
     const roleNames = {
         users: "Users",
         business_owner: "Business Owner",
         branch_manager: "Branch Manager",
         retailer: "Retailer",
+        branch: "Branch",
         admin: "Admin",
     };
 
-    // Load all unique municipalities from the barangays table
+    // Load all unique municipalities
     useEffect(() => {
         const fetchMunicipalities = async () => {
             try {
@@ -39,7 +41,7 @@ export default function AddUserModal({
         fetchMunicipalities();
     }, []);
 
-    // Load barangays when a municipality is chosen
+    // Load barangays when municipality changes
     useEffect(() => {
         const fetchBarangays = async () => {
             if (!formData.municipality) {
@@ -50,7 +52,7 @@ export default function AddUserModal({
                 const res = await axios.get(`${BASE_URL}/barangays`, {
                     params: { municipality: formData.municipality },
                 });
-                setBarangays(res.data); // Expecting {id, name, municipality}
+                setBarangays(res.data);
             } catch (err) {
                 console.error("Error loading barangays:", err);
             }
@@ -59,6 +61,8 @@ export default function AddUserModal({
     }, [formData.municipality]);
 
     if (!showModal) return null;
+
+    const isBranchForm = formData.role === "branch";
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -70,79 +74,12 @@ export default function AddUserModal({
                     <X size={20} />
                 </button>
 
-                <h3 className="text-xl font-bold mb-4">Add User</h3>
+                <h3 className="text-xl font-bold mb-4">
+                    {isBranchForm ? "Add Branch" : "Add User"}
+                </h3>
 
                 <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-                    {/* Full Name */}
-                    <input
-                        type="text"
-                        name="name"
-                        placeholder="Full Name"
-                        value={formData.name}
-                        onChange={handleChange}
-                        required
-                        className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
-                    />
-
-                    {/* Municipality Dropdown */}
-                    <select
-                        name="municipality"
-                        value={formData.municipality}
-                        onChange={(e) => {
-                            handleChange(e);
-                            handleChange({ target: { name: "barangay_id", value: "" } });
-                        }}
-                        required
-                        className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
-                    >
-                        <option value="">Select Municipality</option>
-                        {municipalities.map((m, i) => (
-                            <option key={i} value={m}>
-                                {m}
-                            </option>
-                        ))}
-                    </select>
-
-                    {/* Barangay Dropdown */}
-                    <select
-                        name="barangay_id"
-                        value={formData.barangay_id}
-                        onChange={handleChange}
-                        required
-                        disabled={!formData.municipality}
-                        className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
-                    >
-                        <option value="">Select Barangay</option>
-                        {barangays.map((b) => (
-                            <option key={b.id} value={b.id}>
-                                {b.name}
-                            </option>
-                        ))}
-                    </select>
-
-                    {/* Email */}
-                    <input
-                        type="email"
-                        name="email"
-                        placeholder="Email"
-                        value={formData.email}
-                        onChange={handleChange}
-                        required
-                        className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
-                    />
-
-                    {/* Contact Number */}
-                    <input
-                        type="text"
-                        name="contact_number"
-                        value={formData.contact_number}
-                        onChange={handleChange}
-                        required
-                        placeholder="+639123456789"
-                        className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
-                    />
-
-                    {/* Role Dropdown with display names */}
+                    {/* Role Dropdown */}
                     <select
                         name="role"
                         value={formData.role}
@@ -151,38 +88,168 @@ export default function AddUserModal({
                         className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
                     >
                         <option value="">Select Role</option>
-                        {roles.map((r, i) => (
+                        {roles.concat("branch").map((r, i) => (
                             <option key={i} value={r}>
                                 {roleNames[r]}
                             </option>
                         ))}
                     </select>
 
-                    {/* Password */}
-                    <input
-                        type="password"
-                        name="password"
-                        placeholder="Password"
-                        value={formData.password}
-                        onChange={handleChange}
-                        required
-                        className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
-                    />
-                    <input
-                        type="password"
-                        name="confirmPassword"
-                        placeholder="Confirm Password"
-                        value={formData.confirmPassword}
-                        onChange={handleChange}
-                        required
-                        className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
-                    />
+                    {/* If ROLE = BRANCH → show branch form */}
+                    {isBranchForm ? (
+                        <>
+                            <input
+                                type="text"
+                                name="branch_name"
+                                placeholder="Branch Name"
+                                value={formData.branch_name || ""}
+                                onChange={handleChange}
+                                required
+                                className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
+                            />
+
+                            <input
+                                type="text"
+                                name="branch_contact"
+                                placeholder="Branch Contact"
+                                value={formData.branch_contact || ""}
+                                onChange={handleChange}
+                                required
+                                className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
+                            />
+
+                            <input
+                                type="file"
+                                name="branch_picture"
+                                accept="image/*"
+                                onChange={handleChange}
+                                className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
+                            />
+
+                            {/* Municipality */}
+                            <select
+                                name="municipality"
+                                value={formData.municipality}
+                                onChange={(e) => {
+                                    handleChange(e);
+                                    handleChange({ target: { name: "barangay_id", value: "" } });
+                                }}
+                                required
+                                className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
+                            >
+                                <option value="">Select Municipality</option>
+                                {municipalities.map((m, i) => (
+                                    <option key={i} value={m}>{m}</option>
+                                ))}
+                            </select>
+
+                            {/* Barangay */}
+                            <select
+                                name="barangay_id"
+                                value={formData.barangay_id}
+                                onChange={handleChange}
+                                required
+                                disabled={!formData.municipality}
+                                className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
+                            >
+                                <option value="">Select Barangay</option>
+                                {barangays.map((b) => (
+                                    <option key={b.id} value={b.id}>{b.name}</option>
+                                ))}
+                            </select>
+                        </>
+                    ) : (
+                        /* REGULAR USER FORM */
+                        <>
+                            <input
+                                type="text"
+                                name="name"
+                                placeholder="Full Name"
+                                value={formData.name}
+                                onChange={handleChange}
+                                required
+                                className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
+                            />
+
+                            {/* Municipality */}
+                            <select
+                                name="municipality"
+                                value={formData.municipality}
+                                onChange={(e) => {
+                                    handleChange(e);
+                                    handleChange({ target: { name: "barangay_id", value: "" } });
+                                }}
+                                required
+                                className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
+                            >
+                                <option value="">Select Municipality</option>
+                                {municipalities.map((m, i) => (
+                                    <option key={i} value={m}>{m}</option>
+                                ))}
+                            </select>
+
+                            {/* Barangay */}
+                            <select
+                                name="barangay_id"
+                                value={formData.barangay_id}
+                                onChange={handleChange}
+                                required
+                                disabled={!formData.municipality}
+                                className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
+                            >
+                                <option value="">Select Barangay</option>
+                                {barangays.map((b) => (
+                                    <option key={b.id} value={b.id}>{b.name}</option>
+                                ))}
+                            </select>
+
+                            <input
+                                type="email"
+                                name="email"
+                                placeholder="Email"
+                                value={formData.email}
+                                onChange={handleChange}
+                                required
+                                className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
+                            />
+
+                            <input
+                                type="text"
+                                name="contact_number"
+                                placeholder="+639123456789"
+                                value={formData.contact_number}
+                                onChange={handleChange}
+                                required
+                                className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
+                            />
+
+                            <input
+                                type="password"
+                                name="password"
+                                placeholder="Password"
+                                value={formData.password}
+                                onChange={handleChange}
+                                required
+                                className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
+                            />
+
+                            <input
+                                type="password"
+                                name="confirmPassword"
+                                placeholder="Confirm Password"
+                                value={formData.confirmPassword}
+                                onChange={handleChange}
+                                required
+                                className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
+                            />
+                        </>
+                    )}
 
                     <button
                         type="submit"
                         className="px-4 py-2 bg-green-500 rounded hover:bg-green-600 text-white font-medium"
                     >
-                        Save User
+                        Save
                     </button>
                 </form>
             </div>

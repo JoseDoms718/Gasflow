@@ -45,22 +45,32 @@ export default function Productslist() {
         ]);
 
         const formatProducts = (list) =>
-          list.map((p) => ({
-            ...p,
-            image_url: p.image_url
-              ? p.image_url.startsWith("http")
-                ? p.image_url
-                : `${BASE_URL}/products/images/${p.image_url}`
-              : null,
-            seller: {
-              name: p.seller_name || "-",
-              barangay: p.barangay || "-",
-              municipality: p.municipality || "-",
-            },
-          }));
+          list
+            .map((p) => ({
+              ...p,
+              image_url: p.image_url
+                ? p.image_url.startsWith("http")
+                  ? p.image_url
+                  : `${BASE_URL}/products/images/${p.image_url}`
+                : null,
+              seller: {
+                name: p.seller_name || "-",
+                barangay: p.barangay || "-",
+                municipality: p.municipality || "-",
+              },
+            }))
+            // Filter out products with zero stock
+            .filter((p) => p.stock > 0);
 
         setRegularProducts(formatProducts(regularRes.data));
-        setDiscountedProducts(formatProducts(discountedRes.data));
+
+        // For discounted, also filter out expired discounts
+        const now = new Date();
+        const validDiscounted = formatProducts(discountedRes.data).filter(
+          (p) =>
+            !p.discount_until || new Date(p.discount_until) > now
+        );
+        setDiscountedProducts(validDiscounted);
       } catch (err) {
         console.error("❌ Failed to fetch products:", err);
       }
@@ -167,7 +177,6 @@ export default function Productslist() {
               {item.product_description || "No description available."}
             </p>
 
-            {/* Seller + Address + Price Row */}
             <div className="flex items-start justify-between mt-auto mb-2">
               <div className="flex flex-col text-gray-500 text-sm">
                 <div className="flex items-center gap-1">
