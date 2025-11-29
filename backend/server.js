@@ -26,7 +26,7 @@ const retailerRoutes = require("./routes/retailerSignup");
 const damagedProductsRoute = require("./routes/damagedProducts");
 const chatRoutes = require("./routes/chat"); // renamed to match chat.js
 const servicesRoutes = require("./routes/services");
-
+const branchesRoutes = require("./routes/branch");
 /* -----------------------------------------
    ✅ Initialize App & Server
 ----------------------------------------- */
@@ -125,7 +125,7 @@ app.use("/banners", bannersRoutes);
 app.use("/retailerSignup", retailerRoutes);
 app.use("/damaged-products", damagedProductsRoute);
 app.use("/services", servicesRoutes);
-
+app.use("/branches", branchesRoutes);
 /* -----------------------------------------
    ✅ Chat Routes (no /api prefix)
 ----------------------------------------- */
