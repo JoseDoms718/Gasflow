@@ -35,7 +35,6 @@ export default function Contactsection({ currentUser }) {
     fetchBranches();
   }, []);
 
-  // Open inquiry modal
   const handleInquireClick = (branch) => {
     if (!currentUser?.authToken) {
       alert("Please login first!");
@@ -55,7 +54,6 @@ export default function Contactsection({ currentUser }) {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Submit inquiry
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -63,26 +61,18 @@ export default function Contactsection({ currentUser }) {
       alert("Please login first!");
       return;
     }
-    if (!selectedBranch) {
-      console.error("No branch selected");
-      return;
-    }
+    if (!selectedBranch) return console.error("No branch selected");
 
     try {
-      // 1️⃣ Create conversation: client = currentUser, manager = branch manager
       const convRes = await axios.post(
         `${BASE_URL}/chat/create`,
-        { receiverId: selectedBranch.user_id }, // backend expects this
+        { receiverId: selectedBranch.user_id },
         { headers: { Authorization: `Bearer ${currentUser.authToken}` } }
       );
 
       const conversation = convRes.data.conversation;
-      if (!conversation?.conversation_id) {
-        console.error("No conversation returned:", convRes.data);
-        return;
-      }
+      if (!conversation?.conversation_id) return console.error("No conversation returned:", convRes.data);
 
-      // 2️⃣ Send first message if provided
       if (formData.message.trim()) {
         await axios.post(
           `${BASE_URL}/chat/messages`,
@@ -94,11 +84,8 @@ export default function Contactsection({ currentUser }) {
         );
       }
 
-      // 3️⃣ Close modal & reset form
       setShowForm(false);
       setFormData({ name: currentUser.name, email: currentUser.email, message: "" });
-
-      // 4️⃣ Navigate to inquiry page
       navigate("/inquiry", { state: { conversationId: conversation.conversation_id } });
     } catch (err) {
       console.error("Failed to send inquiry:", err.response || err);
@@ -106,10 +93,10 @@ export default function Contactsection({ currentUser }) {
   };
 
   return (
-    <section className="bg-gray-100 py-16 mt-8 relative">
+    <section className="bg-gray-900 text-gray-100 py-16 mt-8 relative">
       <div className="container mx-auto px-6">
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">Contact Our Branches</h2>
-        <p className="text-gray-700 max-w-2xl mb-8">
+        <h2 className="text-3xl font-bold mb-2">Contact Our Branches</h2>
+        <p className="max-w-2xl mb-8 text-gray-300">
           Select your municipality to inquire directly with your local Solane LPG branch.
         </p>
 
@@ -148,12 +135,12 @@ export default function Contactsection({ currentUser }) {
                 </div>
 
                 <div className="p-4 flex flex-col flex-grow">
-                  <h3 className="text-lg font-bold text-gray-900 mb-1 truncate">{branch.branch_name}</h3>
-                  <p className="text-gray-700 text-sm mb-1 flex items-center gap-1">
+                  <h3 className="text-lg font-bold mb-1 truncate text-gray-900">{branch.branch_name}</h3>
+                  <p className="text-sm mb-1 flex items-center gap-1 text-gray-700">
                     <MapPin className="w-4 h-4 text-gray-600" />
                     {branch.barangay}, <span className="font-medium">{branch.municipality}</span>
                   </p>
-                  <p className="text-gray-600 text-sm flex items-center gap-1 mb-3">
+                  <p className="text-sm flex items-center gap-1 mb-3 text-gray-600">
                     <Phone className="w-4 h-4 text-gray-600" /> {branch.branch_contact}
                   </p>
                   <button
@@ -168,27 +155,27 @@ export default function Contactsection({ currentUser }) {
           ))}
         </Swiper>
 
-        <div className="custom-swiper-button-prev absolute -left-10 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full hover:bg-gray-100 transition">
-          <span className="text-gray-900 text-2xl font-bold">❮</span>
+        <div className="custom-swiper-button-prev absolute -left-10 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-gray-700 text-white shadow-md p-3 rounded-full hover:bg-gray-600 transition">
+          <span className="text-2xl font-bold">❮</span>
         </div>
-        <div className="custom-swiper-button-next absolute -right-10 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full hover:bg-gray-100 transition">
-          <span className="text-gray-900 text-2xl font-bold">❯</span>
+        <div className="custom-swiper-button-next absolute -right-10 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-gray-700 text-white shadow-md p-3 rounded-full hover:bg-gray-600 transition">
+          <span className="text-2xl font-bold">❯</span>
         </div>
       </div>
 
       {/* Modal Form */}
       {showForm && selectedBranch && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 px-4">
-          <div className="bg-white w-full max-w-2xl p-8 rounded-2xl shadow-lg relative text-gray-900">
+          <div className="bg-gray-800 w-full max-w-2xl p-8 rounded-2xl shadow-lg relative text-gray-100">
             <button
               onClick={() => setShowForm(false)}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-900 text-xl"
+              className="absolute top-4 right-4 hover:text-gray-300 text-xl"
             >
               ✕
             </button>
 
-            <h2 className="text-3xl font-bold mb-2 text-center">Contact {selectedBranch.branch_name}</h2>
-            <p className="text-gray-700 text-center mb-6">
+            <h2 className="text-3xl font-bold mb-2 text-center">{`Contact ${selectedBranch.branch_name}`}</h2>
+            <p className="text-center mb-6 text-gray-300">
               Fill out the form below to send your inquiry.
             </p>
 
@@ -200,7 +187,7 @@ export default function Contactsection({ currentUser }) {
                   name="name"
                   value={formData.name}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 rounded-lg text-gray-900"
+                  className="w-full px-3 py-2 rounded-lg bg-gray-700 text-gray-100 border border-gray-600"
                   required
                 />
               </div>
@@ -212,7 +199,7 @@ export default function Contactsection({ currentUser }) {
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 rounded-lg text-gray-900"
+                  className="w-full px-3 py-2 rounded-lg bg-gray-700 text-gray-100 border border-gray-600"
                   required
                 />
               </div>
@@ -224,7 +211,7 @@ export default function Contactsection({ currentUser }) {
                   value={formData.message}
                   onChange={handleInputChange}
                   rows={4}
-                  className="w-full px-3 py-2 rounded-lg text-gray-900"
+                  className="w-full px-3 py-2 rounded-lg bg-gray-700 text-gray-100 border border-gray-600"
                   required
                 />
               </div>
