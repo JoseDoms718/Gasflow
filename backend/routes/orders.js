@@ -67,18 +67,6 @@ function groupOrders(rows, itemFormatter) {
   return Object.values(grouped);
 }
 
-
-/* -------------------------------------------
-   Update order status helper
--------------------------------------------- */
-async function updateOrderStatus(orderId, status) {
-  const query =
-    status === "delivered"
-      ? "UPDATE orders SET status = ?, delivered_at = NOW() WHERE order_id = ?"
-      : "UPDATE orders SET status = ?, delivered_at = NULL WHERE order_id = ?";
-  await db.query(query, [status, orderId]);
-}
-
 /* -------------------------------------------
    Inventory adjust helper (supports transaction connection)
    delta can be positive (restore) or negative (deduct).
@@ -108,21 +96,6 @@ async function adjustInventory(product_id, delta, connection = null) {
       throw new Error("Inventory row not found for product and cannot decrement stock.");
     }
   }
-}
-
-/* -------------------------------------------
-   Fetch product info joined with inventory
-   (keeps previous behavior: returns inventory_stock & stock_threshold)
--------------------------------------------- */
-async function fetchProductWithInventory(product_id) {
-  const [rows] = await db.query(
-    `SELECT p.*, i.stock AS inventory_stock, i.stock_threshold
-     FROM products p
-     LEFT JOIN inventory i ON i.product_id = p.product_id
-     WHERE p.product_id = ?`,
-    [product_id]
-  );
-  return rows[0];
 }
 
 /* -------------------------------------------
@@ -1174,17 +1147,6 @@ async function adjustInventory(productId, delta, connection) {
 
   await q("UPDATE inventory SET stock = ? WHERE product_id = ?", [newStock, productId]);
 }
-
-
-async function updateOrderStatus(order_id, status, conn = null) {
-  const query = "UPDATE orders SET status = ? WHERE order_id = ?";
-  if (conn) {
-    await conn.query(query, [status, order_id]);
-  } else {
-    await db.query(query, [status, order_id]); 
-  }
-}
-
 /* -------------------------------------------------------------------
    EXPORT ROUTER
 ------------------------------------------------------------------- */

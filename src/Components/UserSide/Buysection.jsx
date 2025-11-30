@@ -32,11 +32,10 @@ export default function Buysection() {
   const [selectedBarangayId, setSelectedBarangayId] = useState("");
   const [loading, setLoading] = useState(true);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
-  const [remainingTime, setRemainingTime] = useState("");
 
   const municipalities = ["Boac", "Mogpog", "Gasan", "Buenavista", "Torrijos", "Santa Cruz"];
 
-  // ───────── SOCKET SETUP ─────────
+  // SOCKET SETUP
   useEffect(() => {
     const socket = io(SOCKET_URL);
 
@@ -60,7 +59,7 @@ export default function Buysection() {
     return () => socket.disconnect();
   }, [id]);
 
-  // ───────── FETCH PRODUCT ─────────
+  // FETCH PRODUCT
   useEffect(() => {
     const fetchProduct = async () => {
       try {
@@ -68,11 +67,9 @@ export default function Buysection() {
         const res = await axios.get(`${BASE_URL}/products/${id}`);
         const p = res.data;
 
-        // Auto-select discounted if currently active
-        const now = new Date();
-        if (p.discounted_price && p.discount_until && new Date(p.discount_until) > now) {
-          setProductType("discounted");
-        }
+        // Auto-select type
+        if (p.discounted_price) setProductType("discounted");
+        else setProductType("regular");
 
         setProduct(p);
       } catch (err) {
@@ -85,34 +82,7 @@ export default function Buysection() {
     fetchProduct();
   }, [id]);
 
-  // ───────── DISCOUNT TIMER ─────────
-  useEffect(() => {
-    if (!product?.discount_until) return;
-
-    const updateTimer = () => {
-      const now = new Date();
-      const end = new Date(product.discount_until);
-      const diff = end - now;
-
-      if (diff <= 0) {
-        setRemainingTime("Discount expired");
-        if (productType === "discounted") setProductType("regular");
-        return;
-      }
-
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-
-      setRemainingTime(`${hours}h ${minutes}m ${seconds}s`);
-    };
-
-    updateTimer();
-    const interval = setInterval(updateTimer, 1000);
-    return () => clearInterval(interval);
-  }, [product?.discount_until, productType]);
-
-  // ───────── FETCH USER ─────────
+  // FETCH USER
   useEffect(() => {
     const fetchUser = async () => {
       try {
@@ -122,6 +92,7 @@ export default function Buysection() {
         const res = await axios.get(`${BASE_URL}/auth/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
+
         const user = res.data?.user;
         if (!user) return;
 
@@ -150,7 +121,7 @@ export default function Buysection() {
     fetchUser();
   }, []);
 
-  // ───────── FETCH BARANGAYS ─────────
+  // FETCH BARANGAYS WHEN MUNICIPALITY CHANGES
   useEffect(() => {
     if (!municipality) {
       setBarangays([]);
@@ -174,7 +145,7 @@ export default function Buysection() {
     fetchBarangays();
   }, [municipality]);
 
-  // ───────── INPUT HANDLERS ─────────
+  // INPUT HANDLERS
   const handleNameChange = (e) => {
     const value = e.target.value;
     if (/^[A-Za-z\s]*$/.test(value)) setName(value);
@@ -200,7 +171,7 @@ export default function Buysection() {
     setQuantity(num);
   };
 
-  // ───────── CART HANDLERS ─────────
+  // CART HANDLERS
   const handleAddToCart = () => {
     if (!product) return;
     if (!quantity || quantity <= 0) {
@@ -300,8 +271,23 @@ export default function Buysection() {
       : productType === "discounted"
         ? product.discounted_price
         : product.price;
+
   const totalPrice = (quantity || 0) * pricePerUnit;
   const outOfStock = product.stock <= 0;
+
+  // Dropdown options
+  const getDropdownOptions = () => {
+    const options = [];
+
+    if (product.discounted_price) options.push({ value: "discounted", label: "Discounted" });
+    else options.push({ value: "regular", label: "Regular" });
+
+    // Refill always shown if refill_price exists
+    if (product.refill_price !== undefined && product.refill_price !== null)
+      options.push({ value: "refill", label: "Refill" });
+
+    return options;
+  };
 
   return (
     <section className="bg-gray-900 min-h-screen text-white px-6 pt-28 pb-20 flex items-center justify-center">
@@ -319,16 +305,13 @@ export default function Buysection() {
         <div className="bg-gray-800 p-10 rounded-2xl shadow-lg flex flex-col justify-between h-[600px] max-h-[85vh] overflow-y-auto">
           <div>
             <h2 className="text-3xl font-bold mb-2">{product.product_name}</h2>
-            <p className="text-gray-300 mb-4">{product.product_description || "No description available."}</p>
+            <p className="text-gray-300 mb-4">
+              {product.product_description || "No description available."}
+            </p>
             {outOfStock && <p className="text-red-400 font-semibold mb-4">⚠️ Out of stock.</p>}
 
-            {/* Price & Discount Timer */}
+            {/* Price */}
             <p className="text-2xl font-semibold mb-2">₱{totalPrice.toLocaleString()}.00</p>
-            {product.discounted_price && product.discount_until && (
-              <p className="text-green-400 font-semibold mb-4">
-                Discount ends in: {remainingTime}
-              </p>
-            )}
 
             {/* Type & Quantity */}
             <div className="flex flex-col mb-6 gap-2">
@@ -339,13 +322,11 @@ export default function Buysection() {
                   onChange={(e) => setProductType(e.target.value)}
                   className="px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg"
                 >
-                  {product.discounted_price && product.discount_until && new Date(product.discount_until) > new Date() ? (
-                    <option value="discounted">Discounted</option>
-                  ) : (
-                    <option value="regular">Regular</option>
-                  )}
-
-                  {product.refill_price && product.refill_price > 0 && <option value="refill">Refill</option>}
+                  {getDropdownOptions().map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
                 </select>
 
                 <input
@@ -420,7 +401,8 @@ export default function Buysection() {
               className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold ${isPlacingOrder || outOfStock ? "bg-blue-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
                 }`}
             >
-              <CreditCard size={20} /> {outOfStock ? "Out of Stock" : isPlacingOrder ? "Placing Order..." : "Checkout"}
+              <CreditCard size={20} />{" "}
+              {outOfStock ? "Out of Stock" : isPlacingOrder ? "Placing Order..." : "Checkout"}
             </button>
 
             <button

@@ -4,11 +4,14 @@ import { PlusCircle, Download } from "lucide-react";
 import * as XLSX from "xlsx-js-style";
 import { saveAs } from "file-saver";
 import { toast } from "react-hot-toast";
-const BASE_URL = import.meta.env.VITE_BASE_URL;
+
 import ProductTable from "./ProductTable";
 import AddProductModal from "./AddProductModal";
 import EditProductModal from "./EditProductModal";
 import RestockHistory from "./RestockHistory";
+import AdminProducts from "../Modals/AdminProducts";
+
+const BASE_URL = import.meta.env.VITE_BASE_URL;
 
 export default function Inventory() {
   const [user, setUser] = useState(null);
@@ -22,6 +25,7 @@ export default function Inventory() {
 
   const branches = ["All", "Boac", "Mogpog", "Gasan", "Buenavista", "Torrijos", "Santa Cruz"];
 
+  // Load user info
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
@@ -31,7 +35,10 @@ export default function Inventory() {
     }
   }, []);
 
+  // Fetch products
   useEffect(() => {
+    if (!user || !userRole) return;
+
     const fetchProducts = async () => {
       try {
         const token = localStorage.getItem("token");
@@ -46,31 +53,32 @@ export default function Inventory() {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        const formatted = res.data.map((p) => ({
+        const formatted = (res.data || []).map((p) => ({
           ...p,
           image_url: p.image_url
             ? p.image_url.startsWith("http")
               ? p.image_url
               : `${BASE_URL}/products/images/${p.image_url}`
             : null,
+          branch_id: p.branch_id,
         }));
 
         setProducts(formatted);
       } catch (err) {
         console.error("❌ Failed to fetch products:", err);
+        if (userRole !== "admin") toast.error("Failed to fetch products.");
       }
     };
 
-    if (user && userRole) fetchProducts();
+    fetchProducts();
   }, [user, userRole, selectedBranch, restockCounter]);
 
-  const handleRestockUpdate = () => {
-    setRestockCounter((prev) => prev + 1);
-  };
+  const handleRestockUpdate = () => setRestockCounter((prev) => prev + 1);
 
   const handleExportExcel = () => {
-    if (!products.length && !restockHistory.length)
+    if (!products.length && (!restockHistory.length || userRole === "admin")) {
       return toast.error("No data to export.");
+    }
 
     const timestamp = new Date();
     const formattedTimestamp = timestamp
@@ -80,27 +88,31 @@ export default function Inventory() {
 
     const wb = XLSX.utils.book_new();
 
-    const productData = products.map((p) => ({
-      "Product Name": p.product_name || "N/A",
-      "Price (₱)": p.price ? Number(p.price).toFixed(2) : "0.00",
-      Stock: p.stock || 0,
-      Branch: p.branch || "N/A",
-    }));
+    if (products.length) {
+      const productData = products.map((p) => ({
+        "Product Name": p.product_name || "N/A",
+        "Price (₱)": p.price ? Number(p.price).toFixed(2) : "0.00",
+        Stock: p.stock || 0,
+        Branch: p.branch || "N/A",
+      }));
 
-    const ws1 = XLSX.utils.json_to_sheet(productData);
-    XLSX.utils.book_append_sheet(wb, ws1, "Inventory");
+      const ws1 = XLSX.utils.json_to_sheet(productData);
+      XLSX.utils.book_append_sheet(wb, ws1, "Inventory");
+    }
 
-    const historyData = restockHistory.map((h) => ({
-      "Product Name": h.product_name,
-      Quantity: h.quantity,
-      "Previous Stock": h.previous_stock,
-      "New Stock": h.new_stock,
-      "Restocked By": h.restocked_by_name || h.restocked_by || "-",
-      Date: new Date(h.restocked_at || h.date).toLocaleString("en-PH"),
-    }));
+    if (restockHistory.length && userRole !== "admin") {
+      const historyData = restockHistory.map((h) => ({
+        "Product Name": h.product_name || "N/A",
+        Quantity: h.quantity,
+        "Previous Stock": h.previous_stock,
+        "New Stock": h.new_stock,
+        "Restocked By": h.restocked_by_name || h.restocked_by || "-",
+        Date: h.restocked_at ? new Date(h.restocked_at).toLocaleString("en-PH") : "-",
+      }));
 
-    const ws2 = XLSX.utils.json_to_sheet(historyData);
-    XLSX.utils.book_append_sheet(wb, ws2, "Restock History");
+      const ws2 = XLSX.utils.json_to_sheet(historyData);
+      XLSX.utils.book_append_sheet(wb, ws2, "Restock History");
+    }
 
     const fileName = `Inventory_and_Restock_${selectedBranch}_${formattedTimestamp}.xlsx`;
     const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
@@ -125,7 +137,9 @@ export default function Inventory() {
                   className="w-full sm:w-auto px-3 py-2 rounded bg-white border text-gray-900 shadow-sm hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   {branches.map((b) => (
-                    <option key={b} value={b}>{b}</option>
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
                   ))}
                 </select>
               ) : userRole === "retailer" ? (
@@ -143,7 +157,7 @@ export default function Inventory() {
                 <Download className="w-5 h-5" /> Export Excel
               </button>
 
-              {(userRole === "branch_manager" || userRole === "retailer") && (
+              {(userRole === "branch_manager" || userRole === "admin") && (
                 <button
                   onClick={() => setShowForm(true)}
                   className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow"
@@ -173,15 +187,20 @@ export default function Inventory() {
           </div>
         </div>
 
-        {/* RIGHT: RESTOCK HISTORY */}
+        {/* RIGHT PANEL */}
         <div className="w-[380px] overflow-hidden">
           <div className="overflow-y-auto h-full">
-            <RestockHistory
-              selectedBranch={selectedBranch}
-              refreshTrigger={restockCounter}
-              onHistoryFetched={setRestockHistory}
-              borderless
-            />
+            {userRole === "admin" ? (
+              <AdminProducts refreshTrigger={restockCounter} borderless />
+            ) : (
+              <RestockHistory
+                userRole={userRole} // Pass role properly
+                selectedBranch={selectedBranch}
+                refreshTrigger={restockCounter}
+                onHistoryFetched={setRestockHistory}
+                borderless
+              />
+            )}
           </div>
         </div>
       </div>

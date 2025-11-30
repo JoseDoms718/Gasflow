@@ -16,6 +16,7 @@ export default function ProductTable({
     const [restockQuantity, setRestockQuantity] = useState("");
     const [localProducts, setLocalProducts] = useState(products);
     const BASE_URL = import.meta.env.VITE_BASE_URL;
+
     useEffect(() => setLocalProducts(products), [products]);
 
     const formatPrice = (value) => {
@@ -40,7 +41,10 @@ export default function ProductTable({
         try {
             const res = await axios.put(
                 `${BASE_URL}/products/restock/${restockProduct.product_id}`,
-                { quantity },
+                {
+                    quantity,
+                    branch_id: restockProduct.branch_id // <-- send branch_id
+                },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
 
@@ -71,14 +75,14 @@ export default function ProductTable({
             toast.success(`✅ Restocked successfully! New stock: ${newStock}`);
         } catch (err) {
             console.error("❌ Error restocking product:", err);
-            toast.error("Failed to restock product.");
+            toast.error(err.response?.data?.error || "Failed to restock product.");
         }
     };
 
+
     return (
         <div className="flex-1 border border-gray-200 rounded-lg overflow-hidden flex flex-col">
-
-            {/* HEADER (sticky like RestockHistory) */}
+            {/* HEADER */}
             <div className="bg-gray-900 text-white sticky top-0 z-20 shadow-md">
                 <table className="min-w-full text-center text-sm">
                     <thead>
@@ -93,7 +97,7 @@ export default function ProductTable({
                 </table>
             </div>
 
-            {/* SCROLLABLE BODY (matches your RestockHistory behavior) */}
+            {/* SCROLLABLE BODY */}
             <div className="flex-1 overflow-y-auto max-h-[70vh]">
                 <table className="min-w-full text-gray-800 text-center text-sm border-collapse">
                     <tbody>
@@ -124,9 +128,7 @@ export default function ProductTable({
                                         )}
                                     </td>
 
-                                    <td className="px-4 py-3 font-semibold">
-                                        {p.product_name}
-                                    </td>
+                                    <td className="px-4 py-3 font-semibold">{p.product_name}</td>
 
                                     <td className="px-4 py-3">
                                         <span
@@ -146,14 +148,16 @@ export default function ProductTable({
                                     </td>
 
                                     <td className="px-4 py-3 flex justify-center gap-2">
-                                        <button
-                                            onClick={() => setSelectedProduct(p)}
-                                            className="px-4 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-                                        >
-                                            View
-                                        </button>
+                                        {/* Hide View button for branch_manager */}
+                                        {userRole !== "branch_manager" && (
+                                            <button
+                                                onClick={() => setSelectedProduct(p)}
+                                                className="px-4 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                            >
+                                                View
+                                            </button>
+                                        )}
 
-                                        {/* Hide Restock for admin */}
                                         {userRole !== "admin" && (
                                             <button
                                                 onClick={() => setRestockProduct(p)}
@@ -170,7 +174,7 @@ export default function ProductTable({
                 </table>
             </div>
 
-            {/* MODAL (only if non-admin) */}
+            {/* RESTOCK MODAL */}
             {restockProduct && userRole !== "admin" && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                     <div className="bg-gray-900 text-white p-6 rounded-lg shadow-lg w-full max-w-sm">

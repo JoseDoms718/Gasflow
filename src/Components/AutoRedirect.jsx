@@ -4,42 +4,49 @@ import { useNavigate, useLocation } from "react-router-dom";
 export default function AutoRedirect() {
     const navigate = useNavigate();
     const location = useLocation();
-    const [checking, setChecking] = useState(true); // ✅ loading gate
+    const [checking, setChecking] = useState(true);
 
     useEffect(() => {
         const token = localStorage.getItem("token");
         const user = localStorage.getItem("user");
 
-        if (token && user) {
-            const parsed = JSON.parse(user);
+        // ⛔ If NOT logged in → force redirect to landing page
+        const publicRoutes = ["/", "/login"];
+        const isPublic = publicRoutes.includes(location.pathname);
 
-            // ✅ Only redirect if user is on login or landing
-            if (location.pathname === "/" || location.pathname === "/login") {
-                switch (parsed.role) {
-                    case "users":
-                    case "business_owner":
-                        navigate("/homepage");
-                        break;
-                    case "branch_manager":
-                        navigate("/branchorder");
-                        break;
-                    case "retailer":
-                        navigate("/retailerorder");
-                        break;
-                    case "admin":
-                        navigate("/admininventory");
-                        break;
-                    default:
-                        break;
-                }
+        if (!token || !user) {
+            if (!isPublic) navigate("/", { replace: true });
+            setChecking(false);
+            return;
+        }
+
+        // ✅ User IS logged in
+        const parsed = JSON.parse(user);
+
+        // Redirect logged-in users away from public routes
+        if (isPublic) {
+            switch (parsed.role) {
+                case "users":
+                case "business_owner":
+                    navigate("/homepage", { replace: true });
+                    break;
+                case "branch_manager":
+                    navigate("/branchorder", { replace: true });
+                    break;
+                case "retailer":
+                    navigate("/retailerorder", { replace: true });
+                    break;
+                case "admin":
+                    navigate("/admininventory", { replace: true });
+                    break;
+                default:
+                    break;
             }
         }
 
-        setChecking(false); // ✅ done checking
+        setChecking(false);
     }, [navigate, location]);
 
-    // ✅ While checking, render nothing (prevents flicker)
     if (checking) return null;
-
     return null;
 }

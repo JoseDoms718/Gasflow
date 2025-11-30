@@ -22,7 +22,6 @@ const sendOtpRoute = require("./routes/sendotp");
 const businessOwnerRoutes = require("./routes/businessOwnerSignup");
 const branchInfoRoutes = require("./routes/branchinfo"); // branch routes
 const bannersRoutes = require("./routes/banners");
-const retailerRoutes = require("./routes/retailerSignup");
 const damagedProductsRoute = require("./routes/damagedProducts");
 const chatRoutes = require("./routes/chat"); // renamed to match chat.js
 const servicesRoutes = require("./routes/services");
@@ -122,7 +121,6 @@ app.use("/send-otp", sendOtpRoute);
 app.use("/business-owner", businessOwnerRoutes);
 app.use("/branchinfo", branchInfoRoutes);
 app.use("/banners", bannersRoutes);
-app.use("/retailerSignup", retailerRoutes);
 app.use("/damaged-products", damagedProductsRoute);
 app.use("/services", servicesRoutes);
 app.use("/branches", branchesRoutes);

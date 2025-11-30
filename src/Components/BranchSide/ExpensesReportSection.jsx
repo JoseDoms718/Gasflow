@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { PlusCircle, Box } from "lucide-react";
 import axios from "axios";
 import DamageModal from "../Modals/DamageModal";
@@ -45,11 +45,13 @@ export default function ExpensesReportSection({
                 setProducts(
                     data.map((p) => ({
                         ...p,
+                        product_name: p.product_name || p.name,
                         image_url: p.image_url?.startsWith("http")
                             ? p.image_url
                             : `${BASE_URL}/products/images/${p.image_url}`,
                     }))
                 );
+
             } catch (err) {
                 console.error("❌ Failed to fetch products:", err);
                 toast.error("Failed to fetch products");
@@ -65,6 +67,7 @@ export default function ExpensesReportSection({
             const { data } = await axios.get(`${BASE_URL}/damaged-products/my-damaged-products`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
+
             const list = data.data || [];
 
             const formattedDamaged = list.map((dp, idx) => ({
@@ -115,7 +118,6 @@ export default function ExpensesReportSection({
         }
     };
 
-    // Helper to update parent
     const updateDamagedParent = (list) => {
         if (onDamagedTotalChange) {
             const total = list.reduce((sum, dp) => {
@@ -127,30 +129,12 @@ export default function ExpensesReportSection({
         }
     };
 
-    // Merge damaged products into expenses table
-    const combinedExpenses = useMemo(() => {
-        const mappedDamaged = damagedProducts.map((dp) => {
-            const unitPrice =
-                dp.product_type === "discounted" ? Number(dp.discounted_price) || 0 : Number(dp.price) || 0;
-            return {
-                id: `damage-${dp.damage_id}`,
-                name: `Damaged: ${dp.product_name}`,
-                amount: unitPrice * (dp.quantity || 0),
-                date: dp.date || "N/A",
-                branch: dp.branch,
-                addedBy: dp.addedBy,
-                isDamaged: true,
-            };
-        });
-        return [...filteredExpenses, ...mappedDamaged];
-    }, [filteredExpenses, damagedProducts]);
-
     return (
         <div className="flex gap-6 w-full h-[700px] overflow-hidden">
             {/* LEFT SIDE – EXPENSES TABLE */}
-            <div className="flex-1 flex flex-col overflow-hidden rounded-lg">
-                <div className="flex-1 overflow-hidden border border-gray-300 rounded-lg">
-                    <div className="overflow-y-auto min-h-[400px]">
+            <div className="flex-1 flex flex-col overflow-hidden rounded-lg border border-gray-300">
+                <div className="flex flex-col flex-1 overflow-hidden">
+                    <div className="flex-1 overflow-y-auto">
                         <table className="min-w-full text-sm text-gray-800 text-center">
                             <thead className="bg-gray-900 text-white sticky top-0 z-10">
                                 <tr>
@@ -161,19 +145,15 @@ export default function ExpensesReportSection({
                                 </tr>
                             </thead>
                             <tbody>
-                                {combinedExpenses.length === 0 ? (
+                                {filteredExpenses.length === 0 ? (
                                     <tr>
                                         <td colSpan={userRole === "admin" ? 4 : 3} className="py-20 text-gray-500">
                                             No expense data available.
                                         </td>
                                     </tr>
                                 ) : (
-                                    combinedExpenses.map((e) => (
-                                        <tr
-                                            key={e.id}
-                                            className={`border-b hover:bg-gray-50 text-center ${e.isDamaged ? "bg-yellow-50" : ""
-                                                }`}
-                                        >
+                                    filteredExpenses.map((e) => (
+                                        <tr key={e.id} className="border-b hover:bg-gray-50 text-center">
                                             {userRole === "admin" && <td className="px-4 py-3">{e.branch || "N/A"}</td>}
                                             <td className="px-4 py-3 font-semibold">{e.name || "N/A"}</td>
                                             <td className="px-4 py-3 text-red-600 font-medium">
@@ -189,19 +169,23 @@ export default function ExpensesReportSection({
                 </div>
             </div>
 
-            {/* RIGHT SIDE – PRODUCTS AND DAMAGED LIST */}
+            {/* RIGHT SIDE – PRODUCTS */}
+            {/* RIGHT SIDE – PRODUCTS */}
             <div className="w-[500px] flex flex-col gap-6 overflow-hidden">
                 {userRole !== "admin" && (
-                    <div className="flex-1 overflow-hidden border border-gray-300 rounded-lg">
-                        <div className="overflow-y-auto min-h-[200px]">
-                            <table className="min-w-full text-sm text-center">
+                    <div className="flex-1 flex flex-col border border-gray-300 rounded-lg overflow-hidden">
+
+                        {/* SCROLLABLE TABLE AREA */}
+                        <div className="flex-1 overflow-y-auto">
+                            <table className="min-w-full text-sm text-center table-fixed">
                                 <thead className="bg-gray-900 text-white sticky top-0 z-10">
                                     <tr>
-                                        <th className="px-4 py-3">Product</th>
-                                        <th className="px-4 py-3">Current Stock</th>
-                                        <th className="px-4 py-3">Action</th>
+                                        <th className="px-4 py-3 w-[60%] text-center">Product</th>
+                                        <th className="px-4 py-3 w-[20%] text-center">Stock</th>
+                                        <th className="px-4 py-3 w-[20%] text-center">Action</th>
                                     </tr>
                                 </thead>
+
                                 <tbody>
                                     {products.length === 0 ? (
                                         <tr>
@@ -211,26 +195,33 @@ export default function ExpensesReportSection({
                                         </tr>
                                     ) : (
                                         products.map((p) => (
-                                            <tr key={p.product_id || p.id} className="border-b hover:bg-gray-50">
-                                                <td className="px-4 py-3 flex justify-center items-center gap-3">
-                                                    {p.image_url ? (
-                                                        <img
-                                                            src={p.image_url}
-                                                            alt={p.name}
-                                                            className="w-10 h-10 object-cover rounded"
-                                                        />
-                                                    ) : (
-                                                        <Box className="w-10 h-10 text-gray-400" />
-                                                    )}
-                                                    <span className="font-medium">{p.name || "N/A"}</span>
-                                                </td>
-                                                <td className="px-4 py-3 font-medium">{p.stock ?? 0}</td>
+                                            <tr
+                                                key={p.product_id || p.id}
+                                                className="border-b hover:bg-gray-50 h-[70px]"
+                                            >
                                                 <td className="px-4 py-3">
+                                                    <div className="flex items-center gap-3 max-w-[260px] mx-auto text-left">
+                                                        {p.image_url ? (
+                                                            <img
+                                                                src={p.image_url}
+                                                                alt={p.product_name || "N/A"}
+                                                                className="w-10 h-10 object-cover rounded flex-shrink-0"
+                                                            />
+                                                        ) : (
+                                                            <Box className="w-10 h-10 text-gray-400 flex-shrink-0" />
+                                                        )}
+                                                        <span className="font-medium break-words whitespace-normal leading-tight flex-1 text-left">
+                                                            {p.product_name || "N/A"}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 font-medium text-center">{p.stock ?? 0}</td>
+                                                <td className="px-4 py-3 text-center">
                                                     <button
-                                                        className="px-4 py-2 bg-blue-600 text-white rounded flex items-center gap-2 mx-auto"
+                                                        className="px-3 py-2 bg-blue-600 text-white rounded text-xs flex items-center gap-1 mx-auto"
                                                         onClick={() => openDamageModal(p)}
                                                     >
-                                                        <PlusCircle className="w-5 h-5" /> Damage
+                                                        <PlusCircle className="w-4 h-4" /> Damage
                                                     </button>
                                                 </td>
                                             </tr>
@@ -241,17 +232,53 @@ export default function ExpensesReportSection({
                         </div>
                     </div>
                 )}
-
-                {/* Damaged products modal/list */}
                 <DamagedProductsListModal damagedProducts={damagedProducts} />
             </div>
 
+            {/* Damage Modal */}
             <DamageModal
                 product={selectedProduct}
                 isOpen={showDamageModal}
                 onClose={() => setShowDamageModal(false)}
                 onSubmit={handleDamageSubmit}
             />
+
+            {/* Add Expense Modal */}
+            {showExpenseModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+                    <div className="bg-white rounded-lg p-6 w-[400px]">
+                        <h2 className="text-xl font-bold mb-4">Add Expense</h2>
+                        <input
+                            type="text"
+                            placeholder="Expense Name"
+                            value={newExpense.name}
+                            onChange={(e) => setNewExpense({ ...newExpense, name: e.target.value })}
+                            className="border p-2 w-full mb-4 rounded"
+                        />
+                        <input
+                            type="number"
+                            placeholder="Amount"
+                            value={newExpense.amount}
+                            onChange={(e) => setNewExpense({ ...newExpense, amount: e.target.value })}
+                            className="border p-2 w-full mb-4 rounded"
+                        />
+                        <div className="flex justify-end gap-2">
+                            <button
+                                onClick={() => setShowExpenseModal(false)}
+                                className="px-4 py-2 bg-gray-300 rounded"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleAddExpense}
+                                className="px-4 py-2 bg-blue-600 text-white rounded"
+                            >
+                                Add
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
