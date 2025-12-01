@@ -59,16 +59,14 @@ export default function Productslist() {
                 municipality: p.municipality || "-",
               },
             }))
-            // Filter out products with zero stock
             .filter((p) => p.stock > 0);
 
         setRegularProducts(formatProducts(regularRes.data));
 
-        // For discounted, also filter out expired discounts
+        // Keep discounted products with either null discount_until or still active
         const now = new Date();
         const validDiscounted = formatProducts(discountedRes.data).filter(
-          (p) =>
-            !p.discount_until || new Date(p.discount_until) > now
+          (p) => !p.discount_until || new Date(p.discount_until) > now
         );
         setDiscountedProducts(validDiscounted);
       } catch (err) {
@@ -115,21 +113,18 @@ export default function Productslist() {
     selectedMunicipality ? p.seller.municipality === selectedMunicipality : true
   );
 
-  // Example in Productslist.js
   const handleBuyClick = (product) => {
     const token = localStorage.getItem("token");
     if (!token) {
-      navigate("/login"); // redirect to login if not logged in
+      navigate("/login");
       return;
     }
 
-    // Navigate to Buysection page with product_id and branch_id
     navigate(`/buy/${product.product_id}?branch_id=${product.branch_id}`);
   };
 
-
-
-  const addPlaceholders = (list, min = 6) => {
+  // ───────── PLACEHOLDER LOGIC ─────────
+  const addPlaceholders = (list, min = 3) => {
     const result = [...list];
     while (result.length < min) {
       result.push({ placeholder: true });
@@ -137,8 +132,8 @@ export default function Productslist() {
     return result;
   };
 
-  const displayDiscounted = addPlaceholders(filteredDiscounted);
-  const displayRegular = addPlaceholders(filteredRegular);
+  const displayDiscounted = addPlaceholders(filteredDiscounted, 3);
+  const displayRegular = addPlaceholders(filteredRegular, 3);
 
   const renderCard = (item) => (
     <div className="bg-white rounded-lg shadow-md hover:shadow-xl transition duration-300 border border-gray-200 overflow-hidden flex flex-col h-[450px]">
@@ -277,9 +272,9 @@ export default function Productslist() {
             spaceBetween={20}
             slidesPerView={1}
             breakpoints={{
-              640: { slidesPerView: 1 },
-              768: { slidesPerView: 2 },
-              1024: { slidesPerView: 3 },
+              640: { slidesPerView: Math.min(displayDiscounted.length, 1) },
+              768: { slidesPerView: Math.min(displayDiscounted.length, 2) },
+              1024: { slidesPerView: Math.min(displayDiscounted.length, 3) },
             }}
           >
             {displayDiscounted.map((item, index) => (
@@ -315,9 +310,9 @@ export default function Productslist() {
             spaceBetween={20}
             slidesPerView={1}
             breakpoints={{
-              640: { slidesPerView: 1 },
-              768: { slidesPerView: 2 },
-              1024: { slidesPerView: 3 },
+              640: { slidesPerView: Math.min(displayRegular.length, 1) },
+              768: { slidesPerView: Math.min(displayRegular.length, 2) },
+              1024: { slidesPerView: Math.min(displayRegular.length, 3) },
             }}
           >
             {displayRegular.map((item, index) => (

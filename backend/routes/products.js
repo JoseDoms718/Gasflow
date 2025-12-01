@@ -111,6 +111,89 @@ router.get("/my-products", authenticateToken, async (req, res) => {
 });
 
 // ==============================
+// Add Product (Branch)
+// ==============================
+router.post("/branch/add-product", authenticateToken, async (req, res) => {
+  try {
+    const user = req.user;
+
+    // ✅ Only branch managers allowed
+    if (user.role !== "branch_manager") {
+      return res.status(403).json({ error: "Access denied: Only branch managers can add branch products." });
+    }
+
+    const { product_id, stock, stock_threshold } = req.body;
+
+    // ✅ Validate request body
+    if (!product_id) {
+      return res.status(400).json({ error: "Missing product_id in request body." });
+    }
+    if (stock == null) {
+      return res.status(400).json({ error: "Missing stock value in request body." });
+    }
+    if (stock_threshold == null) {
+      return res.status(400).json({ error: "Missing stock_threshold value in request body." });
+    }
+
+    // ✅ Ensure branch manager has branches
+    if (!user.branches || user.branches.length === 0) {
+      return res.status(400).json({ error: "You do not have any assigned branches." });
+    }
+
+    const branch_id = user.branches[0];
+
+    // ✅ Check if product exists in inventory
+    const [existing] = await db.execute(
+      "SELECT * FROM inventory WHERE branch_id = ? AND product_id = ?",
+      [branch_id, product_id]
+    );
+
+    if (existing.length > 0) {
+      return res.status(400).json({ error: `Product (ID: ${product_id}) already exists in branch inventory.` });
+    }
+
+    // ✅ Ensure product exists in products table
+    const [productExists] = await db.execute(
+      "SELECT * FROM products WHERE product_id = ?",
+      [product_id]
+    );
+
+    if (productExists.length === 0) {
+      return res.status(400).json({ error: `Product with ID ${product_id} does not exist.` });
+    }
+
+    // ✅ Ensure stock and stock_threshold are numbers
+    const stockNum = Number(stock);
+    const thresholdNum = Number(stock_threshold);
+
+    if (isNaN(stockNum) || stockNum < 0) {
+      return res.status(400).json({ error: "Stock must be a non-negative number." });
+    }
+
+    if (isNaN(thresholdNum) || thresholdNum < 0) {
+      return res.status(400).json({ error: "Stock threshold must be a non-negative number." });
+    }
+
+    // ✅ Insert product into branch inventory
+    await db.execute(
+      "INSERT INTO inventory (product_id, branch_id, stock, stock_threshold) VALUES (?, ?, ?, ?)",
+      [product_id, branch_id, stockNum, thresholdNum]
+    );
+
+    res.status(200).json({ message: "✅ Product successfully added to branch inventory!" });
+
+  } catch (err) {
+    console.error("❌ Error adding branch product:", err);
+
+    if (err.code === "ER_NO_REFERENCED_ROW_2") {
+      return res.status(400).json({ error: "Invalid product_id: This product does not exist." });
+    }
+
+    res.status(500).json({ error: "Internal Server Error: Failed to add product to branch inventory." });
+  }
+});
+
+// ==============================
 // Add Product
 // ==============================
 router.post("/admin/add-product", authenticateToken, authorizeAdmin, upload.single("image"), async (req, res) => {
@@ -303,18 +386,10 @@ router.put("/update/:id", authenticateToken, upload.single("image"), async (req,
     if (validationError) return res.status(400).json({ error: validationError });
 
     // Fetch existing product
-    let existingSql = `
-      SELECT p.*, i.branch_id
-      FROM products p
-      JOIN inventory i ON i.product_id = p.product_id
-      WHERE p.product_id = ?
-    `;
-    const params = [id];
-    if (req.user.role !== "admin") existingSql += " AND i.branch_id IN (SELECT branch_id FROM branches WHERE user_id = ?)";
-    if (req.user.role !== "admin") params.push(req.user.id);
-
-    const [existing] = await db.query(existingSql, params);
-    if (existing.length === 0) return res.status(404).json({ error: "Product not found or not accessible." });
+    const [existing] = await db.query("SELECT * FROM products WHERE product_id = ?", [id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ error: "Product not found." });
+    }
 
     const oldImage = existing[0].image_url;
 
@@ -346,7 +421,7 @@ router.put("/update/:id", authenticateToken, upload.single("image"), async (req,
       await db.query(sql, values);
     }
 
-    // --------- Update Inventory ONLY if explicitly provided ---------
+    // --------- Update Inventory ONLY if provided ---------
     const inventoryUpdates = [];
     const inventoryValues = [];
 
@@ -377,6 +452,7 @@ router.put("/update/:id", authenticateToken, upload.single("image"), async (req,
     res.status(500).json({ error: "Failed to update product.", details: err.sqlMessage || err.message });
   }
 });
+
 
 // ==============================
 // Restock Product

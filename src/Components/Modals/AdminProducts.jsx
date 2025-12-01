@@ -3,7 +3,7 @@ import { Package, Eye, Pencil, Check, Camera } from "lucide-react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 
-export default function AdminProducts({ refreshTrigger, borderless = true, selectedBranch = "All" }) {
+export default function AdminProducts({ refreshTrigger, borderless = true }) {
     const [products, setProducts] = useState([]);
     const [viewProduct, setViewProduct] = useState(null);
     const [editedProduct, setEditedProduct] = useState({});
@@ -12,26 +12,16 @@ export default function AdminProducts({ refreshTrigger, borderless = true, selec
     const [hasEdits, setHasEdits] = useState(false);
     const BASE_URL = import.meta.env.VITE_BASE_URL;
 
-    // Fetch products
+    // Fetch products from universal endpoint
     const fetchProducts = async () => {
         try {
             const token = localStorage.getItem("token");
             if (!token) return toast.error("No token found! Please login.");
 
-            let endpoint = `${BASE_URL}/products/all-products`;
-            if (selectedBranch && selectedBranch !== "All") {
-                endpoint += `?branch=${encodeURIComponent(selectedBranch)}`;
-            }
-
+            const endpoint = `${BASE_URL}/products/universal`;
             const res = await axios.get(endpoint, { headers: { Authorization: `Bearer ${token}` } });
 
-            if (!res.data?.success) {
-                toast.error(res.data?.error || "Failed to fetch products.");
-                setProducts([]);
-                return;
-            }
-
-            const formatted = (res.data.data || []).map((p) => ({
+            const formatted = (res.data || []).map((p) => ({
                 ...p,
                 image_url: p.image_url
                     ? p.image_url.startsWith("http")
@@ -55,13 +45,13 @@ export default function AdminProducts({ refreshTrigger, borderless = true, selec
 
     useEffect(() => {
         fetchProducts();
-    }, [refreshTrigger, selectedBranch]);
+    }, [refreshTrigger]);
 
     const formatPrice = (value) => (isNaN(Number(value)) ? "0.00" : Number(value).toFixed(2));
 
     const openEditModal = (product) => {
         setViewProduct(product);
-        setEditedProduct({ ...product }); // clone product
+        setEditedProduct({ ...product });
         setEditedImage(null);
         setIsEditing({});
         setHasEdits(false);
@@ -96,14 +86,12 @@ export default function AdminProducts({ refreshTrigger, borderless = true, selec
     const handleSaveEdits = async () => {
         if (!editedProduct) return;
 
-        // Always include mandatory fields
         const payload = {
             product_name: editedProduct.product_name,
             product_type: editedProduct.product_type,
             price: editedProduct.price,
         };
 
-        // Conditionally include optional fields
         if (editedProduct.product_type === "regular" && editedProduct.refill_price !== undefined) {
             payload.refill_price = editedProduct.refill_price;
         }
@@ -113,7 +101,6 @@ export default function AdminProducts({ refreshTrigger, borderless = true, selec
             if (editedProduct.discount_until) payload.discount_until = editedProduct.discount_until;
         }
 
-        // Only append image if changed
         const formData = new FormData();
         Object.entries(payload).forEach(([key, value]) => {
             if (value !== null && value !== undefined) formData.append(key, value.toString());
@@ -126,7 +113,6 @@ export default function AdminProducts({ refreshTrigger, borderless = true, selec
                 headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" },
             });
 
-            // Update frontend
             setProducts((prev) =>
                 prev.map((p) =>
                     p.product_id === editedProduct.product_id
@@ -142,7 +128,6 @@ export default function AdminProducts({ refreshTrigger, borderless = true, selec
             toast.error("Failed to update product.");
         }
     };
-
 
     return (
         <div className="flex-1 border border-gray-200 rounded-lg overflow-hidden flex flex-col">
