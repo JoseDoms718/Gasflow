@@ -70,12 +70,16 @@ export default function Productsection() {
 
   const handleBuyClick = (product) => {
     const token = localStorage.getItem("token");
-    if (token) {
-      navigate(`/buy/${product.product_id}`);
-    } else {
+    if (!token) {
       navigate("/login");
+      return;
     }
+
+    // Navigate to buy page, include branch_id if it exists
+    const branchParam = product.branch_id ? `?branch_id=${product.branch_id}` : "";
+    navigate(`/buy/${product.product_id}${branchParam}`);
   };
+
 
   if (loading) {
     return (
@@ -151,7 +155,7 @@ export default function Productsection() {
               </div>
 
               <div className="text-right">
-                {p.product_type === "discounted" && p.discounted_price ? (
+                {p.discounted_price ? (
                   <>
                     <p className="line-through text-gray-500 text-sm">
                       ₱{formatPrice(p.price)}
@@ -159,6 +163,11 @@ export default function Productsection() {
                     <p className="text-green-600 font-bold text-base">
                       ₱{formatPrice(p.discounted_price)}
                     </p>
+                    {p.discount_until && (
+                      <p className="text-red-500 text-xs mt-1">
+                        Ends in: {new Date(p.discount_until).toLocaleString()}
+                      </p>
+                    )}
                   </>
                 ) : (
                   <p className="text-blue-600 font-bold text-base">
