@@ -185,84 +185,57 @@ router.get("/universal", authenticateToken, async (req, res) => {
 // ==============================
 // Public Products
 // ==============================
+// Public products (filtered by type)
 router.get("/public/products", async (req, res) => {
   const { type } = req.query;
-  let whereClause = "WHERE p.is_active = 1";
-  
-  if (type === "regular" || type === "discounted") {
-    whereClause += ` AND p.product_type = ${db.escape(type)}`;
-  }
 
   try {
+    let whereClause = "WHERE p.is_active = 1 AND i.branch_id IS NOT NULL";
+
+    if (type === "regular" || type === "discounted") {
+      whereClause += ` AND p.product_type = ${db.escape(type)}`;
+    }
+
     const sql = `
       SELECT 
-        p.*, 
-        i.stock, 
-        i.stock_threshold, 
-        b.branch_id, 
+        p.product_id,
+        p.product_name,
+        p.product_description,
+        p.image_url,
+        p.price,
+        p.discounted_price,
+        p.refill_price,
+        p.discount_until,
+        i.stock,
+        i.stock_threshold,
+        i.branch_id,
         b.branch_name AS seller_name,
-        br.municipality AS municipality, 
-        br.barangay_name AS barangay
+        br.barangay_name AS barangay,
+        br.municipality AS municipality
       FROM products p
       LEFT JOIN inventory i ON i.product_id = p.product_id
-      LEFT JOIN branches b ON i.branch_id = b.branch_id
-      LEFT JOIN barangays br ON b.barangay_id = br.barangay_id
+      INNER JOIN branches b ON b.branch_id = i.branch_id
+      INNER JOIN barangays br ON br.barangay_id = b.barangay_id
       ${whereClause}
       ORDER BY p.product_id DESC
     `;
 
     const [rows] = await db.query(sql);
-    res.json(rows.map(formatProductImage));
+
+    // Format image URLs
+    const formatted = rows.map((row) => ({
+      ...row,
+      image_url: row.image_url
+        ? row.image_url.startsWith("http")
+          ? row.image_url
+          : `${process.env.BASE_URL || ""}/products/images/${row.image_url}`
+        : null,
+    }));
+
+    res.json(formatted);
   } catch (err) {
     console.error("❌ Failed to fetch public products:", err);
     res.status(500).json({ error: "Failed to fetch products" });
-  }
-});
-
-// All products
-router.get("/all-products", authenticateToken, async (req, res) => {
-  try {
-    const [rows] = await db.query(`
-      SELECT 
-        p.product_id,
-        p.image_url,
-        p.product_type,
-        p.product_name,
-        p.product_description,
-        p.price,
-        p.discounted_price,
-        p.refill_price,
-        p.discount_until,
-        p.is_active,
-        p.created_at AS product_created_at,
-        i.inventory_id,
-        i.branch_id,
-        i.stock,
-        i.stock_threshold,
-        i.updated_at AS inventory_updated_at,
-        b.branch_name,
-        b.branch_contact,
-        b.branch_picture,
-        br.barangay_name,
-        br.municipality
-      FROM products p
-      LEFT JOIN inventory i ON i.product_id = p.product_id
-      LEFT JOIN branches b ON b.branch_id = i.branch_id
-      LEFT JOIN barangays br ON br.barangay_id = b.barangay_id
-      WHERE p.is_active = 1
-      ORDER BY p.product_name ASC
-    `);
-
-    res.json({
-      success: true,
-      data: rows,
-    });
-  } catch (err) {
-    console.error("❌ Failed to fetch all products:", err);
-    res.status(500).json({
-      success: false,
-      error: "Failed to fetch products",
-    });
   }
 });
 
@@ -525,40 +498,46 @@ router.get("/my-products-restock", authenticateToken, async (req, res) => {
 // ==============================
 // Single Product
 // ==============================
+// Example API: GET /products/:product_id?branch_id=XYZ
 router.get("/:id", async (req, res) => {
   try {
     const productId = req.params.id;
+    const branchId = req.query.branch_id; // branch is required
+
+    if (!branchId) {
+      return res.status(400).json({ error: "branch_id is required" });
+    }
 
     const sql = `
       SELECT 
-        p.*, 
-        i.stock, 
-        i.stock_threshold, 
-        b.branch_id, 
+        p.*,
+        i.stock,
+        i.stock_threshold,
+        i.branch_id,
         b.branch_name,
-        br.municipality, 
+        br.municipality,
         br.barangay_name
       FROM inventory i
-      LEFT JOIN products p ON i.product_id = p.product_id
-      LEFT JOIN branches b ON i.branch_id = b.branch_id
-      LEFT JOIN barangays br ON b.barangay_id = br.barangay_id
-      WHERE i.product_id = ?
+      JOIN products p ON i.product_id = p.product_id
+      JOIN branches b ON i.branch_id = b.branch_id
+      JOIN barangays br ON b.barangay_id = br.barangay_id
+      WHERE i.branch_id = ? AND i.product_id = ?
       LIMIT 1
     `;
 
-    const [results] = await db.query(sql, [productId]);
+    const [results] = await db.query(sql, [branchId, productId]);
 
-    if (results.length === 0) {
-      return res.status(404).json({ error: "Product not found in inventory" });
+    if (!results.length) {
+      return res.status(404).json({ error: "Product not found in this branch inventory" });
     }
 
-    // Assuming formatProductImage handles undefined or null values
     res.status(200).json(formatProductImage(results[0]));
   } catch (err) {
     console.error("❌ Error fetching product:", err);
     res.status(500).json({ error: "Failed to fetch product" });
   }
 });
+
 
 // ==============================
 // Serve Images

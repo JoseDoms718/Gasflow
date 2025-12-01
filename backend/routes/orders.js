@@ -69,9 +69,6 @@ function groupOrders(rows, itemFormatter) {
 
 /* -------------------------------------------
    Inventory adjust helper (supports transaction connection)
-   delta can be positive (restore) or negative (deduct).
-   If no inventory row exists and delta > 0 -> INSERT.
-   If no row exists and delta < 0 -> throw error.
 -------------------------------------------- */
 async function adjustInventory(product_id, delta, connection = null) {
   const q = connection ? connection.query.bind(connection) : db.query.bind(db);
@@ -309,18 +306,13 @@ router.post("/walk-in", authenticateToken, async (req, res) => {
   }
 });
 
-
+//buy endoint
 router.post("/buy", authenticateToken, async (req, res) => {
   const connection = await db.getConnection();
   try {
     const io = req.app.get("io"); // Socket.IO instance
-    let { items, product_id, quantity, full_name, contact_number, barangay_id } = req.body;
+    let { items, full_name, contact_number, barangay_id } = req.body;
     const buyer_id = req.user.id;
-
-    // Single-product shortcut
-    if (!items && product_id && quantity) {
-      items = [{ product_id, quantity, type: "regular" }];
-    }
 
     // Validate buyer info
     if (!full_name || !contact_number || !barangay_id) {
@@ -333,13 +325,16 @@ router.post("/buy", authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, error: "Invalid Philippine contact number format (+639XXXXXXXXX)." });
     }
 
-    const orderItems = Array.isArray(items)
-      ? items.filter((i) => i.product_id && i.quantity && i.type)
-      : [];
+    if (!Array.isArray(items) || items.length === 0) {
+      connection.release();
+      return res.status(400).json({ success: false, error: "No items provided." });
+    }
 
+    // Validate all items
+    const orderItems = items.filter(i => i.product_id && i.quantity && i.type && i.branch_id);
     if (orderItems.length === 0) {
       connection.release();
-      return res.status(400).json({ success: false, error: "No valid items provided." });
+      return res.status(400).json({ success: false, error: "Invalid items provided. Each item must include branch_id." });
     }
 
     const barangayRow = await fetchBarangay(barangay_id);
@@ -348,107 +343,97 @@ router.post("/buy", authenticateToken, async (req, res) => {
       return res.status(404).json({ success: false, error: "Barangay not found." });
     }
 
-    const productsMap = {};
+    // Group items by branch
+    const branchMap = {};
 
-    // Fetch products and validate stock
     for (const item of orderItems) {
       const sql = `
-        SELECT p.product_id, p.price, p.discounted_price, p.refill_price, p.seller_id, i.stock
+        SELECT p.product_id, p.price, p.discounted_price, p.refill_price, i.stock, i.branch_id
         FROM products p
-        LEFT JOIN inventory i ON p.product_id = i.product_id
-        WHERE p.product_id = ?
+        INNER JOIN inventory i ON p.product_id = i.product_id
+        WHERE p.product_id = ? AND i.branch_id = ? AND i.stock >= ?
+        LIMIT 1
       `;
-      const [rows] = await db.query(sql, [item.product_id]);
+      const [rows] = await db.query(sql, [item.product_id, item.branch_id, item.quantity]);
       const product = rows[0];
 
       if (!product) {
         connection.release();
-        return res.status(404).json({ success: false, error: `Product ${item.product_id} not found.` });
-      }
-
-      const availableStock = Number(product.stock ?? 0);
-      if (availableStock < Number(item.quantity)) {
-        connection.release();
         return res.status(400).json({
           success: false,
-          error: `Insufficient stock for product ${item.product_id}. Only ${availableStock} left.`,
+          error: `Insufficient stock or product ${item.product_id} not available in the selected branch.`,
         });
       }
 
-      // Determine final price and type
-      let finalPrice = product.price;
-      let type = item.type;
+      const finalPrice =
+        item.type === "refill"
+          ? product.refill_price ?? 0
+          : item.type === "discounted" && product.discounted_price != null
+          ? product.discounted_price
+          : product.price;
 
-      if (item.type === "refill") {
-        finalPrice = product.refill_price ?? 0;
-      } else if (item.type === "discounted" && product.discounted_price != null) {
-        finalPrice = product.discounted_price;
-      }
-
-      if (!productsMap[product.seller_id]) productsMap[product.seller_id] = [];
-      productsMap[product.seller_id].push({
+      if (!branchMap[product.branch_id]) branchMap[product.branch_id] = [];
+      branchMap[product.branch_id].push({
         product_id: product.product_id,
         quantity: item.quantity,
         price: finalPrice,
-        type,
+        type: item.type,
       });
     }
 
     await connection.beginTransaction();
     const createdOrders = [];
 
-    for (const [seller_id, sellerItems] of Object.entries(productsMap)) {
-      const totalSellerPrice = sellerItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
+    for (const [branch_id, branchItems] of Object.entries(branchMap)) {
+      const totalBranchPrice = branchItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
       const [orderResult] = await connection.query(
         `INSERT INTO orders (
           buyer_id, full_name, contact_number, barangay_id,
           status, total_price, is_active, ordered_at, inventory_deducted
         ) VALUES (?, ?, ?, ?, 'pending', ?, 1, NOW(), 0)`,
-        [buyer_id, full_name, contact_number, barangay_id, totalSellerPrice]
+        [buyer_id, full_name, contact_number, barangay_id, totalBranchPrice]
       );
 
       const order_id = orderResult.insertId;
 
-      for (const item of sellerItems) {
-        // Insert only the columns that exist in order_items
+      for (const item of branchItems) {
         await connection.query(
-          `INSERT INTO order_items (order_id, product_id, quantity, price, type)
-           VALUES (?, ?, ?, ?, ?)`,
-          [order_id, item.product_id, item.quantity, item.price, item.type]
+          `INSERT INTO order_items (order_id, product_id, quantity, price, type, branch_id)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [order_id, item.product_id, item.quantity, item.price, item.type, branch_id]
         );
 
         // Deduct stock
         await connection.query(
-          `UPDATE inventory SET stock = stock - ? WHERE product_id = ?`,
-          [item.quantity, item.product_id]
+          `UPDATE inventory SET stock = stock - ? WHERE product_id = ? AND branch_id = ?`,
+          [item.quantity, item.product_id, branch_id]
         );
 
+        // Emit stock update
         const [inventoryRows] = await connection.query(
-          `SELECT stock FROM inventory WHERE product_id = ?`,
-          [item.product_id]
+          `SELECT stock FROM inventory WHERE product_id = ? AND branch_id = ?`,
+          [item.product_id, branch_id]
         );
         const updatedStock = inventoryRows[0]?.stock ?? 0;
-
-        io.emit("stock-updated", { product_id: item.product_id, stock: updatedStock });
+        io.emit("stock-updated", { product_id: item.product_id, branch_id, stock: updatedStock });
       }
 
-      createdOrders.push({
+      const newOrder = {
         order_id,
-        seller_id,
-        total_price: totalSellerPrice,
+        branch_id,
+        total_price: totalBranchPrice,
         status: "pending",
-        items: sellerItems,
-      });
+        items: branchItems,
+      };
 
-      io.emit("newOrder", createdOrders[createdOrders.length - 1]);
+      createdOrders.push(newOrder);
+      io.emit("newOrder", newOrder);
     }
 
     await connection.commit();
     connection.release();
-
     return res.status(201).json({ success: true, message: "✅ Orders created successfully.", orders: createdOrders });
-
   } catch (err) {
     try { await connection.rollback(); connection.release(); } catch (e) {}
     console.error("❌ Error (buy):", err);
@@ -458,64 +443,70 @@ router.post("/buy", authenticateToken, async (req, res) => {
 
 
 // routes/orders.js
+router.get(
+  "/my-orders",
+  authenticateToken,
+  requireRole("users", "business_owner", "retailer"),
+  async (req, res) => {
+    try {
+      const buyer_id = req.user.id;
 
-router.get("/my-orders", authenticateToken, requireRole("users", "business_owner", "retailer"), async (req, res) => {
-  try {
-    const buyer_id = req.user.id;
+      const [rows] = await db.query(
+        `
+        SELECT
+          o.order_id,
+          o.buyer_id,
+          o.full_name,
+          o.contact_number,
+          o.status,
+          o.total_price,
+          o.ordered_at,
+          o.delivered_at,
+          o.inventory_deducted,
+          b.barangay_name AS barangay,
+          b.municipality AS municipality,
+          oi.product_id,
+          p.product_name,
+          p.product_description,
+          p.image_url AS image_url,
+          oi.quantity,
+          oi.price,
+          oi.branch_id,
+          br.branch_name
+        FROM orders o
+        LEFT JOIN order_items oi ON o.order_id = oi.order_id
+        LEFT JOIN products p ON oi.product_id = p.product_id
+        LEFT JOIN branches br ON oi.branch_id = br.branch_id
+        LEFT JOIN barangays b ON o.barangay_id = b.barangay_id
+        WHERE o.buyer_id = ?
+        ORDER BY o.ordered_at DESC
+        `,
+        [buyer_id]
+      );
 
-    const [rows] = await db.query(
-      `
-      SELECT
-        o.order_id,
-        o.buyer_id,
-        o.full_name,
-        o.contact_number,
-        o.status,
-        o.total_price,
-        o.ordered_at,
-        o.delivered_at,
-        o.inventory_deducted,
-        b.barangay_name AS barangay,
-        b.municipality AS municipality,
-        p.product_id,
-        p.product_name,
-        p.product_description,
-        p.image_url AS image_url,
-        oi.quantity,
-        oi.price,
-        u.name AS seller_name
-      FROM orders o
-      LEFT JOIN order_items oi ON o.order_id = oi.order_id
-      LEFT JOIN products p ON oi.product_id = p.product_id
-      LEFT JOIN users u ON p.seller_id = u.user_id
-      LEFT JOIN barangays b ON o.barangay_id = b.barangay_id
-      WHERE o.buyer_id = ?
-      ORDER BY o.ordered_at DESC
-      `,
-      [buyer_id]
-    );
+      if (!rows.length) {
+        return res.status(200).json({ success: true, orders: [] });
+      }
 
-    if (!rows.length) {
-      return res.status(200).json({ success: true, orders: [] });
+      // Group items by order_id and branch_id to avoid duplicates
+      const grouped = groupOrders(rows, (row) => ({
+        product_id: row.product_id,
+        product_name: row.product_name,
+        product_description: row.product_description,
+        image_url: formatImageUrl(row.image_url),
+        quantity: row.quantity,
+        price: row.price,
+        branch_id: row.branch_id,
+        branch_name: row.branch_name,
+      }));
+
+      return res.status(200).json({ success: true, orders: grouped });
+    } catch (err) {
+      console.error("❌ Error fetching my-orders:", err);
+      return res.status(500).json({ success: false, error: "Failed to fetch buyer orders." });
     }
-
-    const grouped = groupOrders(rows, (row) => ({
-    product_id: row.product_id,
-    product_name: row.product_name,
-    product_description: row.product_description,
-    image_url: formatImageUrl(row.image_url),
-    quantity: row.quantity,
-    price: row.price,
-    seller_name: row.seller_name,
-  }));
-
-
-    return res.status(200).json({ success: true, orders: grouped });
-  } catch (err) {
-    console.error("❌ Error fetching my-orders:", err);
-    return res.status(500).json({ success: false, error: "Failed to fetch buyer orders." });
   }
-});
+);
 
 /* -------------------------------------------------------------------
    RETAILER / SELLER VIEW: /my-sold
@@ -549,24 +540,26 @@ router.get(
           p.image_url AS image_url,
           oi.quantity,
           oi.price,
-          COALESCE(s.name, 'N/A') AS seller_name
+          br.branch_id,
+          br.branch_name
         FROM orders o
         JOIN order_items oi ON o.order_id = oi.order_id
         JOIN products p ON oi.product_id = p.product_id
         LEFT JOIN users u ON o.buyer_id = u.user_id
-        LEFT JOIN users s ON p.seller_id = s.user_id
+        LEFT JOIN inventory i ON i.product_id = p.product_id
+        LEFT JOIN branches br ON i.branch_id = br.branch_id
         LEFT JOIN barangays b ON o.barangay_id = b.barangay_id
       `;
 
       let params = [];
 
       if (req.user.role === "admin") {
-        // Admin: show only delivered orders where the product seller is a branch manager
-        query += " WHERE o.status = 'delivered' AND s.role = 'branch_manager'";
+        // Admin: show only delivered orders
+        query += " WHERE o.status = 'delivered'";
       } else {
-        // Regular seller/branch_manager: show only their delivered orders
-        query += " WHERE o.status = 'delivered' AND p.seller_id = ?";
-        params.push(req.user.id);
+        // Retailer or branch_manager: show only their products/orders
+        query += " WHERE o.status = 'delivered' AND br.branch_id = ?";
+        params.push(req.user.branch_id); // assuming branch_manager/retailer has branch_id
       }
 
       query += " ORDER BY o.delivered_at DESC";
@@ -606,7 +599,8 @@ router.get(
           image_url: formatImageUrl(row.image_url),
           quantity: row.quantity,
           price: row.price,
-          seller_name: row.seller_name,
+          branch_id: row.branch_id,
+          branch_name: row.branch_name || "Unknown",
         });
 
         return acc;
@@ -621,6 +615,7 @@ router.get(
     }
   }
 );
+
 
 
 // Helper function to group orders

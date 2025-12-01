@@ -115,11 +115,19 @@ export default function Productslist() {
     selectedMunicipality ? p.seller.municipality === selectedMunicipality : true
   );
 
+  // Example in Productslist.js
   const handleBuyClick = (product) => {
     const token = localStorage.getItem("token");
-    if (token) navigate(`/buy/${product.product_id}`);
-    else navigate("/login");
+    if (!token) {
+      navigate("/login"); // redirect to login if not logged in
+      return;
+    }
+
+    // Navigate to Buysection page with product_id and branch_id
+    navigate(`/buy/${product.product_id}?branch_id=${product.branch_id}`);
   };
+
+
 
   const addPlaceholders = (list, min = 6) => {
     const result = [...list];

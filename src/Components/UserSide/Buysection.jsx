@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import { X, ShoppingCart, CreditCard } from "lucide-react";
@@ -8,18 +8,20 @@ import { io } from "socket.io-client";
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 const SOCKET_URL = BASE_URL;
 
-const getFullImageUrl = (url) => {
-  if (!url) return "/placeholder.png";
-  return url.startsWith("http") ? url : `${BASE_URL}/products/images/${url.replace(/^\/+/, "")}`;
-};
+// Helpers
+const getFullImageUrl = (url) =>
+  url
+    ? url.startsWith("http")
+      ? url
+      : `${BASE_URL}/products/images/${url.replace(/^\/+/, "")}`
+    : "/placeholder.png";
 
-const getUserCartKey = () => {
-  const token = localStorage.getItem("token");
-  return token ? `cart_${token}` : "cart_guest";
-};
+const getUserCartKey = () =>
+  localStorage.getItem("token") ? `cart_${localStorage.getItem("token")}` : "cart_guest";
 
 export default function Buysection() {
   const { id } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
 
   const [product, setProduct] = useState(null);
@@ -35,43 +37,32 @@ export default function Buysection() {
 
   const municipalities = ["Boac", "Mogpog", "Gasan", "Buenavista", "Torrijos", "Santa Cruz"];
 
-  // SOCKET SETUP
+  const branchId = new URLSearchParams(location.search).get("branch_id");
+
+  // ───────── SOCKET.IO ─────────
   useEffect(() => {
     const socket = io(SOCKET_URL);
 
     socket.on("stock-updated", (data) => {
-      if (data.product_id === id) {
+      if (data.product_id === parseInt(id) && (!branchId || data.branch_id === parseInt(branchId))) {
         setProduct((prev) => (prev ? { ...prev, stock: data.stock } : prev));
         toast.info(`⚠️ Stock updated: ${data.stock} units available`);
       }
     });
 
-    socket.on("cart-updated", (data) => {
-      const cartKey = getUserCartKey();
-      const cart = JSON.parse(localStorage.getItem(cartKey)) || [];
-      const updatedCart = cart.map((item) =>
-        item.product_id === data.product_id ? { ...item, quantity: data.quantity } : item
-      );
-      localStorage.setItem(cartKey, JSON.stringify(updatedCart));
-      window.dispatchEvent(new Event("storage"));
-    });
-
     return () => socket.disconnect();
-  }, [id]);
+  }, [id, branchId]);
 
-  // FETCH PRODUCT
+  // ───────── FETCH PRODUCT ─────────
   useEffect(() => {
     const fetchProduct = async () => {
       try {
         if (!id) throw new Error("No product ID provided.");
-        const res = await axios.get(`${BASE_URL}/products/${id}`);
-        const p = res.data;
-
-        // Auto-select type
-        if (p.discounted_price) setProductType("discounted");
-        else setProductType("regular");
-
-        setProduct(p);
+        const { data } = await axios.get(`${BASE_URL}/products/${id}`, {
+          params: { branch_id: branchId },
+        });
+        setProduct(data);
+        setProductType(data.discounted_price ? "discounted" : "regular");
       } catch (err) {
         console.error(err);
         toast.error("Failed to load product information.");
@@ -80,20 +71,16 @@ export default function Buysection() {
       }
     };
     fetchProduct();
-  }, [id]);
+  }, [id, branchId]);
 
-  // FETCH USER
+  // ───────── FETCH USER INFO ─────────
   useEffect(() => {
     const fetchUser = async () => {
       try {
         const token = localStorage.getItem("token");
         if (!token) return;
-
-        const res = await axios.get(`${BASE_URL}/auth/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        const user = res.data?.user;
+        const { data } = await axios.get(`${BASE_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
+        const user = data.user;
         if (!user) return;
 
         setName(user.name || "");
@@ -101,18 +88,14 @@ export default function Buysection() {
         setMunicipality(user.municipality || "");
 
         if (user.municipality) {
-          const barangayRes = await axios.get(
-            `${BASE_URL}/barangays?municipality=${user.municipality}`
-          );
-          const list = barangayRes.data || [];
-          setBarangays(list);
-
-          const matched = list.find(
+          const res = await axios.get(`${BASE_URL}/barangays?municipality=${user.municipality}`);
+          setBarangays(res.data || []);
+          const match = res.data.find(
             (b) =>
               String(b.id) === String(user.barangay_id) ||
               b.name.toLowerCase() === user.barangay?.toLowerCase()
           );
-          if (matched) setSelectedBarangayId(matched.id);
+          if (match) setSelectedBarangayId(match.id);
         }
       } catch (err) {
         console.error(err);
@@ -121,22 +104,19 @@ export default function Buysection() {
     fetchUser();
   }, []);
 
-  // FETCH BARANGAYS WHEN MUNICIPALITY CHANGES
+  // ───────── FETCH BARANGAYS ON MUNICIPALITY CHANGE ─────────
   useEffect(() => {
     if (!municipality) {
       setBarangays([]);
       setSelectedBarangayId("");
       return;
     }
-
     const fetchBarangays = async () => {
       try {
         const res = await axios.get(`${BASE_URL}/barangays?municipality=${municipality}`);
-        const list = res.data || [];
-        setBarangays(list);
-
-        setSelectedBarangayId((prevId) =>
-          list.some((b) => String(b.id) === String(prevId)) ? prevId : ""
+        setBarangays(res.data || []);
+        setSelectedBarangayId((prev) =>
+          res.data.some((b) => String(b.id) === String(prev)) ? prev : ""
         );
       } catch (err) {
         console.error(err);
@@ -145,43 +125,29 @@ export default function Buysection() {
     fetchBarangays();
   }, [municipality]);
 
-  // INPUT HANDLERS
+  // ───────── INPUT HANDLERS ─────────
   const handleNameChange = (e) => {
-    const value = e.target.value;
-    if (/^[A-Za-z\s]*$/.test(value)) setName(value);
+    if (/^[A-Za-z\s]*$/.test(e.target.value)) setName(e.target.value);
   };
 
   const handlePhoneChange = (e) => {
-    let value = e.target.value;
-    if (!value.startsWith("+63")) value = "+63" + value.replace(/\D/g, "");
-    else value = "+63" + value.replace("+63", "").replace(/\D/g, "");
-    if (value.length > 13) value = value.slice(0, 13);
-    setPhone(value);
+    let v = e.target.value.replace(/\D/g, "");
+    if (!v.startsWith("63")) v = "63" + v;
+    setPhone("+" + v.slice(0, 12));
   };
 
   const handleQuantityChange = (e) => {
-    const val = e.target.value;
-    if (val === "") {
-      setQuantity(null);
-      return;
-    }
-    let num = parseInt(val);
-    if (isNaN(num) || num < 0) num = 0;
+    let num = parseInt(e.target.value) || 0;
     if (product && num > product.stock) num = product.stock;
     setQuantity(num);
   };
 
-  // CART HANDLERS
+  // ───────── CART HANDLER ─────────
   const handleAddToCart = () => {
-    if (!product) return;
-    if (!quantity || quantity <= 0) {
-      toast.error("Quantity must be at least 1.");
-      return;
-    }
+    if (!product || quantity <= 0) return toast.error("Quantity must be at least 1.");
 
     const cartKey = getUserCartKey();
     const cart = JSON.parse(localStorage.getItem(cartKey)) || [];
-
     const price =
       productType === "refill"
         ? product.refill_price
@@ -192,10 +158,9 @@ export default function Buysection() {
     const existingIndex = cart.findIndex(
       (item) => item.product_id === product.product_id && item.type === productType
     );
-    if (existingIndex >= 0) {
-      const newQuantity = cart[existingIndex].quantity + quantity;
-      cart[existingIndex].quantity = Math.min(newQuantity, product.stock);
-    } else {
+    if (existingIndex >= 0)
+      cart[existingIndex].quantity = Math.min(cart[existingIndex].quantity + quantity, product.stock);
+    else
       cart.push({
         product_id: product.product_id,
         product_name: product.product_name,
@@ -204,47 +169,50 @@ export default function Buysection() {
         price,
         quantity,
         type: productType,
-        seller_name: product.seller_name || "Unknown",
+        seller_name: product.branch_name || "Unknown",
+        branch_id: product.branch_id || null,
       });
-    }
 
     localStorage.setItem(cartKey, JSON.stringify(cart));
     window.dispatchEvent(new Event("storage"));
     toast.success(`🛒 Added ${quantity} × ${product.product_name} (${productType}) to cart!`);
   };
 
+  // ───────── CHECKOUT ─────────
   const handleCheckout = async () => {
-    if (!quantity || quantity <= 0) {
-      toast.error("Quantity must be at least 1.");
-      return;
+    if (
+      !product ||
+      quantity <= 0 ||
+      !name ||
+      !phone ||
+      !municipality ||
+      !selectedBarangayId ||
+      !/^\+639\d{9}$/.test(phone)
+    ) {
+      return toast.error("Please fill out all fields correctly.");
     }
-    if (!name || !phone || !municipality || !selectedBarangayId) {
-      toast.error("Please fill out all required fields.");
-      return;
-    }
-    if (!/^\+639\d{9}$/.test(phone)) {
-      toast.error("Please enter a valid Philippine phone number (+639XXXXXXXXX).");
-      return;
-    }
-    if (quantity > product.stock) {
-      toast.error(`Only ${product.stock} items available in stock.`);
+    if (quantity > product.stock) return toast.error(`Only ${product.stock} available.`);
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      toast.error("Please log in.");
+      navigate("/login");
       return;
     }
 
     try {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        toast.error("Please log in to place an order.");
-        navigate("/login");
-        return;
-      }
-
       setIsPlacingOrder(true);
-
-      const res = await axios.post(
+      const { data } = await axios.post(
         `${BASE_URL}/orders/buy`,
         {
-          items: [{ product_id: product.product_id, quantity, type: productType }],
+          items: [
+            {
+              product_id: product.product_id,
+              quantity,
+              type: productType,
+              branch_id: product.branch_id,
+            },
+          ],
           full_name: name,
           contact_number: phone,
           barangay_id: selectedBarangayId,
@@ -252,7 +220,7 @@ export default function Buysection() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      toast.success(res.data.message || "Order placed successfully!");
+      toast.success(data.message || "Order placed successfully!");
       navigate("/orders");
     } catch (err) {
       console.error(err);
@@ -271,28 +239,21 @@ export default function Buysection() {
       : productType === "discounted"
         ? product.discounted_price
         : product.price;
-
   const totalPrice = (quantity || 0) * pricePerUnit;
   const outOfStock = product.stock <= 0;
 
-  // Dropdown options
   const getDropdownOptions = () => {
-    const options = [];
-
-    if (product.discounted_price) options.push({ value: "discounted", label: "Discounted" });
-    else options.push({ value: "regular", label: "Regular" });
-
-    // Refill always shown if refill_price exists
-    if (product.refill_price !== undefined && product.refill_price !== null)
-      options.push({ value: "refill", label: "Refill" });
-
-    return options;
+    const opts = [];
+    if (product.discounted_price) opts.push({ value: "discounted", label: "Discounted" });
+    else opts.push({ value: "regular", label: "Regular" });
+    if (product.refill_price != null) opts.push({ value: "refill", label: "Refill" });
+    return opts;
   };
 
   return (
     <section className="bg-gray-900 min-h-screen text-white px-6 pt-28 pb-20 flex items-center justify-center">
       <div className="max-w-6xl w-full grid md:grid-cols-2 gap-10 items-start">
-        {/* Product Image */}
+        {/* Image */}
         <div className="rounded-2xl shadow-xl flex items-center justify-center bg-gray-800 p-8 h-[600px]">
           <img
             src={getFullImageUrl(product.image_url)}
@@ -301,16 +262,17 @@ export default function Buysection() {
           />
         </div>
 
-        {/* Product Info & Form */}
+        {/* Info */}
         <div className="bg-gray-800 p-10 rounded-2xl shadow-lg flex flex-col justify-between h-[600px] max-h-[85vh] overflow-y-auto">
           <div>
             <h2 className="text-3xl font-bold mb-2">{product.product_name}</h2>
-            <p className="text-gray-300 mb-4">
-              {product.product_description || "No description available."}
-            </p>
+            <p className="text-gray-300 mb-2">{product.product_description || "No description available."}</p>
+            {product.branch_name && (
+              <p className="text-gray-400 mb-4 text-sm">
+                Sold by: <span className="font-medium">{product.branch_name}</span>
+              </p>
+            )}
             {outOfStock && <p className="text-red-400 font-semibold mb-4">⚠️ Out of stock.</p>}
-
-            {/* Price */}
             <p className="text-2xl font-semibold mb-2">₱{totalPrice.toLocaleString()}.00</p>
 
             {/* Type & Quantity */}
@@ -328,7 +290,6 @@ export default function Buysection() {
                     </option>
                   ))}
                 </select>
-
                 <input
                   type="number"
                   value={quantity ?? ""}
@@ -341,6 +302,7 @@ export default function Buysection() {
               </div>
             </div>
 
+            {/* User Info */}
             <div className="space-y-4 mb-6">
               <input
                 type="text"
@@ -384,7 +346,7 @@ export default function Buysection() {
             </div>
           </div>
 
-          {/* Buttons */}
+          {/* Actions */}
           <div className="flex flex-col md:flex-row gap-4 mt-4">
             <button
               onClick={handleAddToCart}
@@ -401,8 +363,7 @@ export default function Buysection() {
               className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold ${isPlacingOrder || outOfStock ? "bg-blue-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
                 }`}
             >
-              <CreditCard size={20} />{" "}
-              {outOfStock ? "Out of Stock" : isPlacingOrder ? "Placing Order..." : "Checkout"}
+              <CreditCard size={20} /> {outOfStock ? "Out of Stock" : isPlacingOrder ? "Placing Order..." : "Checkout"}
             </button>
 
             <button

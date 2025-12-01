@@ -24,7 +24,6 @@ export default function Orderlist({ role: propRole }) {
   const role = propRole || user?.role || "user";
   const isRetailer = role === "retailer";
 
-  // Always default to cart as requested
   const [activeTab, setActiveTab] = useState("cart");
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -65,15 +64,21 @@ export default function Orderlist({ role: propRole }) {
 
       const localCart = getUserCart();
       if (localCart.length) {
-        backendOrders = [
-          {
-            order_id: "local_cart",
-            status: "cart",
-            items: localCart,
-            total_price: localCart.reduce((sum, i) => sum + (Number(i.price) || 0) * (Number(i.quantity) || 0), 0),
-          },
-          ...backendOrders,
-        ];
+        const existingIndex = backendOrders.findIndex((o) => o.order_id === "local_cart");
+        const localCartOrder = {
+          order_id: "local_cart",
+          status: "cart",
+          items: localCart,
+          total_price: localCart.reduce(
+            (sum, i) => sum + (Number(i.price) || 0) * (Number(i.quantity) || 0),
+            0
+          ),
+        };
+        if (existingIndex === -1) {
+          backendOrders.unshift(localCartOrder); // Only add if not already in orders
+        } else {
+          backendOrders[existingIndex] = localCartOrder; // Update existing one
+        }
       }
 
       setOrders(backendOrders);
@@ -85,6 +90,7 @@ export default function Orderlist({ role: propRole }) {
       setLoading(false);
     }
   }, [getUserCart]);
+
 
   useEffect(() => {
     fetchOrders();
@@ -118,17 +124,21 @@ export default function Orderlist({ role: propRole }) {
     setOrders((prev) => {
       const newOrders = [...prev];
       const index = newOrders.findIndex((o) => o.order_id === "local_cart");
-      if (index !== -1) {
+      const localCartOrder = {
+        order_id: "local_cart",
+        status: "cart",
+        items: updatedCart.map((i) => ({ ...i, image_url: normalizeImageUrl(i.image_url) })),
+        total_price: updatedCart.reduce((sum, i) => sum + (Number(i.price) || 0) * (Number(i.quantity) || 0), 0),
+      };
+
+      if (index === -1 && updatedCart.length) {
+        newOrders.unshift(localCartOrder);
+      } else if (index !== -1) {
         if (updatedCart.length === 0) {
           newOrders.splice(index, 1);
           setExpandedOrder((prevExp) => (prevExp === "local_cart" ? null : prevExp));
         } else {
-          newOrders[index] = {
-            order_id: "local_cart",
-            status: "cart",
-            items: updatedCart.map((i) => ({ ...i, image_url: normalizeImageUrl(i.image_url) })),
-            total_price: updatedCart.reduce((sum, i) => sum + (Number(i.price) || 0) * (Number(i.quantity) || 0), 0),
-          };
+          newOrders[index] = localCartOrder;
         }
       }
       return newOrders;
@@ -281,10 +291,10 @@ export default function Orderlist({ role: propRole }) {
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
                 className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition text-sm sm:text-base ${activeTab === tab.key
-                    ? "bg-blue-600 text-white shadow"
-                    : isRetailer
-                      ? "bg-gray-100 text-gray-800 hover:bg-gray-200"
-                      : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+                  ? "bg-blue-600 text-white shadow"
+                  : isRetailer
+                    ? "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                    : "bg-gray-800 text-gray-300 hover:bg-gray-700"
                   }`}
               >
                 <Icon size={18} /> {tab.label}
@@ -371,10 +381,13 @@ export default function Orderlist({ role: propRole }) {
                                       value={item.quantity}
                                       onChange={(e) => {
                                         const newQty = Math.max(1, Number(e.target.value));
-                                        updateLocalCart(
-                                          getUserCart().map((c) => (c.product_id === item.product_id ? { ...c, quantity: newQty } : c))
+                                        const localCartItems = orders.find(o => o.order_id === "local_cart")?.items || [];
+                                        const updatedItems = localCartItems.map(c =>
+                                          c.product_id === item.product_id ? { ...c, quantity: newQty } : c
                                         );
+                                        updateLocalCart(updatedItems);
                                       }}
+
                                       className="w-14 sm:w-16 px-2 py-1 rounded border border-gray-400 text-center text-[10px] sm:text-sm bg-transparent"
                                     />
                                     <button
@@ -389,8 +402,12 @@ export default function Orderlist({ role: propRole }) {
                                 <div className="mt-1 sm:mt-2">
                                   <p className="font-medium text-xs sm:text-sm md:text-base">₱{item.price?.toLocaleString()} each</p>
                                   <p className="text-[10px] sm:text-xs text-gray-500 truncate">
-                                    {isRetailer ? `Buyer: ${item.buyer_name || "Unknown"}` : `Seller: ${item.seller_name || "Unknown"}`}
+                                    {isRetailer
+                                      ? `Buyer: ${order.full_name || "Unknown"}`
+                                      : `Seller: ${item.branch_name || "Unknown"}`
+                                    }
                                   </p>
+
                                 </div>
                               </div>
                             </div>
