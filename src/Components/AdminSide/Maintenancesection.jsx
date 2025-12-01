@@ -6,23 +6,10 @@ import { useNavigate } from "react-router-dom";
 export default function Maintenancesection() {
   const navigate = useNavigate();
 
-  const [isMaintMode, setIsMaintMode] = useState(false);
-  const [showMaintModal, setShowMaintModal] = useState(false);
-  const [startDate, setStartDate] = useState("");
-  const [duration, setDuration] = useState("1h");
-  const [message, setMessage] = useState("");
-
   const [backups, setBackups] = useState([
     { id: 1, name: "Backup_2025-08-20", date: "2025-08-20 14:00" },
     { id: 2, name: "Backup_2025-08-15", date: "2025-08-15 09:30" },
   ]);
-
-  const handleSave = () => {
-    const settings = { isMaintMode, startDate, duration, message };
-    console.log("Maintenance settings:", settings);
-    toast.success("✅ Maintenance settings saved successfully!");
-    setShowMaintModal(false);
-  };
 
   const handleBackup = () => {
     const newBackup = {
@@ -55,39 +42,35 @@ export default function Maintenancesection() {
       <h1 className="text-2xl font-bold mb-6">Maintenance & Updates</h1>
 
       <div className="grid grid-cols-3 gap-6">
-        {/* System Maintenance */}
+
+        {/* Delivery Fee Setup (New Card) */}
         <div className="bg-white rounded-2xl shadow p-6 flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-3 mb-4">
               <Wrench className="w-8 h-8 text-gray-700" />
-              <h2 className="text-xl font-semibold">System Maintenance</h2>
+              <h2 className="text-xl font-semibold">Delivery Fee Settings</h2>
             </div>
-            <p className="text-red-600 font-medium mb-2">
-              ⚠️ Only administrators can configure system maintenance.
-            </p>
+
             <p className="text-gray-600 mb-6">
-              Enable system-wide maintenance mode. Users will see a downtime message while active.
+              Set and update delivery fees for each branch. This affects checkout pricing for customers.
             </p>
+
             <span className="text-gray-700 font-medium">
-              Maintenance Mode:{" "}
-              {isMaintMode ? (
-                <span className="text-red-600">Enabled</span>
-              ) : (
-                <span className="text-green-600">Disabled</span>
-              )}
+              Configure delivery fees for all areas in one place.
             </span>
           </div>
+
           <div className="mt-6 flex justify-end">
             <button
-              onClick={() => setShowMaintModal(true)}
+              onClick={() => navigate("/admindeliveryfees")}
               className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
             >
-              Configure
+              Manage Fees
             </button>
           </div>
         </div>
 
-        {/* Manage Services (Static Icon, Centered) */}
+        {/* Manage Services */}
         <div className="bg-white rounded-2xl shadow p-6 flex flex-col items-center justify-center text-center">
           <Database className="w-16 h-16 text-gray-700 mb-4" />
           <h2 className="text-xl font-semibold mb-2">Manage Services</h2>
@@ -102,7 +85,7 @@ export default function Maintenancesection() {
           </button>
         </div>
 
-        {/* Banners (Static Icon, Centered) */}
+        {/* Manage Banners */}
         <div className="bg-white rounded-2xl shadow p-6 flex flex-col items-center justify-center text-center">
           <Image className="w-16 h-16 text-gray-700 mb-4" />
           <h2 className="text-xl font-semibold mb-2">Manage Offers Banners</h2>
@@ -163,96 +146,6 @@ export default function Maintenancesection() {
           </button>
         </div>
       </div>
-
-      {/* Maintenance Modal */}
-      {showMaintModal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-          <div className="bg-white rounded-2xl shadow-lg w-full max-w-lg p-6 relative">
-            <button
-              onClick={() => setShowMaintModal(false)}
-              className="absolute top-3 right-3 text-gray-500 hover:text-gray-700"
-            >
-              <X className="w-6 h-6" />
-            </button>
-            <h2 className="text-xl font-semibold mb-4">Configure Maintenance</h2>
-            <div className="flex items-center justify-between mb-4">
-              <span className="font-medium">
-                Maintenance Mode:{" "}
-                {isMaintMode ? (
-                  <span className="text-red-600">Enabled</span>
-                ) : (
-                  <span className="text-green-600">Disabled</span>
-                )}
-              </span>
-              <button
-                onClick={() => setIsMaintMode(!isMaintMode)}
-                className={`px-4 py-2 rounded-lg font-medium transition ${isMaintMode
-                    ? "bg-red-600 text-white hover:bg-red-700"
-                    : "bg-green-600 text-white hover:bg-green-700"
-                  }`}
-              >
-                {isMaintMode ? "Disable" : "Enable"}
-              </button>
-            </div>
-
-            {isMaintMode && (
-              <>
-                <div className="mb-4 flex gap-4">
-                  <input
-                    type="date"
-                    value={startDate.split("T")[0] || ""}
-                    onChange={(e) =>
-                      setStartDate((prev) =>
-                        prev
-                          ? `${e.target.value}T${prev.split("T")[1] || "00:00"}`
-                          : `${e.target.value}T00:00`
-                      )
-                    }
-                    className="w-1/2 border rounded-lg p-2"
-                  />
-                  <input
-                    type="time"
-                    value={startDate.split("T")[1] || ""}
-                    onChange={(e) =>
-                      setStartDate((prev) =>
-                        prev
-                          ? `${prev.split("T")[0]}T${e.target.value}`
-                          : `${new Date().toISOString().split("T")[0]}T${e.target.value}`
-                      )
-                    }
-                    className="w-1/2 border rounded-lg p-2"
-                  />
-                </div>
-                <select
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                  className="w-full border rounded-lg p-2 mb-4"
-                >
-                  <option value="30m">30 minutes</option>
-                  <option value="1h">1 hour</option>
-                  <option value="2h">2 hours</option>
-                  <option value="6h">6 hours</option>
-                  <option value="12h">12 hours</option>
-                  <option value="24h">24 hours</option>
-                </select>
-                <textarea
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  className="w-full border rounded-lg p-2 mb-4"
-                  rows={3}
-                  placeholder="Custom message to users"
-                />
-                <button
-                  onClick={handleSave}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                >
-                  Save & Activate
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </section>
   );
 }

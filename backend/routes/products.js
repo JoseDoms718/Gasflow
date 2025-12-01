@@ -54,7 +54,13 @@ function normalizeDate(date) {
   if (isNaN(d)) return null;
   return d.toISOString().split("T")[0];
 }
-
+function authorizeAdmin(req, res, next) {
+  if (req.user && req.user.role === "admin") {
+    next();
+  } else {
+    return res.status(403).json({ error: "Access denied. Admins only." });
+  }
+}
 
 // ==============================
 // Get Branch Manager’s Products
@@ -107,7 +113,7 @@ router.get("/my-products", authenticateToken, async (req, res) => {
 // ==============================
 // Add Product
 // ==============================
-router.post("/add", authenticateToken, upload.single("image"), async (req, res) => {
+router.post("/admin/add-product", authenticateToken, authorizeAdmin, upload.single("image"), async (req, res) => {
   try {
     const {
       product_name,
@@ -116,20 +122,16 @@ router.post("/add", authenticateToken, upload.single("image"), async (req, res) 
       discounted_price,
       discount_until,
       refill_price,
-      stock,
-      stock_threshold,
-      product_type,
-      branch_id // Branch assignment
+      product_type
     } = req.body;
-
-    if (!branch_id) return res.status(400).json({ error: "branch_id is required." });
 
     const image_url = req.file ? req.file.filename : null;
 
+    // Validate product fields
     const validationError = validateProductFields(product_type, discounted_price);
     if (validationError) return res.status(400).json({ error: validationError });
 
-    // Insert product
+    // Insert product into products table
     const sql = `
       INSERT INTO products (
         image_url, product_name, product_description,
@@ -148,18 +150,36 @@ router.post("/add", authenticateToken, upload.single("image"), async (req, res) 
       product_type,
     ]);
 
-    // Insert inventory for branch
-    const inventorySql = `INSERT INTO inventory (product_id, branch_id, stock, stock_threshold) VALUES (?, ?, ?, ?)`;
-    await db.query(inventorySql, [result.insertId, branch_id, stock || 0, stock_threshold || 0]);
-
+    // Fetch the inserted product
     const [rows] = await db.query("SELECT * FROM products WHERE product_id = ?", [result.insertId]);
     res.status(200).json({ message: "✅ Product added successfully!", product: formatProductImage(rows[0]) });
+
   } catch (err) {
     console.error("❌ Error adding product:", err);
     res.status(500).json({ error: "Failed to add product." });
   }
 });
 
+// GET universal products - accessible to any authenticated user
+router.get("/universal", authenticateToken, async (req, res) => {
+  try {
+    const sql = `
+      SELECT *
+      FROM products
+      WHERE is_active = 1
+      ORDER BY created_at DESC
+    `;
+    const [rows] = await db.query(sql);
+
+    // Optionally format images
+    const products = rows.map(formatProductImage);
+
+    res.status(200).json(products);
+  } catch (err) {
+    console.error("❌ Error fetching universal products:", err);
+    res.status(500).json({ error: "Failed to fetch products." });
+  }
+});
 
 
 // ==============================
@@ -245,8 +265,6 @@ router.get("/all-products", authenticateToken, async (req, res) => {
     });
   }
 });
-
-
 
 // ==============================
 // Admin Products

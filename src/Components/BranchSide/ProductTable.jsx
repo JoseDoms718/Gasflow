@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Package } from "lucide-react";
+import { Package, Eye } from "lucide-react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 
@@ -43,7 +43,7 @@ export default function ProductTable({
                 `${BASE_URL}/products/restock/${restockProduct.product_id}`,
                 {
                     quantity,
-                    branch_id: restockProduct.branch_id // <-- send branch_id
+                    branch_id: restockProduct.branch_id, // send branch_id
                 },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
@@ -52,18 +52,14 @@ export default function ProductTable({
 
             setLocalProducts((prev) =>
                 prev.map((p) =>
-                    p.product_id === restockProduct.product_id
-                        ? { ...p, stock: newStock }
-                        : p
+                    p.product_id === restockProduct.product_id ? { ...p, stock: newStock } : p
                 )
             );
 
             if (setProducts) {
                 setProducts((prev) =>
                     prev.map((p) =>
-                        p.product_id === restockProduct.product_id
-                            ? { ...p, stock: newStock }
-                            : p
+                        p.product_id === restockProduct.product_id ? { ...p, stock: newStock } : p
                     )
                 );
             }
@@ -79,19 +75,18 @@ export default function ProductTable({
         }
     };
 
-
     return (
         <div className="flex-1 border border-gray-200 rounded-lg overflow-hidden flex flex-col">
             {/* HEADER */}
             <div className="bg-gray-900 text-white sticky top-0 z-20 shadow-md">
-                <table className="min-w-full text-center text-sm">
+                <table className="min-w-full text-center text-sm table-fixed">
                     <thead>
                         <tr>
-                            <th className="px-4 py-3 rounded-tl-lg">Image</th>
-                            <th className="px-4 py-3">Name</th>
-                            <th className="px-4 py-3">Stock</th>
-                            <th className="px-4 py-3">Price</th>
-                            <th className="px-4 py-3 rounded-tr-lg">Action</th>
+                            <th className="px-4 py-3 w-[80px] rounded-tl-lg">Image</th>
+                            <th className="px-4 py-3 w-[200px]">Name</th>
+                            <th className="px-4 py-3 w-[80px]">Stock</th>
+                            <th className="px-4 py-3 w-[100px]">Price</th>
+                            <th className="px-4 py-3 rounded-tr-lg w-[120px]">Action</th>
                         </tr>
                     </thead>
                 </table>
@@ -99,7 +94,7 @@ export default function ProductTable({
 
             {/* SCROLLABLE BODY */}
             <div className="flex-1 overflow-y-auto max-h-[70vh]">
-                <table className="min-w-full text-gray-800 text-center text-sm border-collapse">
+                <table className="min-w-full text-gray-800 text-center text-sm table-fixed border-collapse">
                     <tbody>
                         {localProducts.length === 0 ? (
                             <tr>
@@ -111,8 +106,7 @@ export default function ProductTable({
                             localProducts.map((p, i) => (
                                 <tr
                                     key={i}
-                                    className={`hover:bg-gray-50 ${borderless ? "" : "border-b"
-                                        }`}
+                                    className={`hover:bg-gray-50 ${borderless ? "" : "border-b border-gray-200"}`}
                                 >
                                     <td className="px-4 py-3">
                                         {p.image_url ? (
@@ -122,7 +116,7 @@ export default function ProductTable({
                                                 className="w-12 h-12 object-cover rounded-lg mx-auto"
                                             />
                                         ) : (
-                                            <div className="w-12 h-12 bg-gray-200 flex items-center justify-center rounded-lg">
+                                            <div className="w-12 h-12 bg-gray-200 flex items-center justify-center rounded-lg mx-auto">
                                                 <Package size={28} className="text-gray-500" />
                                             </div>
                                         )}
@@ -143,25 +137,22 @@ export default function ProductTable({
                                         </span>
                                     </td>
 
-                                    <td className="px-4 py-3">
-                                        ₱{formatPrice(p.discounted_price || p.price)}
-                                    </td>
+                                    <td className="px-4 py-3">₱{formatPrice(p.discounted_price || p.price)}</td>
 
-                                    <td className="px-4 py-3 flex justify-center gap-2">
-                                        {/* Hide View button for branch_manager */}
+                                    {/* Action buttons */}
+                                    <td className="px-4 py-0 h-16 flex items-center justify-center gap-2">
                                         {userRole !== "branch_manager" && (
                                             <button
                                                 onClick={() => setSelectedProduct(p)}
-                                                className="px-4 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                                className="flex items-center justify-center gap-1 px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                                             >
-                                                View
+                                                <Eye className="w-4 h-4" /> View
                                             </button>
                                         )}
-
                                         {userRole !== "admin" && (
                                             <button
                                                 onClick={() => setRestockProduct(p)}
-                                                className="px-4 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-400"
+                                                className="px-3 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-400"
                                             >
                                                 Restock
                                             </button>

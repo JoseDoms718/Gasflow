@@ -26,6 +26,7 @@ const damagedProductsRoute = require("./routes/damagedProducts");
 const chatRoutes = require("./routes/chat"); // renamed to match chat.js
 const servicesRoutes = require("./routes/services");
 const branchesRoutes = require("./routes/branch");
+const deliveryfeesRoutes = require("./routes/deliveryfee");
 /* -----------------------------------------
    ✅ Initialize App & Server
 ----------------------------------------- */
@@ -124,6 +125,7 @@ app.use("/banners", bannersRoutes);
 app.use("/damaged-products", damagedProductsRoute);
 app.use("/services", servicesRoutes);
 app.use("/branches", branchesRoutes);
+app.use("/fee", deliveryfeesRoutes);
 /* -----------------------------------------
    ✅ Chat Routes (no /api prefix)
 ----------------------------------------- */

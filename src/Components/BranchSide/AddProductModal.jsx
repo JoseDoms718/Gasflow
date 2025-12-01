@@ -46,13 +46,11 @@ export default function AddProductModal({ setShowForm, setProducts }) {
         if (/^\d*\.?\d{0,2}$/.test(value)) updateField(e.target.name, value);
     };
 
-    // 🔥 MAIN FIX: Ensure refill & discount never exceed price
+    // Ensure refill & discount never exceed price
     const enforcePriceRules = () => {
         const price = parseFloat(newProduct.price);
-
         if (isNaN(price)) return;
 
-        // Refill Price
         if (newProduct.refill_price) {
             let refill = parseFloat(newProduct.refill_price);
             if (!isNaN(refill) && refill >= price) {
@@ -61,7 +59,6 @@ export default function AddProductModal({ setShowForm, setProducts }) {
             }
         }
 
-        // Discounted Price
         if (newProduct.discounted_price) {
             let discounted = parseFloat(newProduct.discounted_price);
             if (!isNaN(discounted) && discounted >= price) {
@@ -74,11 +71,10 @@ export default function AddProductModal({ setShowForm, setProducts }) {
     const handlePriceBlur = (e) => {
         const { name, value } = e.target;
         if (!value) return;
-
         const num = parseFloat(value);
         if (!isNaN(num)) {
             updateField(name, num.toFixed(2));
-            enforcePriceRules(); // 🔥 Apply rule after blur
+            enforcePriceRules();
         }
     };
 
@@ -89,7 +85,6 @@ export default function AddProductModal({ setShowForm, setProducts }) {
 
     const handleAddProduct = async (e) => {
         e.preventDefault();
-
         const token = localStorage.getItem("token");
         const formData = new FormData();
 
@@ -97,14 +92,13 @@ export default function AddProductModal({ setShowForm, setProducts }) {
             formData.append("product_name", newProduct.name);
             formData.append("product_description", newProduct.details);
             formData.append("price", newProduct.price);
-            formData.append("refill_price", newProduct.refill_price);
+            formData.append("refill_price", newProduct.refill_price || "");
             formData.append("product_type", newProduct.product_type);
-            formData.append("discount_until", newProduct.discount_until);
-
-            if (newProduct.product_type === "discounted")
+            formData.append("discount_until", newProduct.discount_until || "");
+            if (newProduct.product_type === "discounted") {
                 formData.append("discounted_price", newProduct.discounted_price);
-
-            formData.append("image", newProduct.image);
+            }
+            if (newProduct.image) formData.append("image", newProduct.image);
         }
 
         if (role === "branch_manager") {
@@ -114,7 +108,12 @@ export default function AddProductModal({ setShowForm, setProducts }) {
         }
 
         try {
-            const res = await axios.post(`${BASE_URL}/products/add`, formData, {
+            const url =
+                role === "admin"
+                    ? `${BASE_URL}/products/admin/add-product`
+                    : `${BASE_URL}/products/add`;
+
+            const res = await axios.post(url, formData, {
                 headers: {
                     Authorization: `Bearer ${token}`,
                     "Content-Type": "multipart/form-data",
@@ -123,11 +122,10 @@ export default function AddProductModal({ setShowForm, setProducts }) {
 
             const added = res.data.product || res.data;
             setProducts((prev) => [added, ...prev]);
-
             toast.success("Product added!");
             setShowForm(false);
         } catch (error) {
-            console.error("Error adding:", error);
+            console.error("Error adding product:", error);
             toast.error("Failed to add product.");
         }
     };
@@ -136,9 +134,7 @@ export default function AddProductModal({ setShowForm, setProducts }) {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-gray-900 text-white p-6 rounded-lg shadow-lg w-full max-w-3xl">
                 <h3 className="text-xl font-bold mb-4">Add New Product</h3>
-
                 <form className="flex flex-col md:flex-row gap-6" onSubmit={handleAddProduct}>
-
                     {/* ADMIN IMAGE */}
                     {role === "admin" && (
                         <div className="flex-1 flex flex-col items-center">
@@ -148,8 +144,8 @@ export default function AddProductModal({ setShowForm, setProducts }) {
                                 accept="image/*"
                                 onChange={handleImageUpload}
                                 className="w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4
-                                file:rounded file:border-0 file:text-sm file:font-semibold
-                                file:bg-green-500 file:text-white hover:file:bg-green-600"
+                                    file:rounded file:border-0 file:text-sm file:font-semibold
+                                    file:bg-green-500 file:text-white hover:file:bg-green-600"
                             />
                             {newProduct.image && (
                                 <img
@@ -162,7 +158,6 @@ export default function AddProductModal({ setShowForm, setProducts }) {
                     )}
 
                     <div className="flex-1 flex flex-col gap-4">
-
                         {/* BRANCH MANAGER SELECT ADMIN PRODUCT */}
                         {role === "branch_manager" && (
                             <div>

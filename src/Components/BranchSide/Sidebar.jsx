@@ -99,8 +99,10 @@ export default function Sidebar({ role }) {
       { to: "/admininventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
       { to: "/adminsalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
       { to: "/adminmanageuser", label: "Manage Users", icon: <Users className="w-5 h-5" /> },
-      { to: "/admininquiries", label: "Inquiries", icon: <MessageCircle className="w-5 h-5" /> }, // added
+      { to: "/admininquiries", label: "Inquiries", icon: <MessageCircle className="w-5 h-5" /> },
+      { to: "/adminmaintenance", label: "Maintenance", icon: <Settings className="w-5 h-5" /> },
     ],
+
 
     branch_manager: [
       { to: "/branchorder", label: "Orders", icon: <ShoppingCart className="w-5 h-5" />, showBadge: true },

@@ -41,6 +41,7 @@ import AdminManagebanners from "./Pages/Admin/AdminManagebannerpage";
 import AdminManageservicespage from "./Pages/Admin/AdminManageservicepage";
 import AdminManageUserRequestpage from "./Pages/Admin/AdminManageUserRequestpage";
 import AdminInquirypage from "./Pages/Admin/AdminInquirypage";
+import Deliveryfeepage from "./Pages/Admin/Deliveryfeepage";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
@@ -83,6 +84,7 @@ createRoot(document.getElementById("root")).render(
         <Route path="/adminmanageservices" element={<AdminManageservicespage />} />
         <Route path="/adminmanageuserrequest" element={<AdminManageUserRequestpage />} />
         <Route path="/admininquiries" element={<AdminInquirypage />} />
+        <Route path="/admindeliveryfees" element={<Deliveryfeepage />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>
