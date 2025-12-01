@@ -30,7 +30,8 @@ export default function IncomingOrderSection() {
       const token = localStorage.getItem("token");
       if (!token) throw new Error("Not logged in");
 
-      const res = await axios.get(`${API_BASE}/orders/retailer-orders`, {
+      // 🔥 FIXED ENDPOINT
+      const res = await axios.get(`${API_BASE}/orders/branch-orders`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -54,7 +55,10 @@ export default function IncomingOrderSection() {
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-    socketRef.current = io(SOCKET_URL, { auth: { token }, transports: ["websocket"] });
+    socketRef.current = io(SOCKET_URL, {
+      auth: { token },
+      transports: ["websocket"],
+    });
 
     socketRef.current.on("order-updated", (updatedOrder) => {
       setOrders((prev) => {
@@ -107,7 +111,7 @@ export default function IncomingOrderSection() {
 
     try {
       const res = await axios.put(
-        `${API_BASE}/orders/retailer/update-status/${order_id}`,
+        `${API_BASE}/orders/branch/update-status/${order_id}`,
         { status: newStatus },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -202,7 +206,9 @@ export default function IncomingOrderSection() {
             return (
               <div
                 key={order.order_id}
-                className={`rounded-xl overflow-hidden mb-4 border bg-white ${open ? "shadow-2xl" : "shadow-md hover:shadow-xl"
+                className={`rounded-xl overflow-hidden mb-4 border bg-white ${open
+                  ? "shadow-2xl"
+                  : "shadow-md hover:shadow-xl"
                   }`}
               >
                 {/* COLLAPSE HEADER */}
@@ -216,7 +222,8 @@ export default function IncomingOrderSection() {
                       {order.items?.[0]?.product_name || "Order"}
                     </p>
                     <p className="text-sm text-gray-700">
-                      Buyer: <span className="font-bold">{order.buyer_name}</span>
+                      Buyer:{" "}
+                      <span className="font-bold">{order.buyer_name}</span>
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
@@ -231,29 +238,29 @@ export default function IncomingOrderSection() {
                 {open && (
                   <div className="p-5 border-t border-gray-200 bg-gray-50">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* LEFT SIDE — FIXED LAYOUT */}
+                      {/* LEFT SIDE */}
                       <div className="w-full h-[350px] overflow-y-auto rounded-xl bg-white shadow-md p-4 scroll-smooth snap-y snap-mandatory space-y-4">
                         {order.items?.map((item, idx) => (
                           <div
                             key={idx}
                             className="flex items-start gap-4 p-4 snap-start min-h-[150px] bg-gray-50 rounded-lg shadow-sm"
                           >
-                            {/* PRODUCT IMAGE */}
                             <img
                               src={item.image_url}
                               alt={item.product_name}
                               className="w-32 h-32 object-cover rounded-lg flex-shrink-0"
                             />
 
-                            {/* TEXT INFO */}
                             <div className="flex flex-col justify-between">
                               <h3 className="text-lg font-semibold text-gray-900">
                                 {item.product_name}
                               </h3>
+
                               <p className="text-sm text-gray-700 mt-1">
                                 Qty: <span className="font-bold">{item.quantity}</span> × ₱
                                 {item.price.toLocaleString()}
                               </p>
+
                               <p className="text-blue-600 font-semibold mt-1">
                                 Subtotal: ₱{(item.quantity * item.price).toLocaleString()}
                               </p>
@@ -262,11 +269,13 @@ export default function IncomingOrderSection() {
                         ))}
                       </div>
 
-                      {/* RIGHT SIDE — ORDER DETAILS */}
+                      {/* RIGHT SIDE */}
                       <div className="bg-white rounded-xl shadow-md border p-6 text-sm text-gray-800 space-y-4">
                         <div>
                           <p className="font-semibold text-gray-900">Delivery Address</p>
-                          <p className="text-gray-700">{order.barangay}, {order.municipality}</p>
+                          <p className="text-gray-700">
+                            {order.barangay}, {order.municipality}
+                          </p>
                         </div>
 
                         <div>
@@ -275,14 +284,20 @@ export default function IncomingOrderSection() {
                         </div>
 
                         <div>
-                          <p className="font-semibold text-gray-900">Contact Number</p>
-                          <p className="text-gray-700">{order.contact_number}</p>
+                          <p className="font-semibold text-gray-900">
+                            Contact Number
+                          </p>
+                          <p className="text-gray-700">
+                            {order.contact_number}
+                          </p>
                         </div>
 
                         <div>
                           <p className="font-semibold text-gray-900">Ordered At</p>
                           <p className="text-gray-700">
-                            {order.ordered_at ? new Date(order.ordered_at).toLocaleString() : "—"}
+                            {order.ordered_at
+                              ? new Date(order.ordered_at).toLocaleString()
+                              : "—"}
                           </p>
                         </div>
 
@@ -301,7 +316,9 @@ export default function IncomingOrderSection() {
                     <div className="flex justify-end gap-2 mt-5">
                       {nextStatus && (
                         <button
-                          onClick={() => updateOrderStatus(order.order_id, nextStatus)}
+                          onClick={() =>
+                            updateOrderStatus(order.order_id, nextStatus)
+                          }
                           className="px-5 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 shadow-sm transition"
                         >
                           Mark as {statusLabels[nextStatus]}
@@ -310,7 +327,9 @@ export default function IncomingOrderSection() {
 
                       {order.status !== "delivered" && (
                         <button
-                          onClick={() => updateOrderStatus(order.order_id, "cancelled")}
+                          onClick={() =>
+                            updateOrderStatus(order.order_id, "cancelled")
+                          }
                           className="px-5 py-2 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 shadow-sm transition"
                         >
                           Cancel
