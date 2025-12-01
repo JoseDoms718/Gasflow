@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { ArrowLeft, Tag, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ArrowLeft, Tag, X } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation } from "swiper/modules";
@@ -26,10 +26,9 @@ export default function WalkInOrders() {
   const BASE_URL = import.meta.env.VITE_BASE_URL;
   const navigate = useNavigate();
   const location = useLocation();
-  const userRole = localStorage.getItem("role");
   const token = localStorage.getItem("token");
+  const userRole = localStorage.getItem("role");
 
-  // Helper for price formatting
   const formatPrice = (value) => {
     const num = Number(value);
     return isNaN(num)
@@ -37,12 +36,10 @@ export default function WalkInOrders() {
       : num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  // Scroll to top on route change
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [location.pathname]);
 
-  // Back navigation
   const handleBack = () => {
     if (userRole === "owner") navigate("/ownerorders");
     else if (userRole === "branch_manager") navigate("/branchorder");
@@ -50,7 +47,6 @@ export default function WalkInOrders() {
     else navigate("/login");
   };
 
-  // Phone input handler
   const handlePhoneChange = (e) => {
     let value = e.target.value;
     if (!value.startsWith("+63")) value = "+63" + value.replace(/^0+|^\+63/, "");
@@ -59,7 +55,6 @@ export default function WalkInOrders() {
     setFormData({ ...formData, contact: value });
   };
 
-  // Fetch products
   const fetchProducts = useCallback(async () => {
     if (!token) return;
     try {
@@ -70,7 +65,7 @@ export default function WalkInOrders() {
       const formatted = products.map((p) => ({
         ...p,
         stock: Number(p.stock) || 0,
-        isRefill: false, // <-- add isRefill state here
+        isRefill: false,
         image_url: p.image_url
           ? p.image_url.startsWith("http")
             ? p.image_url
@@ -81,6 +76,7 @@ export default function WalkInOrders() {
       setDiscountedProducts(formatted.filter((p) => p.product_type === "discounted"));
     } catch (err) {
       console.error("❌ Failed to fetch products:", err);
+      toast.error("Failed to load products");
     }
   }, [token]);
 
@@ -88,14 +84,13 @@ export default function WalkInOrders() {
     fetchProducts();
   }, [fetchProducts]);
 
-  // Fetch barangays when municipality changes
   useEffect(() => {
+    if (!formData.municipality) {
+      setBarangays([]);
+      setFormData((prev) => ({ ...prev, barangay: "" }));
+      return;
+    }
     const fetchBarangays = async () => {
-      if (!formData.municipality) {
-        setBarangays([]);
-        setFormData((prev) => ({ ...prev, barangay: "" }));
-        return;
-      }
       try {
         const res = await axios.get(`${BASE_URL}/barangays?municipality=${formData.municipality}`);
         setBarangays(res.data || []);
@@ -108,10 +103,18 @@ export default function WalkInOrders() {
     fetchBarangays();
   }, [formData.municipality]);
 
-  // Form input handler
   const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
-  // Form submit
+  const handleToggleRefill = (isRefill) => {
+    if (!selectedProduct) return;
+    const updated = { ...selectedProduct, isRefill };
+    setSelectedProduct(updated);
+
+    const updateArr = (arr) => arr.map((p) => (p.product_id === updated.product_id ? updated : p));
+    setRegularProducts(updateArr);
+    setDiscountedProducts(updateArr);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedProduct) return;
@@ -120,24 +123,32 @@ export default function WalkInOrders() {
       return;
     }
     setLoading(true);
+
     try {
+      // Construct items array for backend
+      const items = [
+        {
+          product_id: selectedProduct.product_id,
+          quantity,
+          refill: selectedProduct.isRefill, // boolean
+        },
+      ];
+
       const orderData = {
-        product_id: selectedProduct.product_id,
-        product_name: selectedProduct.product_name,
-        quantity,
+        items,
         customer_name: formData.name,
         contact_number: formData.contact,
         address: `${formData.barangay}, ${formData.municipality}`,
-        total_price: (selectedProduct.isRefill
-          ? selectedProduct.refill_price
-          : selectedProduct.discounted_price || selectedProduct.price) * quantity,
       };
+
       const res = await axios.post(`${BASE_URL}/orders/walk-in`, orderData, {
         headers: { Authorization: `Bearer ${token}` },
       });
+
       if (res.status === 200 || res.status === 201) {
         toast.success("✅ Walk-in order created successfully!");
-        // Update stock in products
+
+        // Update stock locally
         const updateStock = (arr) =>
           arr.map((p) =>
             p.product_id === selectedProduct.product_id
@@ -146,20 +157,19 @@ export default function WalkInOrders() {
           );
         setRegularProducts(updateStock);
         setDiscountedProducts(updateStock);
-        await fetchProducts();
+
         setSelectedProduct(null);
         setFormData({ name: "", contact: "+63", barangay: "", municipality: "" });
         setQuantity(1);
       }
     } catch (err) {
       console.error("❌ Failed to submit order:", err);
-      toast.error("❌ Failed to submit order. Please try again.");
+      toast.error(err.response?.data?.error || "Failed to submit order. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Product Card component
   const ProductCard = ({ product, isDiscounted }) => (
     <div className="bg-gray-800 rounded-2xl shadow-md overflow-hidden flex flex-col justify-between hover:scale-[1.02] transition-transform duration-200 border border-gray-700">
       <div onClick={() => setSelectedProduct(product)} className="cursor-pointer">
@@ -167,8 +177,7 @@ export default function WalkInOrders() {
         <div className="p-4">
           <h2 className="text-lg font-semibold text-white truncate">{product.product_name}</h2>
           <p className="text-gray-400 text-sm mt-1">
-            Stock:{" "}
-            <span className={`${product.stock > 0 ? "text-green-400" : "text-red-500"} font-semibold`}>
+            Stock: <span className={`${product.stock > 0 ? "text-green-400" : "text-red-500"} font-semibold`}>
               {product.stock}
             </span>
           </p>
@@ -186,23 +195,12 @@ export default function WalkInOrders() {
       <button
         onClick={() => setSelectedProduct(product)}
         disabled={product.stock <= 0}
-        className={`${product.stock <= 0 ? "bg-gray-600 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
-          } text-white font-semibold py-2 rounded-b-2xl transition`}
+        className={`${product.stock <= 0 ? "bg-gray-600 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"} text-white font-semibold py-2 rounded-b-2xl transition`}
       >
         {product.stock <= 0 ? "Out of Stock" : "Buy Now"}
       </button>
     </div>
   );
-
-  // Update isRefill on modal toggle and sync with product arrays
-  const handleToggleRefill = (isRefill) => {
-    if (!selectedProduct) return;
-    const updated = { ...selectedProduct, isRefill };
-    setSelectedProduct(updated);
-    const updateArr = (arr) => arr.map((p) => (p.product_id === updated.product_id ? updated : p));
-    setRegularProducts(updateArr);
-    setDiscountedProducts(updateArr);
-  };
 
   return (
     <div className="bg-gray-900 min-h-screen text-white flex flex-col overflow-x-hidden">
@@ -243,16 +241,6 @@ export default function WalkInOrders() {
           ) : (
             <p className="text-gray-500">No discounted products found.</p>
           )}
-          {discountedProducts.length > 3 && (
-            <>
-              <button className="prev-btn2 absolute left-[-60px] top-1/2 -translate-y-1/2 bg-green-700 hover:bg-green-600 p-3 rounded-full shadow-lg transition">
-                <ChevronLeft className="w-6 h-6 text-white" />
-              </button>
-              <button className="next-btn2 absolute right-[-60px] top-1/2 -translate-y-1/2 bg-green-700 hover:bg-green-600 p-3 rounded-full shadow-lg transition">
-                <ChevronRight className="w-6 h-6 text-white" />
-              </button>
-            </>
-          )}
         </div>
 
         {/* Regular */}
@@ -276,16 +264,6 @@ export default function WalkInOrders() {
           ) : (
             <p className="text-gray-500">No regular products found.</p>
           )}
-          {regularProducts.length > 3 && (
-            <>
-              <button className="prev-btn absolute left-[-60px] top-1/2 -translate-y-1/2 bg-gray-800 hover:bg-gray-700 p-3 rounded-full shadow-lg transition">
-                <ChevronLeft className="w-6 h-6 text-white" />
-              </button>
-              <button className="next-btn absolute right-[-60px] top-1/2 -translate-y-1/2 bg-gray-800 hover:bg-gray-700 p-3 rounded-full shadow-lg transition">
-                <ChevronRight className="w-6 h-6 text-white" />
-              </button>
-            </>
-          )}
         </div>
       </div>
 
@@ -301,10 +279,7 @@ export default function WalkInOrders() {
             <div className="p-5">
               <h2 className="text-xl font-semibold text-white text-center">{selectedProduct.product_name}</h2>
               <p className="text-center text-sm text-gray-400 mt-1">
-                Stock Available:{" "}
-                <span className={`${selectedProduct.stock > 0 ? "text-green-400" : "text-red-500"} font-semibold`}>
-                  {selectedProduct.stock}
-                </span>
+                Stock Available: <span className={`${selectedProduct.stock > 0 ? "text-green-400" : "text-red-500"} font-semibold`}>{selectedProduct.stock}</span>
               </p>
 
               <div className="text-center mt-2">
@@ -321,7 +296,7 @@ export default function WalkInOrders() {
                 <div className="flex justify-center gap-4 mt-4">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="radio" name="purchaseType" value="full" checked={!selectedProduct.isRefill} onChange={() => handleToggleRefill(false)} />
-                    Full
+                    Regular
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="radio" name="purchaseType" value="refill" checked={selectedProduct.isRefill} onChange={() => handleToggleRefill(true)} />
@@ -353,7 +328,6 @@ export default function WalkInOrders() {
                   </select>
                 </div>
 
-                {/* Quantity */}
                 <div className="flex items-center justify-between">
                   <span className="text-sm">Quantity</span>
                   <div className="flex items-center gap-2">

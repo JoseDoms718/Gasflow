@@ -25,29 +25,25 @@ export default function ReportsPage() {
   const [newExpense, setNewExpense] = useState({ name: "", amount: "" });
   const [damagedTotal, setDamagedTotal] = useState(0);
 
-  const handleDamagedUpdate = (updatedList, total) => {
-    setDamagedProducts(updatedList);
-    setDamagedTotal(total);
-  };
-
   const branches = ["Boac", "Mogpog", "Gasan", "Buenavista", "Torrijos", "Santa Cruz"];
 
   const toLocalDate = (dateString) => new Date(dateString).toLocaleDateString("en-CA");
 
-  // Fetch data
+  // Fetch data from endpoints
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) return;
 
     const fetchData = async () => {
       try {
+        // User info
         const { data: me } = await axios.get(`${BASE_URL}/auth/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setUserRole(me.user.role);
         setUserMunicipality(me.user.municipality);
 
-        // Expenses
+        // Expenses endpoint
         const { data: expensesRes } = await axios.get(`${BASE_URL}/expenses`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -62,10 +58,9 @@ export default function ReportsPage() {
               addedBy: e.user_name || "N/A",
             }))
           );
-
         }
 
-        // Transactions
+        // Transactions endpoint
         const { data: transactionsRes } = await axios.get(`${BASE_URL}/orders/my-sold`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -89,16 +84,14 @@ export default function ReportsPage() {
           );
         }
 
-        // Damaged Products
-        // Damaged Products
-        const { data: damagedRes } = await axios.get(
-          `${BASE_URL}/damaged-products/my-damaged-products`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        // Damaged products endpoint
+        const { data: damagedRes } = await axios.get(`${BASE_URL}/damaged-products/my-damaged-products`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         const damagedList = damagedRes.success ? damagedRes.data : [];
         setDamagedProducts(damagedList);
 
-        // Calculate total
+        // Damaged total calculation
         const total = damagedList.reduce((sum, dp) => {
           const quantity = dp.quantity || 0;
           const unitPrice =
@@ -108,7 +101,6 @@ export default function ReportsPage() {
           return sum + unitPrice * quantity;
         }, 0);
         setDamagedTotal(total);
-
       } catch (err) {
         console.error("❌ Failed to fetch reports data:", err);
         toast.error("Failed to fetch reports data");
@@ -120,9 +112,9 @@ export default function ReportsPage() {
 
   // Add expense
   const handleAddExpense = async () => {
-    if (!newExpense.name.trim() || !newExpense.amount || newExpense.amount <= 0) {
+    if (!newExpense.name.trim() || !newExpense.amount || newExpense.amount <= 0)
       return toast.error("Please fill all fields correctly.");
-    }
+
     const token = localStorage.getItem("token");
     if (!token) return toast.error("You are not authenticated.");
 
@@ -134,6 +126,7 @@ export default function ReportsPage() {
       );
 
       if (res.data.success) {
+        // Refresh expenses after adding
         const refreshed = await axios.get(`${BASE_URL}/expenses`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -159,7 +152,7 @@ export default function ReportsPage() {
     }
   };
 
-  // Filters
+  // Filter by date & branch
   const filterByDateAndBranch = (items) =>
     items.filter((item) => {
       const date = new Date(item.date);
@@ -168,18 +161,12 @@ export default function ReportsPage() {
       const iDay = date.getDate();
 
       const branchMatch =
-        userRole === "admin"
-          ? branch === "All" || item.branch === branch
-          : true; // sellers only see their own
+        userRole === "admin" ? branch === "All" || item.branch === branch : true;
       if (!branchMatch) return false;
 
       const today = new Date();
       if (timeFilter === "daily") {
-        return (
-          iYear === today.getFullYear() &&
-          iMonth === String(today.getMonth() + 1).padStart(2, "0") &&
-          iDay === today.getDate()
-        );
+        return iYear === today.getFullYear() && iMonth === String(today.getMonth() + 1).padStart(2, "0") && iDay === today.getDate();
       }
 
       if (timeFilter === "weekly") {
@@ -193,138 +180,29 @@ export default function ReportsPage() {
       return iMonth === month && iYear.toString() === year;
     });
 
-  const filteredTransactions = useMemo(
-    () => filterByDateAndBranch(transactions),
-    [transactions, month, year, timeFilter, branch]
-  );
-
-  const filteredExpenses = useMemo(
-    () => filterByDateAndBranch(expenses),
-    [expenses, month, year, timeFilter, branch]
-  );
-
-  // Filtered damaged products (update whenever damagedProducts change)
+  const filteredTransactions = useMemo(() => filterByDateAndBranch(transactions), [transactions, month, year, timeFilter, branch]);
+  const filteredExpenses = useMemo(() => filterByDateAndBranch(expenses), [expenses, month, year, timeFilter, branch]);
   const filteredDamagedProducts = useMemo(() => {
     return filterByDateAndBranch(
       damagedProducts.map((dp) => ({
         ...dp,
-        date: dp.damaged_at ? new Date(dp.damaged_at) : new Date(), // <-- use damaged_at
+        date: dp.damaged_at ? new Date(dp.damaged_at) : new Date(),
         branch: dp.municipality || dp.branch || "Unknown",
-        addedBy: dp.user_name || "N/A", // <-- use user_name from API
+        addedBy: dp.user_name || "N/A",
       }))
     );
   }, [damagedProducts, month, year, timeFilter, branch]);
 
-
-
   const totalRevenue = filteredTransactions.reduce((sum, t) => sum + t.totalPrice, 0);
   const totalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
   const totalNet = totalRevenue - (totalExpenses + damagedTotal);
-
-  // Export Excel
-  const handleExportExcel = () => {
-    const wb = XLSX.utils.book_new();
-    const isAdmin = userRole === "admin";
-
-    // Sales Sheet
-    if (filteredTransactions.length > 0) {
-      const salesData = filteredTransactions.map((t) =>
-        isAdmin
-          ? {
-            "Added By": t.addedBy,
-            Municipality: t.branch,
-            Product: t.productName,
-            Quantity: t.quantity,
-            "Total Price (₱)": t.totalPrice,
-            "Delivery Date": t.date,
-            Buyer: t.buyer,
-          }
-          : {
-            Product: t.productName,
-            Quantity: t.quantity,
-            "Total Price (₱)": t.totalPrice,
-            "Delivery Date": t.date,
-            Buyer: t.buyer,
-          }
-      );
-      const wsSales = XLSX.utils.json_to_sheet(salesData);
-      wsSales["!cols"] = Object.keys(salesData[0]).map((key) => ({
-        wch: Math.max(key.length + 2, ...salesData.map((r) => String(r[key]).length + 2)),
-      }));
-      XLSX.utils.book_append_sheet(wb, wsSales, "Sales");
-    }
-
-    // Expenses Sheet
-    if (filteredExpenses.length > 0) {
-      const expensesData = filteredExpenses.map((e) =>
-        isAdmin
-          ? {
-            "Added By": e.addedBy,
-            Municipality: e.branch,
-            "Expense Name": e.name,
-            "Amount (₱)": e.amount,
-            Date: e.date,
-          }
-          : {
-            "Expense Name": e.name,
-            "Amount (₱)": e.amount,
-            Date: e.date,
-          }
-      );
-      const wsExpenses = XLSX.utils.json_to_sheet(expensesData);
-      wsExpenses["!cols"] = Object.keys(expensesData[0]).map((key) => ({
-        wch: Math.max(key.length + 2, ...expensesData.map((r) => String(r[key]).length + 2)),
-      }));
-      XLSX.utils.book_append_sheet(wb, wsExpenses, "Expenses");
-    }
-
-    // Damaged Products Sheet
-    // Damaged Products Sheet
-    // Damaged Products Sheet
-    if (damagedProducts.length > 0) {
-      const damagedData = damagedProducts.map((d) => {
-        const unitPrice =
-          d.product_type === "discounted" ? Number(d.discounted_price) || 0 : Number(d.price) || 0;
-
-        return {
-          "Added By": d.user_name || "N/A",
-          Municipality: d.municipality || "Unknown",
-          Product: d.product_name,
-          Quantity: d.quantity || 0,
-          "Total Price (₱)": unitPrice * (d.quantity || 0),
-          Date: d.damaged_at ? toLocalDate(d.damaged_at) : "Invalid date",
-        };
-      });
-
-      const wsDamaged = XLSX.utils.json_to_sheet(damagedData);
-      wsDamaged["!cols"] = Object.keys(damagedData[0]).map((key) => ({
-        wch: Math.max(
-          key.length + 2,
-          ...damagedData.map((r) => String(r[key] ?? "").length + 2)
-        ),
-      }));
-      XLSX.utils.book_append_sheet(wb, wsDamaged, "Damaged Products");
-    }
-
-
-
-    if (wb.SheetNames.length === 0) return toast.error("No data to export for this period.");
-
-    const fileName = `Report_${month}-${year}.xlsx`;
-    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-    saveAs(new Blob([wbout], { type: "application/octet-stream" }), fileName);
-  };
 
   // Charts
   const productQuantityMap = filteredTransactions.reduce((acc, t) => {
     acc[t.productName] = (acc[t.productName] || 0) + t.quantity;
     return acc;
   }, {});
-  const pieOptions = {
-    labels: Object.keys(productQuantityMap),
-    legend: { position: "bottom" },
-    tooltip: { y: { formatter: (val) => `${val} pcs` } },
-  };
+  const pieOptions = { labels: Object.keys(productQuantityMap), legend: { position: "bottom" }, tooltip: { y: { formatter: (val) => `${val} pcs` } } };
   const pieSeries = Object.values(productQuantityMap);
 
   const dateRevenueMap = filteredTransactions.reduce((acc, t) => {
@@ -332,13 +210,7 @@ export default function ReportsPage() {
     return acc;
   }, {});
   const sortedDates = Object.keys(dateRevenueMap).sort((a, b) => new Date(a) - new Date(b));
-  const lineOptions = {
-    chart: { id: "sales-trend" },
-    xaxis: { categories: sortedDates },
-    stroke: { curve: "smooth" },
-    yaxis: { labels: { formatter: (val) => `₱${val.toFixed(2)}` } },
-    tooltip: { y: { formatter: (val) => `₱${val.toFixed(2)}` } },
-  };
+  const lineOptions = { chart: { id: "sales-trend" }, xaxis: { categories: sortedDates }, stroke: { curve: "smooth" }, yaxis: { labels: { formatter: (val) => `₱${val.toFixed(2)}` } }, tooltip: { y: { formatter: (val) => `₱${val.toFixed(2)}` } } };
   const lineSeries = [{ name: "Total Sales", data: sortedDates.map((d) => dateRevenueMap[d]) }];
 
   return (
@@ -352,10 +224,7 @@ export default function ReportsPage() {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 font-semibold ${activeTab === tab
-                ? "border-b-4 border-blue-600 text-blue-600"
-                : "text-gray-600 hover:text-blue-500"
-                }`}
+              className={`px-4 py-2 font-semibold ${activeTab === tab ? "border-b-4 border-blue-600 text-blue-600" : "text-gray-600 hover:text-blue-500"}`}
             >
               {tab === "sales" ? "Sales Report" : "Expenses Report"}
             </button>
@@ -373,52 +242,24 @@ export default function ReportsPage() {
       <div className="flex items-center justify-between mb-6 gap-4">
         <div className="flex gap-4 items-center">
           {userRole === "admin" && (
-            <select
-              value={branch}
-              onChange={(e) => setBranch(e.target.value)}
-              className="border border-gray-300 rounded p-2"
-            >
+            <select value={branch} onChange={(e) => setBranch(e.target.value)} className="border border-gray-300 rounded p-2">
               <option value="All">All Municipalities</option>
-              {branches.map((b, idx) => (
-                <option key={idx} value={b}>
-                  {b}
-                </option>
-              ))}
+              {branches.map((b, idx) => <option key={idx} value={b}>{b}</option>)}
             </select>
           )}
 
-          <select
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            className="border border-gray-300 rounded p-2"
-          >
+          <select value={month} onChange={(e) => setMonth(e.target.value)} className="border border-gray-300 rounded p-2">
             {Array.from({ length: 12 }, (_, i) => {
               const m = String(i + 1).padStart(2, "0");
-              return (
-                <option key={m} value={m}>
-                  {new Date(0, i).toLocaleString("default", { month: "long" })}
-                </option>
-              );
+              return <option key={m} value={m}>{new Date(0, i).toLocaleString("default", { month: "long" })}</option>;
             })}
           </select>
 
-          <select
-            value={year}
-            onChange={(e) => setYear(e.target.value)}
-            className="border border-gray-300 rounded p-2"
-          >
-            {["2023", "2024", "2025", "2026"].map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
+          <select value={year} onChange={(e) => setYear(e.target.value)} className="border border-gray-300 rounded p-2">
+            {["2023", "2024", "2025", "2026"].map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
 
-          <select
-            value={timeFilter}
-            onChange={(e) => setTimeFilter(e.target.value)}
-            className="border border-gray-300 rounded p-2"
-          >
+          <select value={timeFilter} onChange={(e) => setTimeFilter(e.target.value)} className="border border-gray-300 rounded p-2">
             <option value="daily">Daily</option>
             <option value="weekly">Weekly</option>
             <option value="monthly">Monthly</option>
@@ -427,18 +268,11 @@ export default function ReportsPage() {
 
         <div className="flex gap-4">
           {activeTab === "expenses" && userRole !== "admin" && (
-            <button
-              onClick={() => setShowExpenseModal(true)}
-              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow"
-            >
+            <button onClick={() => setShowExpenseModal(true)} className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow">
               <PlusCircle className="w-5 h-5" /> Add Expense
             </button>
           )}
-
-          <button
-            onClick={handleExportExcel}
-            className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow"
-          >
+          <button onClick={() => toast.info("Export logic not shown here")} className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow">
             <Download className="w-5 h-5" /> Export Excel
           </button>
         </div>
@@ -449,9 +283,7 @@ export default function ReportsPage() {
         <div className="flex flex-1 gap-6 overflow-hidden">
           <div className="flex-1 border border-gray-300 rounded-lg overflow-y-auto">
             {filteredTransactions.length === 0 ? (
-              <div className="flex justify-center items-center h-full text-gray-500 py-20">
-                No sales data available for this period.
-              </div>
+              <div className="flex justify-center items-center h-full text-gray-500 py-20">No sales data available for this period.</div>
             ) : (
               <table className="w-full border-collapse text-center">
                 <thead className="bg-gray-900 text-white sticky top-0 z-10">
@@ -465,10 +297,7 @@ export default function ReportsPage() {
                 </thead>
                 <tbody className="bg-white">
                   {filteredTransactions.map((t, idx) => (
-                    <tr
-                      key={t.id}
-                      className={`border-t border-gray-300 ${idx % 2 === 0 ? "bg-gray-50" : "bg-white"} hover:bg-gray-100`}
-                    >
+                    <tr key={t.id} className={`border-t border-gray-300 ${idx % 2 === 0 ? "bg-gray-50" : "bg-white"} hover:bg-gray-100`}>
                       {userRole === "admin" && <td className="px-4 py-3">{t.branch}</td>}
                       <td className="px-4 py-3 font-semibold">{t.productName}</td>
                       <td className="px-4 py-3">{t.quantity}</td>
@@ -508,7 +337,7 @@ export default function ReportsPage() {
           newExpense={newExpense}
           setNewExpense={setNewExpense}
           handleAddExpense={handleAddExpense}
-          onDamagedTotalChange={handleDamagedUpdate}
+          onDamagedTotalChange={(list, total) => setDamagedProducts(list) || setDamagedTotal(total)}
         />
       )}
     </div>

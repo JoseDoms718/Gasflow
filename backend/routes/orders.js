@@ -131,8 +131,6 @@ router.post("/walk-in", authenticateToken, async (req, res) => {
   try {
     let {
       items, // array of { product_id, quantity, refill? }
-      product_id,
-      quantity,
       full_name,
       customer_name,
       contact_number,
@@ -143,28 +141,27 @@ router.post("/walk-in", authenticateToken, async (req, res) => {
 
     const buyerName = full_name || customer_name || "Unknown Customer";
 
-    // Handle single-product shorthand
-    if (!Array.isArray(items)) {
-      if (product_id && quantity) items = [{ product_id, quantity }];
-      else items = [];
+    // Ensure items array
+    if (!Array.isArray(items)) items = [];
+
+    if (!items.length || !contact_number) {
+      return res.status(400).json({ success: false, error: "Missing required fields." });
     }
 
-    // Parse barangay_id if missing
+    // Parse barangay_id from address if missing
     if (!barangay_id && address) {
       const maybeBarangay = address.split(",")[0].trim();
       if (maybeBarangay) {
         const [rows] = await db.query(
-          `SELECT barangay_id, barangay_name, municipality 
-           FROM barangays 
-           WHERE LOWER(barangay_name) = LOWER(?) LIMIT 1`,
+          `SELECT barangay_id FROM barangays WHERE LOWER(barangay_name) = LOWER(?) LIMIT 1`,
           [maybeBarangay]
         );
         if (rows.length) barangay_id = rows[0].barangay_id;
       }
     }
 
-    if (!items.length || !contact_number || !barangay_id) {
-      return res.status(400).json({ success: false, error: "Missing required fields." });
+    if (!barangay_id) {
+      return res.status(400).json({ success: false, error: "Barangay is required." });
     }
 
     // Validate barangay exists
@@ -177,28 +174,35 @@ router.post("/walk-in", authenticateToken, async (req, res) => {
     }
     const barangayRow = barangayRows[0];
 
-    // Validate Philippine contact number
+    // Validate PH contact number
     if (!PH_PHONE_REGEX.test(contact_number)) {
-      return res.status(400).json({
-        success: false,
-        error: "Invalid Philippine contact number format (+639XXXXXXXXX).",
-      });
+      return res.status(400).json({ success: false, error: "Invalid Philippine contact number format (+639XXXXXXXXX)." });
     }
+
+    // Determine branch_id for branch_manager or retailer
+    let branchIdForItems = null;
+    if (req.user.role === "branch_manager") branchIdForItems = req.user.branches?.[0] ?? null;
+    else if (req.user.role === "retailer") branchIdForItems = req.user.branch_id;
 
     const connection = await db.getConnection();
     try {
       await connection.beginTransaction();
 
-      // Check inventory for each item
+      // Fetch all products
+      const productIds = items.map((it) => it.product_id);
+      const [prodRows] = await connection.query(
+        `SELECT p.product_id, p.product_name, p.product_type, p.price, p.discounted_price, p.refill_price, i.stock
+         FROM products p
+         LEFT JOIN inventory i ON p.product_id = i.product_id
+         WHERE p.product_id IN (?)`,
+        [productIds]
+      );
+
+      const productsMap = Object.fromEntries(prodRows.map((p) => [p.product_id, p]));
+
+      // Check stock
       for (const it of items) {
-        const [prodRows] = await connection.query(
-          `SELECT p.product_name, p.product_type, p.price, p.discounted_price, p.refill_price, i.stock 
-           FROM products p 
-           LEFT JOIN inventory i ON p.product_id = i.product_id 
-           WHERE p.product_id = ? LIMIT 1`,
-          [it.product_id]
-        );
-        const product = prodRows[0];
+        const product = productsMap[it.product_id];
         if (!product) throw new Error(`Product ${it.product_id} not found.`);
         if (Number(it.quantity) > Number(product.stock)) {
           throw new Error(`Insufficient stock for ${product.product_name}. Only ${product.stock} left.`);
@@ -207,20 +211,14 @@ router.post("/walk-in", authenticateToken, async (req, res) => {
 
       // Compute total price if not provided
       if (!total_price) {
-        total_price = 0;
-        for (const it of items) {
-          const [pRows] = await connection.query(
-            "SELECT discounted_price, price, refill_price FROM products WHERE product_id = ? LIMIT 1",
-            [it.product_id]
-          );
-          const p = pRows[0];
-          let price = p.discounted_price ?? p.price ?? 0;
-          if (p.refill_price && it.refill) price = p.refill_price;
-          total_price += price * Number(it.quantity);
-        }
+        total_price = items.reduce((acc, it) => {
+          const p = productsMap[it.product_id];
+          const price = it.refill && p.refill_price ? p.refill_price : p.discounted_price ?? p.price ?? 0;
+          return acc + price * Number(it.quantity);
+        }, 0);
       }
 
-      // Insert order (walk-in is delivered immediately)
+      // Insert order
       const [orderResult] = await connection.query(
         `INSERT INTO orders (
           buyer_id, full_name, contact_number, barangay_id,
@@ -228,33 +226,28 @@ router.post("/walk-in", authenticateToken, async (req, res) => {
         ) VALUES (NULL, ?, ?, ?, 'delivered', ?, 1, NOW(), NOW(), 1)`,
         [buyerName, contact_number, barangay_id, total_price]
       );
-
       const order_id = orderResult.insertId;
 
-      // Insert items, deduct inventory, log
+      // Insert items, deduct inventory, and log
       for (const it of items) {
-        const [prodRows] = await connection.query(
-          `SELECT p.product_type, p.price, p.discounted_price, p.refill_price, p.product_name, i.stock 
-           FROM products p 
-           LEFT JOIN inventory i ON p.product_id = i.product_id 
-           WHERE p.product_id = ? LIMIT 1`,
-          [it.product_id]
-        );
-        const prod = prodRows[0];
-        if (!prod) throw new Error(`Product ${it.product_id} not found.`);
+        const prod = productsMap[it.product_id];
 
-        // Determine price
-        let price = prod.discounted_price ?? prod.price ?? 0;
-        let state = ["regular", "discounted"].includes(prod.product_type) ? "full" : "n/a";
-        if (prod.refill_price && it.refill) {
-          price = prod.refill_price;
-          state = "refill";
+        const price = it.refill && prod.refill_price ? prod.refill_price : prod.discounted_price ?? prod.price ?? 0;
+
+        // ✅ Determine type and state for inventory_logs
+        let typeForLog, stateForLog;
+        if (it.refill && prod.refill_price) {
+          typeForLog = "refill";
+          stateForLog = "n/a";
+        } else {
+          typeForLog = "sales";
+          stateForLog = "full";
         }
 
         // Insert order item
         await connection.query(
-          "INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)",
-          [order_id, it.product_id, it.quantity, price]
+          "INSERT INTO order_items (order_id, product_id, quantity, price, branch_id) VALUES (?, ?, ?, ?, ?)",
+          [order_id, it.product_id, it.quantity, price, branchIdForItems]
         );
 
         // Deduct inventory
@@ -269,8 +262,8 @@ router.post("/walk-in", authenticateToken, async (req, res) => {
         await connection.query(
           `INSERT INTO inventory_logs 
             (product_id, state, user_id, type, quantity, previous_stock, new_stock, description, created_at)
-           VALUES (?, ?, ?, 'sale', ?, ?, ?, ?, NOW())`,
-          [it.product_id, state, req.user.id, it.quantity, prevStock, newStock, `Walk-in sale Order #${order_id}`]
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+          [it.product_id, stateForLog, req.user.id, typeForLog, it.quantity, prevStock, newStock, `Walk-in sale Order #${order_id}`]
         );
       }
 
@@ -289,6 +282,7 @@ router.post("/walk-in", authenticateToken, async (req, res) => {
           barangay: barangayRow.barangay_name,
           municipality: barangayRow.municipality,
           status: "delivered",
+          branch_id: branchIdForItems,
         },
       });
     } catch (txErr) {
@@ -532,42 +526,44 @@ router.get(
           b.municipality AS municipality,
           u.name AS buyer_name,
           u.email AS buyer_email,
-          p.product_id,
+          oi.product_id,
           p.product_name,
           p.product_description,
           p.image_url AS image_url,
           oi.quantity,
           oi.price,
-          br.branch_id,
+          oi.branch_id,
           br.branch_name
         FROM orders o
         JOIN order_items oi ON o.order_id = oi.order_id
         JOIN products p ON oi.product_id = p.product_id
         LEFT JOIN users u ON o.buyer_id = u.user_id
-        LEFT JOIN inventory i ON i.product_id = p.product_id
-        LEFT JOIN branches br ON i.branch_id = br.branch_id
+        LEFT JOIN branches br ON oi.branch_id = br.branch_id
         LEFT JOIN barangays b ON o.barangay_id = b.barangay_id
+        WHERE o.status = 'delivered'
       `;
 
-      let params = [];
+      const params = [];
 
-      if (req.user.role === "admin") {
-        // Admin: show only delivered orders
-        query += " WHERE o.status = 'delivered'";
-      } else {
-        // Retailer or branch_manager: show only their products/orders
-        query += " WHERE o.status = 'delivered' AND br.branch_id = ?";
-        params.push(req.user.branch_id); // assuming branch_manager/retailer has branch_id
+      // Branch manager: filter by all assigned branches
+      if (req.user.role === "branch_manager" && req.user.branches && req.user.branches.length > 0) {
+        query += ` AND oi.branch_id IN (${req.user.branches.map(() => "?").join(",")})`;
+        params.push(...req.user.branches);
+      }
+
+      // Retailer: filter by their user_id (if needed)
+      if (req.user.role === "retailer") {
+        query += " AND oi.branch_id = ?";
+        params.push(req.user.branch_id); // make sure branch_id is set for retailer
       }
 
       query += " ORDER BY o.delivered_at DESC";
 
       const [rows] = await db.query(query, params);
 
-      if (!rows.length) {
-        return res.status(200).json({ success: true, orders: [] });
-      }
+      if (!rows.length) return res.status(200).json({ success: true, orders: [] });
 
+      // Group items by order
       const grouped = rows.reduce((acc, row) => {
         let order = acc.find((o) => o.order_id === row.order_id);
         if (!order) {
@@ -607,9 +603,7 @@ router.get(
       return res.status(200).json({ success: true, orders: grouped });
     } catch (err) {
       console.error("❌ Error fetching my-sold:", err);
-      return res
-        .status(500)
-        .json({ success: false, error: "Failed to fetch seller orders." });
+      return res.status(500).json({ success: false, error: "Failed to fetch seller orders." });
     }
   }
 );
