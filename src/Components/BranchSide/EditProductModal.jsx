@@ -16,11 +16,27 @@ export default function EditProductModal({ selectedProduct, setSelectedProduct, 
 
     const handleEditChange = (field, value) => {
         let num = value === "" ? "" : Number(value);
+
         if (field === "branch_discounted_price" || field === "branch_refill_price") {
-            const max = Number(editedProduct.branch_price) - 1;
-            if (num !== "" && num > max) num = max;
+            const maxPrice = Number(editedProduct.branch_price) - 1;
+            const maxDiscounted = editedProduct.product_type === "discounted"
+                ? Number(editedProduct.branch_discounted_price) - 1
+                : maxPrice;
+
+            if (field === "branch_refill_price" && editedProduct.product_type === "discounted") {
+                // Refill cannot exceed discounted price - 1
+                if (num !== "" && num > maxDiscounted) num = maxDiscounted;
+            } else if (field === "branch_discounted_price") {
+                // Discounted price cannot exceed branch price - 1
+                if (num !== "" && num > maxPrice) num = maxPrice;
+            } else {
+                // Normal upper bound: branch price - 1
+                if (num !== "" && num > maxPrice) num = maxPrice;
+            }
+
             if (num !== "" && num < 0) num = 0;
         }
+
         setEditedProduct(prev => ({ ...prev, [field]: num }));
     };
 
@@ -93,12 +109,16 @@ export default function EditProductModal({ selectedProduct, setSelectedProduct, 
             }
         }
 
-        // ✅ Safeguard: ensure refill and discounted prices are <= branch price
-        if (editedProduct.branch_refill_price > editedProduct.branch_price)
-            return toast.error("Branch refill price cannot exceed branch price.");
+        if (editedProduct.branch_refill_price > editedProduct.branch_price - 1)
+            return toast.error("Branch refill price cannot exceed branch price minus 1.");
 
-        if (editedProduct.product_type === "discounted" && editedProduct.branch_discounted_price > editedProduct.branch_price)
-            return toast.error("Branch discounted price cannot exceed branch price.");
+        if (editedProduct.product_type === "discounted") {
+            if (editedProduct.branch_discounted_price > editedProduct.branch_price - 1)
+                return toast.error("Branch discounted price cannot exceed branch price minus 1.");
+            if (editedProduct.branch_refill_price > editedProduct.branch_discounted_price - 1)
+                return toast.error("Branch refill price cannot exceed discounted price minus 1.");
+        }
+
 
         const payload = {
             price: Number(editedProduct.branch_price),

@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
+import { Calendar } from "lucide-react";
 
 export default function AddProductModal({ setShowForm, setProducts }) {
+    const BASE_URL = import.meta.env.VITE_BASE_URL;
+    const user = JSON.parse(localStorage.getItem("user"));
+    const role = user?.role;
+    const token = localStorage.getItem("token");
+
     const [newProduct, setNewProduct] = useState({
         image: null,
         name: "",
@@ -18,10 +24,6 @@ export default function AddProductModal({ setShowForm, setProducts }) {
     });
 
     const [universalProducts, setUniversalProducts] = useState([]);
-    const BASE_URL = import.meta.env.VITE_BASE_URL;
-    const user = JSON.parse(localStorage.getItem("user"));
-    const role = user?.role;
-    const token = localStorage.getItem("token");
 
     useEffect(() => {
         if (role === "branch_manager") {
@@ -34,25 +36,32 @@ export default function AddProductModal({ setShowForm, setProducts }) {
         }
     }, []);
 
-    const updateField = (name, value) =>
-        setNewProduct((prev) => ({ ...prev, [name]: value }));
+    const updateField = (name, value) => setNewProduct((prev) => ({ ...prev, [name]: value }));
 
     const handleChange = (e) => updateField(e.target.name, e.target.value);
 
     const handleNumericInput = (e) => {
         const { name, value } = e.target;
-
-        // allow only numbers and max 2 decimals
         if (/^\d*\.?\d{0,2}$/.test(value)) {
             let newVal = value;
 
-            // live enforce: discounted/refill cannot exceed price
-            if ((name === "refill_price" || name === "discounted_price") && newProduct.price) {
-                const price = parseFloat(newProduct.price);
+            const priceNum = parseFloat(newProduct.price);
+            const discountedNum = parseFloat(newProduct.discounted_price);
+
+            if (name === "refill_price" && newProduct.price) {
                 const val = parseFloat(value);
-                if (!isNaN(val) && val >= price) {
-                    newVal = (price - 1).toFixed(2);
+                if (!isNaN(val)) {
+                    if (newProduct.product_type === "discounted" && !isNaN(discountedNum) && val >= discountedNum) {
+                        newVal = (discountedNum - 1).toFixed(2);
+                    } else if (val >= priceNum) {
+                        newVal = (priceNum - 1).toFixed(2);
+                    }
                 }
+            }
+
+            if (name === "discounted_price" && !isNaN(priceNum)) {
+                const val = parseFloat(value);
+                if (!isNaN(val) && val >= priceNum) newVal = (priceNum - 1).toFixed(2);
             }
 
             updateField(name, newVal);
@@ -62,18 +71,27 @@ export default function AddProductModal({ setShowForm, setProducts }) {
     const handlePriceBlur = (e) => {
         const { name, value } = e.target;
         let num = parseFloat(value);
-        if (isNaN(num) || num <= 0) {
-            updateField(name, "");
-        } else {
-            updateField(name, num.toFixed(2));
+        if (isNaN(num) || num <= 0) updateField(name, "");
+        else updateField(name, num.toFixed(2));
+
+        const priceNum = parseFloat(newProduct.price);
+        const discountedNum = parseFloat(newProduct.discounted_price);
+
+        if (name === "refill_price") {
+            const refillNum = parseFloat(newProduct.refill_price);
+            if (!isNaN(refillNum)) {
+                if (newProduct.product_type === "discounted" && !isNaN(discountedNum) && refillNum >= discountedNum) {
+                    updateField("refill_price", (discountedNum - 1).toFixed(2));
+                } else if (refillNum >= priceNum) {
+                    updateField("refill_price", (priceNum - 1).toFixed(2));
+                }
+            }
         }
 
-        // enforce price rules for refill/discounted
-        if ((name === "refill_price" || name === "discounted_price") && newProduct.price) {
-            const price = parseFloat(newProduct.price);
-            const val = parseFloat(newProduct[name]);
-            if (!isNaN(val) && val >= price) {
-                updateField(name, (price - 1).toFixed(2));
+        if (name === "discounted_price" && !isNaN(priceNum)) {
+            const discNum = parseFloat(newProduct.discounted_price);
+            if (!isNaN(discNum) && discNum >= priceNum) {
+                updateField("discounted_price", (priceNum - 1).toFixed(2));
             }
         }
     };
@@ -86,28 +104,35 @@ export default function AddProductModal({ setShowForm, setProducts }) {
     const handleAddProduct = async (e) => {
         e.preventDefault();
 
-        // Final safeguard: ensure refill/discounted prices <= price
         const priceNum = parseFloat(newProduct.price);
-        if (newProduct.refill_price) {
-            const refillNum = parseFloat(newProduct.refill_price);
-            if (!isNaN(refillNum) && refillNum >= priceNum) {
-                toast.error("Refill price cannot exceed or equal the product price.");
-                return;
+        const refillNum = parseFloat(newProduct.refill_price);
+        const discNum = parseFloat(newProduct.discounted_price);
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const discountDate = newProduct.discount_until ? new Date(newProduct.discount_until) : null;
+
+        if (isNaN(priceNum) || priceNum <= 0) return toast.error("Price must be greater than 0.");
+
+        if (!isNaN(refillNum)) {
+            if (newProduct.product_type === "discounted" && !isNaN(discNum) && refillNum >= discNum) {
+                return toast.error("Refill price cannot exceed discounted price − 1.");
+            } else if (refillNum >= priceNum) {
+                return toast.error("Refill price cannot exceed main price − 1.");
             }
         }
 
-        if (newProduct.product_type === "discounted" && newProduct.discounted_price) {
-            const discNum = parseFloat(newProduct.discounted_price);
+        if (newProduct.product_type === "discounted") {
+            if (!discountDate || discountDate <= today) {
+                return toast.error("Discount until must be a future date.");
+            }
             if (!isNaN(discNum) && discNum >= priceNum) {
-                toast.error("Discounted price cannot exceed or equal the product price.");
-                return;
+                return toast.error("Discounted price cannot exceed main price − 1.");
             }
         }
 
-        // Check image for admin
         if (role === "admin" && !newProduct.image) {
-            toast.error("You must upload an image for the product.");
-            return;
+            return toast.error("You must upload an image for the product.");
         }
 
         try {
@@ -121,17 +146,12 @@ export default function AddProductModal({ setShowForm, setProducts }) {
                 formData.append("refill_price", newProduct.refill_price || "");
                 formData.append("product_type", newProduct.product_type);
                 formData.append("discount_until", newProduct.discount_until || "");
-
-                if (newProduct.product_type === "discounted") {
-                    formData.append("discounted_price", newProduct.discounted_price);
-                }
-
+                if (newProduct.product_type === "discounted") formData.append("discounted_price", newProduct.discounted_price);
                 if (newProduct.image) formData.append("image", newProduct.image);
 
                 res = await axios.post(`${BASE_URL}/products/admin/add-product`, formData, {
                     headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" },
                 });
-
                 addedProduct = res.data.product || res.data;
             } else if (role === "branch_manager") {
                 const payload = {
@@ -143,7 +163,6 @@ export default function AddProductModal({ setShowForm, setProducts }) {
                 res = await axios.post(`${BASE_URL}/products/branch/add-product`, payload, {
                     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
                 });
-
                 addedProduct = res.data.product || res.data;
             }
 
@@ -164,6 +183,15 @@ export default function AddProductModal({ setShowForm, setProducts }) {
         }
     };
 
+    // Get tomorrow's date in YYYY-MM-DD format for min attribute
+    const getTomorrowDate = () => {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const yyyy = tomorrow.getFullYear();
+        const mm = String(tomorrow.getMonth() + 1).padStart(2, "0");
+        const dd = String(tomorrow.getDate()).padStart(2, "0");
+        return `${yyyy}-${mm}-${dd}`;
+    };
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -276,7 +304,7 @@ export default function AddProductModal({ setShowForm, setProducts }) {
                                 </div>
 
                                 {newProduct.product_type === "discounted" && (
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-2 gap-4 items-center">
                                         <div>
                                             <label className="block text-sm font-semibold mb-2">Discounted Price (₱)</label>
                                             <input
@@ -289,16 +317,29 @@ export default function AddProductModal({ setShowForm, setProducts }) {
                                             />
                                         </div>
 
-                                        <div>
+                                        <div className="relative">
                                             <label className="block text-sm font-semibold mb-2">Discount Until</label>
-                                            <input
-                                                type="date"
-                                                name="discount_until"
-                                                value={newProduct.discount_until}
-                                                onChange={handleChange}
-                                                className="w-full px-4 py-2 rounded bg-gray-800 text-white text-base"
-                                            />
+                                            <div className="relative">
+                                                <input
+                                                    type="date"
+                                                    id="discountUntilInput"
+                                                    name="discount_until"
+                                                    value={newProduct.discount_until}
+                                                    onChange={handleChange}
+                                                    className="w-full bg-gray-800 text-white outline-none rounded px-3 py-2 pr-10 cursor-pointer
+                                                                appearance-none [&::-webkit-calendar-picker-indicator]:hidden
+                                                                [&::-moz-calendar-picker-indicator]:hidden"
+                                                    min={getTomorrowDate()}
+                                                />
+
+                                                <Calendar
+                                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white cursor-pointer"
+                                                    size={16}
+                                                    onClick={() => document.getElementById("discountUntilInput").showPicker?.()}
+                                                />
+                                            </div>
                                         </div>
+
                                     </div>
                                 )}
                             </>

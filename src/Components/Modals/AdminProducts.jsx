@@ -12,6 +12,7 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
     const [hasEdits, setHasEdits] = useState(false);
     const BASE_URL = import.meta.env.VITE_BASE_URL;
 
+    // Fetch products
     useEffect(() => {
         const fetchProducts = async () => {
             try {
@@ -45,25 +46,41 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
         fetchProducts();
     }, [refreshTrigger]);
 
+    // Format price
     const formatPrice = (value) => (isNaN(Number(value)) ? "0.00" : Number(value).toFixed(2));
 
+    // Open modal
     const openEditModal = (product) => {
         setViewProduct(product);
-        setEditedProduct({ ...product });
+        setEditedProduct({ ...product, discount_until_prev: product.discount_until });
         setEditedImage(null);
         setIsEditing({});
         setHasEdits(false);
     };
 
+    // Toggle field editing
+    const toggleEdit = (field) => setIsEditing((prev) => ({ ...prev, [field]: !prev[field] }));
+
+    // Handle input changes
     const handleEditChange = (field, value) => {
         let newValue = value;
 
         if (["price", "discounted_price", "refill_price"].includes(field)) {
             newValue = value === "" ? "" : Number(value);
             const price = Number(editedProduct.price);
-            if ((field === "discounted_price" || field === "refill_price") && !isNaN(newValue) && newValue >= price) {
+            const discounted = Number(editedProduct.discounted_price);
+
+            if (field === "discounted_price" && !isNaN(newValue) && newValue >= price) {
                 newValue = price - 1;
-                toast.error(`${field === "discounted_price" ? "Discounted" : "Refill"} price cannot exceed regular price. Set to ₱${newValue}`);
+                toast.error(`Discounted price cannot exceed regular price. Set to ₱${newValue}`);
+            }
+
+            if (field === "refill_price") {
+                const limit = editedProduct.product_type === "discounted" ? discounted : price;
+                if (!isNaN(newValue) && newValue >= limit) {
+                    newValue = limit - 1;
+                    toast.error(`Refill price cannot exceed ${editedProduct.product_type === "discounted" ? "discounted" : "main"} price. Set to ₱${newValue}`);
+                }
             }
         }
 
@@ -71,15 +88,19 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
             const selectedDate = new Date(value);
             const today = new Date();
             today.setHours(0, 0, 0, 0);
+
+            const prevDate = editedProduct.discount_until_prev ? new Date(editedProduct.discount_until_prev) : null;
+
             if (selectedDate <= today) return toast.error("Discount until date must be a future date.");
+            if (prevDate && selectedDate.getTime() === prevDate.getTime())
+                return toast.error("Please choose a different date than the current discount until date.");
         }
 
         setEditedProduct((prev) => ({ ...prev, [field]: newValue }));
         setHasEdits(true);
     };
 
-    const toggleEdit = (field) => setIsEditing((prev) => ({ ...prev, [field]: !prev[field] }));
-
+    // Handle image change
     const handleEditImage = (e) => {
         const file = e.target.files[0];
         if (file) {
@@ -88,6 +109,17 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
         }
     };
 
+    // Get tomorrow's date in YYYY-MM-DD for min attribute
+    const getTomorrowDate = () => {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const yyyy = tomorrow.getFullYear();
+        const mm = String(tomorrow.getMonth() + 1).padStart(2, "0");
+        const dd = String(tomorrow.getDate()).padStart(2, "0");
+        return `${yyyy}-${mm}-${dd}`;
+    };
+
+    // Save edits
     const handleSaveEdits = async () => {
         if (!editedProduct) return;
 
@@ -100,18 +132,15 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
                 return toast.error(`${field.replace("_", " ")} must be greater than 0.`);
         }
 
-        // ✅ Safeguard: prevent saving if refill or discounted price exceeds main price
-        if (editedProduct.refill_price > editedProduct.price)
-            return toast.error("Refill price cannot exceed the main price.");
+        // Price safeguards
+        if (editedProduct.refill_price > editedProduct.price - 1)
+            return toast.error("Refill price cannot exceed the main price minus 1.");
 
-        if (editedProduct.product_type === "discounted" && editedProduct.discounted_price > editedProduct.price)
-            return toast.error("Discounted price cannot exceed the main price.");
-
-        if (editedProduct.product_type === "discounted" && editedProduct.discount_until) {
-            const selectedDate = new Date(editedProduct.discount_until);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            if (selectedDate <= today) return toast.error("Discount until must be a future date.");
+        if (editedProduct.product_type === "discounted") {
+            if (editedProduct.discounted_price > editedProduct.price - 1)
+                return toast.error("Discounted price cannot exceed the main price minus 1.");
+            if (editedProduct.refill_price > editedProduct.discounted_price - 1)
+                return toast.error("Refill price cannot exceed the discounted price minus 1.");
         }
 
         const payload = {
@@ -250,7 +279,6 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
                                 <hr className="border-gray-700 mb-5" />
 
                                 <div className="space-y-2 text-[1.05rem] leading-relaxed text-gray-200">
-                                    {/** Inline fields: Details, Type, Price, Refill Price, Discounted Price, Discount Until */}
                                     {[
                                         { label: "Details", field: "product_description", type: "textarea" },
                                         { label: "Type", field: "product_type", type: "select", options: ["regular", "discounted"] },
@@ -284,7 +312,7 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
                                                             <input
                                                                 type="date"
                                                                 value={editedProduct[field]?.split("T")[0] || ""}
-                                                                min={new Date(Date.now() + 86400000).toISOString().split("T")[0]}
+                                                                min={getTomorrowDate()}
                                                                 onChange={(e) => handleEditChange(field, e.target.value)}
                                                                 className="bg-gray-800 text-white px-2 py-1 rounded w-32 appearance-none"
                                                             />
