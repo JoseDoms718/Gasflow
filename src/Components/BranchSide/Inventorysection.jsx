@@ -61,9 +61,16 @@ export default function Inventory() {
         });
 
         const formatted = (res.data || [])
-          .filter((p) => p.branch_id) // only show branch products
+          .filter((p) => p.branch_id) // only branch products
           .map((p) => ({
             ...p,
+            branch_product_id: p.id,       // match ProductTable
+            branch_price: p.branch_price,
+            branch_refill_price: p.branch_refill_price,
+            branch_discounted_price: p.branch_discounted_price,
+            stock: p.stock,
+            stock_threshold: p.stock_threshold,
+            branch_id: p.branch_id,
             image_url: p.image_url
               ? p.image_url.startsWith("http")
                 ? p.image_url

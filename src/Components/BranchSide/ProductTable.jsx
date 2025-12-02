@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Package, Eye } from "lucide-react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
@@ -14,10 +14,7 @@ export default function ProductTable({
 }) {
     const [restockProduct, setRestockProduct] = useState(null);
     const [restockQuantity, setRestockQuantity] = useState("");
-    const [localProducts, setLocalProducts] = useState(products);
     const BASE_URL = import.meta.env.VITE_BASE_URL;
-
-    useEffect(() => setLocalProducts(products), [products]);
 
     const formatPrice = (value) => {
         const num = Number(value);
@@ -26,6 +23,15 @@ export default function ProductTable({
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
         });
+    };
+
+    // Ensure proper object is passed to Edit modal
+    const handleView = (product) => {
+        if (!product.branch_product_id) {
+            toast.error("Branch product ID is missing. Cannot edit this product.");
+            return;
+        }
+        setSelectedProduct(product);
     };
 
     const handleRestockSubmit = async () => {
@@ -43,23 +49,20 @@ export default function ProductTable({
                 `${BASE_URL}/products/restock/${restockProduct.product_id}`,
                 {
                     quantity,
-                    branch_id: restockProduct.branch_id, // send branch_id
+                    branch_id: restockProduct.branch_id,
                 },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
 
             const newStock = res.data.newStock;
 
-            setLocalProducts((prev) =>
-                prev.map((p) =>
-                    p.product_id === restockProduct.product_id ? { ...p, stock: newStock } : p
-                )
-            );
-
+            // Update products state
             if (setProducts) {
                 setProducts((prev) =>
                     prev.map((p) =>
-                        p.product_id === restockProduct.product_id ? { ...p, stock: newStock } : p
+                        p.branch_product_id === restockProduct.branch_product_id
+                            ? { ...p, stock: newStock }
+                            : p
                     )
                 );
             }
@@ -77,86 +80,110 @@ export default function ProductTable({
 
     return (
         <div className="flex-1 border border-gray-200 rounded-lg overflow-hidden flex flex-col">
-            {/* HEADER */}
-            <div className="bg-gray-900 text-white sticky top-0 z-20 shadow-md">
-                <table className="min-w-full text-center text-sm table-fixed">
-                    <thead>
+            <div className="flex-1 overflow-y-auto max-h-[70vh]">
+                <table className="min-w-full table-fixed text-sm text-center text-gray-800 border-collapse">
+                    {/* HEADER */}
+                    <thead className="bg-gray-900 text-white sticky top-0 z-20">
                         <tr>
-                            <th className="px-4 py-3 w-[80px] rounded-tl-lg">Image</th>
-                            <th className="px-4 py-3 w-[200px]">Name</th>
-                            <th className="px-4 py-3 w-[80px]">Stock</th>
-                            <th className="px-4 py-3 w-[100px]">Price</th>
-                            <th className="px-4 py-3 rounded-tr-lg w-[120px]">Action</th>
+                            <th className="px-4 py-3 text-center rounded-tl-lg">Image</th>
+                            <th className="px-4 py-3 text-center">Name</th>
+                            <th className="px-4 py-3 text-center">Stock</th>
+                            <th className="px-4 py-3 text-center">Price</th>
+                            <th className="px-4 py-3 text-center rounded-tr-lg">Action</th>
                         </tr>
                     </thead>
-                </table>
-            </div>
 
-            {/* SCROLLABLE BODY */}
-            <div className="flex-1 overflow-y-auto max-h-[70vh]">
-                <table className="min-w-full text-gray-800 text-center text-sm table-fixed border-collapse">
+                    {/* BODY */}
                     <tbody>
-                        {localProducts.length === 0 ? (
+                        {products.length === 0 ? (
                             <tr>
                                 <td className="p-6 text-gray-500" colSpan={5}>
                                     No products available.
                                 </td>
                             </tr>
                         ) : (
-                            localProducts.map((p, i) => (
+                            products.map((p, i) => (
                                 <tr
                                     key={i}
-                                    className={`hover:bg-gray-50 ${borderless ? "" : "border-b border-gray-200"}`}
+                                    className={`hover:bg-gray-50 ${borderless ? "" : "border-b border-gray-200"
+                                        }`}
                                 >
-                                    <td className="px-4 py-3">
-                                        {p.image_url ? (
-                                            <img
-                                                src={p.image_url}
-                                                alt={p.product_name}
-                                                className="w-12 h-12 object-cover rounded-lg mx-auto"
-                                            />
-                                        ) : (
-                                            <div className="w-12 h-12 bg-gray-200 flex items-center justify-center rounded-lg mx-auto">
-                                                <Package size={28} className="text-gray-500" />
-                                            </div>
-                                        )}
+                                    {/* IMAGE */}
+                                    <td className="px-4 py-3 align-middle">
+                                        <div className="flex items-center justify-center">
+                                            {p.image_url ? (
+                                                <img
+                                                    src={p.image_url}
+                                                    alt={p.product_name}
+                                                    className="w-12 h-12 object-cover rounded-lg"
+                                                />
+                                            ) : (
+                                                <div className="w-12 h-12 bg-gray-200 flex items-center justify-center rounded-lg">
+                                                    <Package size={28} className="text-gray-500" />
+                                                </div>
+                                            )}
+                                        </div>
                                     </td>
 
-                                    <td className="px-4 py-3 font-semibold">{p.product_name}</td>
-
-                                    <td className="px-4 py-3">
-                                        <span
-                                            className={`inline-block px-3 py-1 text-sm font-semibold rounded-lg shadow-sm ${p.stock <= p.stock_threshold
-                                                ? "bg-red-600 text-white"
-                                                : p.stock <= p.stock_threshold + 5
-                                                    ? "bg-yellow-400 text-gray-800"
-                                                    : "bg-green-600 text-white"
-                                                }`}
-                                        >
-                                            {p.stock}
-                                        </span>
+                                    {/* NAME */}
+                                    <td className="px-4 py-3 align-middle">
+                                        <div className="flex items-center justify-center text-center">
+                                            <span className="font-semibold break-words leading-tight">
+                                                {p.product_name}
+                                            </span>
+                                        </div>
                                     </td>
 
-                                    <td className="px-4 py-3">₱{formatPrice(p.discounted_price || p.price)}</td>
+                                    {/* STOCK */}
+                                    <td className="px-4 py-3 align-middle">
+                                        <div className="flex justify-center">
+                                            <span
+                                                className={`px-3 py-1 text-sm font-semibold rounded-lg shadow-sm ${p.stock <= p.stock_threshold
+                                                        ? "bg-red-600 text-white"
+                                                        : p.stock <= p.stock_threshold + 5
+                                                            ? "bg-yellow-400 text-gray-800"
+                                                            : "bg-green-600 text-white"
+                                                    }`}
+                                            >
+                                                {p.stock}
+                                            </span>
+                                        </div>
+                                    </td>
 
-                                    {/* Action buttons */}
-                                    <td className="px-4 py-0 h-16 flex items-center justify-center gap-2">
-                                        {userRole !== "branch_manager" && (
-                                            <button
-                                                onClick={() => setSelectedProduct(p)}
-                                                className="flex items-center justify-center gap-1 px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                                            >
-                                                <Eye className="w-4 h-4" /> View
-                                            </button>
-                                        )}
-                                        {userRole !== "admin" && (
-                                            <button
-                                                onClick={() => setRestockProduct(p)}
-                                                className="px-3 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-400"
-                                            >
-                                                Restock
-                                            </button>
-                                        )}
+                                    {/* PRICE */}
+                                    <td className="px-4 py-3 align-middle">
+                                        <div className="flex justify-center">
+                                            ₱{formatPrice(
+                                                p.branch_discounted_price ??
+                                                p.branch_price ??
+                                                p.discounted_price ??
+                                                p.price
+                                            )}
+                                        </div>
+                                    </td>
+
+                                    {/* ACTION */}
+                                    <td className="px-4 py-3 align-middle">
+                                        <div className="flex justify-center items-center gap-2">
+                                            {userRole !== "branch_manager" && (
+                                                <button
+                                                    onClick={() => handleView(p)}
+                                                    className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                                                >
+                                                    <Eye className="w-4 h-4" />
+                                                    View
+                                                </button>
+                                            )}
+
+                                            {userRole !== "admin" && (
+                                                <button
+                                                    onClick={() => setRestockProduct(p)}
+                                                    className="px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-400"
+                                                >
+                                                    Restock
+                                                </button>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))
