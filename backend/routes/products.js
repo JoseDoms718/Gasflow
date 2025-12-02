@@ -268,7 +268,6 @@ router.get("/universal", authenticateToken, async (req, res) => {
 // ==============================
 // Public Products
 // ==============================
-// Public products (filtered by type)
 router.get("/public/products", async (req, res) => {
   const { type } = req.query;
 

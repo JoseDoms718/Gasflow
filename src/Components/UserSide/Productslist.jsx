@@ -136,7 +136,25 @@ export default function Productslist() {
   const displayRegular = addPlaceholders(filteredRegular, 3);
 
   const renderCard = (item) => (
-    <div className="bg-white rounded-lg shadow-md hover:shadow-xl transition duration-300 border border-gray-200 overflow-hidden flex flex-col h-[450px]">
+    <div className="bg-white rounded-lg shadow-md hover:shadow-xl transition duration-300 border border-gray-200 overflow-hidden flex flex-col h-[450px] relative">
+      {/* Top-right badge */}
+      {!item.placeholder && discountedProducts.some(p => p.product_id === item.product_id) && (
+        <div className="absolute top-2 right-2 z-20">
+          {item.discount_until ? (
+            discountTimers[item.product_id] && (
+              <span className="bg-red-600 text-white text-xs md:text-sm font-bold px-3 py-1 rounded-full shadow-lg animate-pulse">
+                {discountTimers[item.product_id]}
+              </span>
+            )
+          ) : (
+            <span className="bg-yellow-500 text-gray-900 text-xs md:text-sm font-bold px-3 py-1 rounded-full shadow-lg animate-bounce">
+              Limited Stock
+            </span>
+          )}
+        </div>
+      )}
+
+
       <div className="w-full h-48 bg-gray-200 flex items-center justify-center flex-shrink-0">
         {item.placeholder ? (
           <Package className="w-12 h-12 text-gray-400" />
@@ -203,11 +221,6 @@ export default function Productslist() {
                     <p className="text-green-600 font-bold text-lg">
                       ₱{formatPrice(item.discounted_price)}
                     </p>
-                    {item.discount_until && discountTimers[item.product_id] && (
-                      <p className="text-red-500 text-xs mt-1">
-                        Ends in: {discountTimers[item.product_id]}
-                      </p>
-                    )}
                   </>
                 ) : (
                   <p className="text-blue-600 font-bold text-lg">
@@ -228,6 +241,7 @@ export default function Productslist() {
       </div>
     </div>
   );
+
 
   return (
     <section className="bg-gray-900 py-16 mt-8">
