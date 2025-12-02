@@ -93,9 +93,11 @@ router.get("/my-products", authenticateToken, async (req, res) => {
         b.branch_contact,
         br.barangay_name,
         br.municipality,
+        bp.id AS branch_price_id,
         bp.price AS branch_price,
         bp.discounted_price AS branch_discounted_price,
-        bp.refill_price AS branch_refill_price
+        bp.refill_price AS branch_refill_price,
+        bp.updated_at AS branch_price_updated_at
       FROM inventory i
       JOIN products p ON i.product_id = p.product_id
       JOIN branches b ON i.branch_id = b.branch_id
@@ -117,7 +119,6 @@ router.get("/my-products", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Failed to fetch products" });
   }
 });
-
 
 // ==============================
 // Add Product (Branch)
@@ -348,8 +349,8 @@ router.get("/admin/all-products", authenticateToken, async (req, res) => {
     const { branch } = req.query;
     let whereClause = "";
     if (branch && branch !== "All") {
-      // Filter by municipality from barangays table
-      whereClause = `WHERE br.municipality = ${db.escape(branch)}`;
+      // Filter by branch_name from branches table
+      whereClause = `WHERE b.branch_name LIKE ${db.escape(`%${branch}%`)}`;
     }
 
     const sql = `
@@ -358,11 +359,16 @@ router.get("/admin/all-products", authenticateToken, async (req, res) => {
         i.stock, 
         i.stock_threshold, 
         b.branch_id, 
+        b.branch_name,           -- fetch branch name directly
+        b.branch_contact,
+        b.branch_picture,
         br.municipality, 
         br.barangay_name,
+        bp.id AS branch_price_id,
         bp.price AS branch_price,
         bp.discounted_price AS branch_discounted_price,
-        bp.refill_price AS branch_refill_price
+        bp.refill_price AS branch_refill_price,
+        bp.updated_at AS branch_price_updated_at
       FROM products p
       LEFT JOIN inventory i ON i.product_id = p.product_id
       LEFT JOIN branches b ON i.branch_id = b.branch_id
@@ -388,33 +394,20 @@ router.get("/admin/all-products", authenticateToken, async (req, res) => {
 //admin edit branch prices
 router.put("/branch/update/:id", authenticateToken, async (req, res) => {
   try {
-    const branchProductId = req.params.id;
+    const branchProductId = req.params.id; // from URL
     const { price, discounted_price, refill_price } = req.body;
+
+    // Only allow admin or branch managers
+    if (req.user.role !== "admin" && req.user.role !== "branch_manager") {
+      return res.status(403).json({ error: "Access denied. Admins or branch managers only." });
+    }
 
     // Validate at least one price is provided
     if (price == null && discounted_price == null && refill_price == null) {
       return res.status(400).json({ error: "At least one price field must be provided to update." });
     }
 
-    // Prepare updates object
-    const updates = {};
-    if (price != null) {
-      const num = Number(price);
-      if (isNaN(num) || num < 0) return res.status(400).json({ error: "Price must be non-negative." });
-      updates.price = num;
-    }
-    if (discounted_price != null) {
-      const num = Number(discounted_price);
-      if (isNaN(num) || num < 0) return res.status(400).json({ error: "Discounted price must be non-negative." });
-      updates.discounted_price = num;
-    }
-    if (refill_price != null) {
-      const num = Number(refill_price);
-      if (isNaN(num) || num < 0) return res.status(400).json({ error: "Refill price must be non-negative." });
-      updates.refill_price = num;
-    }
-
-    // Check if branch product exists
+    // Check if the branch product exists
     const [existing] = await db.execute(
       "SELECT id FROM branch_product_prices WHERE id = ?",
       [branchProductId]
@@ -424,13 +417,24 @@ router.put("/branch/update/:id", authenticateToken, async (req, res) => {
       return res.status(404).json({ error: "Branch product not found." });
     }
 
-    // Build dynamic SET clause for UPDATE
-    const setClause = Object.keys(updates)
-      .map((field) => `${field} = ?`)
-      .join(", ");
+    // Prepare updates object
+    const updates = {};
+    if (price != null) updates.price = Number(price);
+    if (discounted_price != null) updates.discounted_price = Number(discounted_price);
+    if (refill_price != null) updates.refill_price = Number(refill_price);
+
+    // Validate numbers
+    for (const [key, value] of Object.entries(updates)) {
+      if (isNaN(value) || value < 0) {
+        return res.status(400).json({ error: `${key} must be a non-negative number.` });
+      }
+    }
+
+    // Build dynamic SET clause
+    const setClause = Object.keys(updates).map((field) => `${field} = ?`).join(", ");
     const values = [...Object.values(updates), branchProductId];
 
-    // Update only price fields + updated_at
+    // Update branch_product_prices
     await db.execute(
       `UPDATE branch_product_prices SET ${setClause}, updated_at = NOW() WHERE id = ?`,
       values
@@ -443,50 +447,84 @@ router.put("/branch/update/:id", authenticateToken, async (req, res) => {
   }
 });
 
-
 //syncs with the srp
 router.put("/branch/sync/:id", authenticateToken, async (req, res) => {
   try {
-    const branchProductId = req.params.id;
+    const branchPriceId = req.params.id;
 
     // Only admin can sync
     if (req.user.role !== "admin") {
       return res.status(403).json({ error: "Unauthorized: Admins only." });
     }
 
-    // Get branch product and associated product
+    // Get branch_product_prices row
     const [branchRows] = await db.execute(
-      `SELECT product_id FROM branch_product_prices WHERE id = ?`,
-      [branchProductId]
+      `SELECT id AS branch_price_id, branch_id, product_id
+       FROM branch_product_prices
+       WHERE id = ?`,
+      [branchPriceId]
     );
 
     if (branchRows.length === 0) {
       return res.status(404).json({ error: "Branch product not found." });
     }
 
-    const productId = branchRows[0].product_id;
+    const { branch_id, product_id } = branchRows[0];
 
     // Get main product prices
     const [productRows] = await db.execute(
-      `SELECT price, discounted_price, refill_price FROM products WHERE id = ?`,
-      [productId]
+      `SELECT product_id, product_name, product_description, image_url, price, discounted_price, refill_price, discount_until, product_type, is_active, created_at
+       FROM products
+       WHERE product_id = ?`,
+      [product_id]
     );
 
     if (productRows.length === 0) {
       return res.status(404).json({ error: "Main product not found." });
     }
 
-    const { price, discounted_price, refill_price } = productRows[0];
+    const product = productRows[0];
 
-    // Update branch product with main product prices
+    // Update branch_product_prices
     await db.execute(
-      `UPDATE branch_product_prices 
-       SET price = ?, discounted_price = ?, refill_price = ?, updated_at = NOW() 
+      `UPDATE branch_product_prices
+       SET price = ?, discounted_price = ?, refill_price = ?, updated_at = NOW()
        WHERE id = ?`,
-      [price, discounted_price, refill_price, branchProductId]
+      [product.price, product.discounted_price, product.refill_price, branchPriceId]
     );
 
-    res.status(200).json({ message: "✅ Branch product prices synced with main product successfully!" });
+    // Get branch info
+    const [branchInfo] = await db.execute(
+      `SELECT b.branch_name, b.branch_contact, b.branch_picture, br.municipality, br.barangay_name
+       FROM branches b
+       LEFT JOIN barangays br ON b.barangay_id = br.barangay_id
+       WHERE b.branch_id = ?`,
+      [branch_id]
+    );
+
+    // Get inventory
+    const [inventoryRows] = await db.execute(
+      `SELECT stock, stock_threshold
+       FROM inventory
+       WHERE product_id = ? AND branch_id = ?`,
+      [product_id, branch_id]
+    );
+
+    const inventory = inventoryRows[0] || { stock: 0, stock_threshold: 0 };
+
+    // Return full response
+    res.status(200).json({
+      branch_price_id: branchPriceId,
+      branch_id,
+      product_id,
+      branch_price: product.price,
+      branch_discounted_price: product.discounted_price,
+      branch_refill_price: product.refill_price,
+      branch_price_updated_at: new Date(),
+      ...branchInfo[0],
+      ...product,
+      ...inventory
+    });
   } catch (err) {
     console.error("❌ Error syncing branch product prices:", err);
     res.status(500).json({ error: "Internal Server Error: Failed to sync branch product prices." });
@@ -722,6 +760,7 @@ router.get("/:id", async (req, res) => {
         b.branch_name,
         br.municipality,
         br.barangay_name,
+        bp.id AS branch_product_id,          -- needed for editing
         bp.price AS branch_price,
         bp.refill_price AS branch_refill_price,
         bp.discounted_price AS branch_discounted_price
@@ -751,9 +790,11 @@ router.get("/:id", async (req, res) => {
 
     const product = results[0];
 
-    // Use branch-specific prices first, fallback to product default prices
+    // **Make sure branch_product_id and branch_id are always sent**
     const formatted = {
       ...product,
+      branch_product_id: product.branch_product_id ?? null,
+      branch_id: product.branch_id ?? null,
       price: product.branch_price ?? product.price,
       discounted_price: product.branch_discounted_price ?? product.discounted_price,
       refill_price: product.branch_refill_price ?? product.refill_price,
@@ -770,6 +811,7 @@ router.get("/:id", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch product" });
   }
 });
+
 
 // ==============================
 // Serve Images

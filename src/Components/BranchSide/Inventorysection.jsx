@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
 import { PlusCircle, Download } from "lucide-react";
 import * as XLSX from "xlsx-js-style";
 import { saveAs } from "file-saver";
@@ -7,89 +6,29 @@ import { toast } from "react-hot-toast";
 
 import ProductTable from "./ProductTable";
 import AddProductModal from "./AddProductModal";
-import EditProductModal from "./EditProductModal";
 import RestockHistory from "./RestockHistory";
 import AdminProducts from "../Modals/AdminProducts";
 
-const BASE_URL = import.meta.env.VITE_BASE_URL;
-
 export default function Inventory() {
-  const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [products, setProducts] = useState([]);
   const [restockHistory, setRestockHistory] = useState([]);
   const [showForm, setShowForm] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedBranch, setSelectedBranch] = useState("All");
   const [restockCounter, setRestockCounter] = useState(0);
 
-  const branches = [
-    "All",
-    "Boac",
-    "Mogpog",
-    "Gasan",
-    "Buenavista",
-    "Torrijos",
-    "Santa Cruz",
-  ];
+  const branches = ["All", "Boac", "Mogpog", "Gasan", "Buenavista", "Torrijos", "Santa Cruz"];
 
+  // Load user role from localStorage once
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
       const parsedUser = JSON.parse(storedUser);
-      setUser(parsedUser);
       setUserRole(parsedUser.role);
     }
   }, []);
 
-  // FETCH PRODUCTS FOR INVENTORY
-  useEffect(() => {
-    if (!user || !userRole) return;
-
-    const fetchProducts = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        if (!token) return;
-
-        const endpoint =
-          userRole === "admin"
-            ? `${BASE_URL}/products/admin/all-products?branch=${selectedBranch}`
-            : `${BASE_URL}/products/my-products`;
-
-        const res = await axios.get(endpoint, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        const formatted = (res.data || [])
-          .filter((p) => p.branch_id) // only branch products
-          .map((p) => ({
-            ...p,
-            branch_product_id: p.id,       // match ProductTable
-            branch_price: p.branch_price,
-            branch_refill_price: p.branch_refill_price,
-            branch_discounted_price: p.branch_discounted_price,
-            stock: p.stock,
-            stock_threshold: p.stock_threshold,
-            branch_id: p.branch_id,
-            image_url: p.image_url
-              ? p.image_url.startsWith("http")
-                ? p.image_url
-                : `${BASE_URL}/products/images/${p.image_url}`
-              : null,
-          }));
-
-        setProducts(formatted);
-      } catch (err) {
-        console.error("Fetch failed:", err);
-        if (userRole !== "admin") toast.error("Failed to fetch products.");
-      }
-    };
-
-    fetchProducts();
-  }, [user, userRole, selectedBranch, restockCounter]);
-
-  const handleRestockUpdate = () =>
-    setRestockCounter((prev) => prev + 1);
+  const handleRestockUpdate = () => setRestockCounter((prev) => prev + 1);
 
   const handleExportExcel = () => {
     if (!products.length && (!restockHistory.length || userRole === "admin")) {
@@ -122,9 +61,7 @@ export default function Inventory() {
         "Previous Stock": h.previous_stock,
         "New Stock": h.new_stock,
         "Restocked By": h.restocked_by_name || "-",
-        Date: h.restocked_at
-          ? new Date(h.restocked_at).toLocaleString("en-PH")
-          : "-",
+        Date: h.restocked_at ? new Date(h.restocked_at).toLocaleString("en-PH") : "-",
       }));
 
       const ws2 = XLSX.utils.json_to_sheet(historyData);
@@ -136,58 +73,56 @@ export default function Inventory() {
     saveAs(new Blob([wbout]), fileName);
   };
 
+  // Only render ProductTable once userRole is loaded
+  if (!userRole) return null;
+
   return (
     <div className="p-4 w-full flex flex-col gap-3 relative">
       {/* HEADER */}
       <div className="flex flex-col gap-2">
         {userRole !== "retailer" && (
-          <h2 className="text-2xl font-bold text-gray-900">
-            Products & Inventory
-          </h2>
+          <h2 className="text-2xl font-bold text-gray-900">Products & Inventory</h2>
         )}
 
-        {(userRole === "admin" ||
-          userRole === "branch_manager" ||
-          userRole === "retailer") && (
-            <div className="flex flex-col sm:flex-row items-center gap-3">
-              <div className="flex-1 w-full">
-                {userRole === "admin" ? (
-                  <select
-                    value={selectedBranch}
-                    onChange={(e) => setSelectedBranch(e.target.value)}
-                    className="px-3 py-2 border rounded bg-white shadow-sm"
-                  >
-                    {branches.map((b) => (
-                      <option key={b}>{b}</option>
-                    ))}
-                  </select>
-                ) : userRole === "retailer" ? (
-                  <h2 className="text-lg text-gray-800">
-                    Browse and purchase from nearby branches.
-                  </h2>
-                ) : null}
-              </div>
-
-              <div className="flex gap-3 ml-auto">
-                <button
-                  onClick={handleExportExcel}
-                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow"
+        {(userRole === "admin" || userRole === "branch_manager" || userRole === "retailer") && (
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <div className="flex-1 w-full">
+              {userRole === "admin" ? (
+                <select
+                  value={selectedBranch}
+                  onChange={(e) => setSelectedBranch(e.target.value)}
+                  className="px-3 py-2 border rounded bg-white shadow-sm"
                 >
-                  <Download className="w-5 h-5" /> Export Excel
-                </button>
-
-                {(userRole === "branch_manager" ||
-                  userRole === "admin") && (
-                    <button
-                      onClick={() => setShowForm(true)}
-                      className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow"
-                    >
-                      <PlusCircle className="w-5 h-5" /> Add Product
-                    </button>
-                  )}
-              </div>
+                  {branches.map((b) => (
+                    <option key={b}>{b}</option>
+                  ))}
+                </select>
+              ) : userRole === "retailer" ? (
+                <h2 className="text-lg text-gray-800">
+                  Browse and purchase from nearby branches.
+                </h2>
+              ) : null}
             </div>
-          )}
+
+            <div className="flex gap-3 ml-auto">
+              <button
+                onClick={handleExportExcel}
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow"
+              >
+                <Download className="w-5 h-5" /> Export Excel
+              </button>
+
+              {(userRole === "branch_manager" || userRole === "admin") && (
+                <button
+                  onClick={() => setShowForm(true)}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow"
+                >
+                  <PlusCircle className="w-5 h-5" /> Add Product
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* MAIN CONTENT */}
@@ -196,13 +131,12 @@ export default function Inventory() {
         <div className="flex-1 overflow-hidden">
           <div className="overflow-y-auto h-full">
             <ProductTable
-              products={products}
               userRole={userRole}
               selectedBranch={selectedBranch}
-              setSelectedProduct={setSelectedProduct}
               setProducts={setProducts}
               onRestock={handleRestockUpdate}
               borderless
+              refreshTrigger={restockCounter}
             />
           </div>
         </div>
@@ -211,10 +145,7 @@ export default function Inventory() {
         <div className="w-[380px] overflow-hidden">
           <div className="overflow-y-auto h-full">
             {userRole === "admin" ? (
-              <AdminProducts
-                refreshTrigger={restockCounter}
-                borderless
-              />
+              <AdminProducts refreshTrigger={restockCounter} borderless />
             ) : (
               <RestockHistory
                 userRole={userRole}
@@ -229,20 +160,7 @@ export default function Inventory() {
       </div>
 
       {/* MODALS */}
-      {showForm && (
-        <AddProductModal
-          setShowForm={setShowForm}
-          setProducts={setProducts}
-        />
-      )}
-
-      {selectedProduct && (
-        <EditProductModal
-          selectedProduct={selectedProduct}
-          setSelectedProduct={setSelectedProduct}
-          setProducts={setProducts}
-        />
-      )}
+      {showForm && <AddProductModal setShowForm={setShowForm} setProducts={setProducts} />}
     </div>
   );
 }

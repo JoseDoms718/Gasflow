@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Package, Eye, Pencil, Check, Camera } from "lucide-react";
+import { Package, Eye, Pencil, Check, Camera, Calendar } from "lucide-react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 
@@ -12,38 +12,36 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
     const [hasEdits, setHasEdits] = useState(false);
     const BASE_URL = import.meta.env.VITE_BASE_URL;
 
-    // Fetch products from universal endpoint
-    const fetchProducts = async () => {
-        try {
-            const token = localStorage.getItem("token");
-            if (!token) return toast.error("No token found! Please login.");
-
-            const endpoint = `${BASE_URL}/products/universal`;
-            const res = await axios.get(endpoint, { headers: { Authorization: `Bearer ${token}` } });
-
-            const formatted = (res.data || []).map((p) => ({
-                ...p,
-                image_url: p.image_url
-                    ? p.image_url.startsWith("http")
-                        ? p.image_url
-                        : `${BASE_URL}/products/images/${p.image_url}`
-                    : null,
-                price: Number(p.price) || 0,
-                discounted_price: p.discounted_price !== null ? Number(p.discounted_price) : null,
-                refill_price: p.refill_price !== null ? Number(p.refill_price) : null,
-                stock: p.stock ?? 0,
-                stock_threshold: p.stock_threshold ?? 0,
-            }));
-
-            setProducts(formatted);
-        } catch (err) {
-            console.error("❌ Failed to fetch admin products:", err);
-            toast.error("Failed to load products. See console for details.");
-            setProducts([]);
-        }
-    };
-
     useEffect(() => {
+        const fetchProducts = async () => {
+            try {
+                const token = localStorage.getItem("token");
+                if (!token) return toast.error("No token found! Please login.");
+
+                const res = await axios.get(`${BASE_URL}/products/universal`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+
+                const formatted = (res.data || []).map((p) => ({
+                    ...p,
+                    image_url: p.image_url?.startsWith("http")
+                        ? p.image_url
+                        : p.image_url
+                            ? `${BASE_URL}/products/images/${p.image_url}`
+                            : null,
+                    price: Number(p.price) || 0,
+                    discounted_price: p.discounted_price != null ? Number(p.discounted_price) : null,
+                    refill_price: p.refill_price != null ? Number(p.refill_price) : null,
+                }));
+
+                setProducts(formatted);
+            } catch (err) {
+                console.error("❌ Failed to fetch admin products:", err);
+                toast.error("Failed to load products.");
+                setProducts([]);
+            }
+        };
+
         fetchProducts();
     }, [refreshTrigger]);
 
@@ -59,16 +57,23 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
 
     const handleEditChange = (field, value) => {
         let newValue = value;
+
         if (["price", "discounted_price", "refill_price"].includes(field)) {
-            newValue = Number(value);
+            newValue = value === "" ? "" : Number(value);
             const price = Number(editedProduct.price);
-            if (field !== "price" && !isNaN(newValue) && newValue >= price) {
+            if ((field === "discounted_price" || field === "refill_price") && !isNaN(newValue) && newValue >= price) {
                 newValue = price - 1;
-                toast.error(
-                    `${field === "discounted_price" ? "Discounted" : "Refill"} price cannot exceed regular price. Automatically set to ₱${newValue}`
-                );
+                toast.error(`${field === "discounted_price" ? "Discounted" : "Refill"} price cannot exceed regular price. Set to ₱${newValue}`);
             }
         }
+
+        if (field === "discount_until") {
+            const selectedDate = new Date(value);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            if (selectedDate <= today) return toast.error("Discount until date must be a future date.");
+        }
+
         setEditedProduct((prev) => ({ ...prev, [field]: newValue }));
         setHasEdits(true);
     };
@@ -86,25 +91,43 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
     const handleSaveEdits = async () => {
         if (!editedProduct) return;
 
+        const requiredFields = ["price", "refill_price"];
+        if (editedProduct.product_type === "discounted") requiredFields.push("discounted_price");
+
+        for (const field of requiredFields) {
+            const value = editedProduct[field];
+            if (value === "" || value == null || value <= 0)
+                return toast.error(`${field.replace("_", " ")} must be greater than 0.`);
+        }
+
+        // ✅ Safeguard: prevent saving if refill or discounted price exceeds main price
+        if (editedProduct.refill_price > editedProduct.price)
+            return toast.error("Refill price cannot exceed the main price.");
+
+        if (editedProduct.product_type === "discounted" && editedProduct.discounted_price > editedProduct.price)
+            return toast.error("Discounted price cannot exceed the main price.");
+
+        if (editedProduct.product_type === "discounted" && editedProduct.discount_until) {
+            const selectedDate = new Date(editedProduct.discount_until);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            if (selectedDate <= today) return toast.error("Discount until must be a future date.");
+        }
+
         const payload = {
             product_name: editedProduct.product_name,
             product_type: editedProduct.product_type,
             price: editedProduct.price,
+            refill_price: editedProduct.refill_price,
+            ...(editedProduct.product_type === "discounted" && {
+                discounted_price: editedProduct.discounted_price,
+                discount_until: editedProduct.discount_until,
+            }),
+            product_description: editedProduct.product_description,
         };
 
-        if (editedProduct.product_type === "regular" && editedProduct.refill_price !== undefined) {
-            payload.refill_price = editedProduct.refill_price;
-        }
-
-        if (editedProduct.product_type === "discounted") {
-            if (editedProduct.discounted_price !== undefined) payload.discounted_price = editedProduct.discounted_price;
-            if (editedProduct.discount_until) payload.discount_until = editedProduct.discount_until;
-        }
-
         const formData = new FormData();
-        Object.entries(payload).forEach(([key, value]) => {
-            if (value !== null && value !== undefined) formData.append(key, value.toString());
-        });
+        Object.entries(payload).forEach(([key, value]) => value != null && formData.append(key, value.toString()));
         if (editedImage) formData.append("image", editedImage);
 
         try {
@@ -172,7 +195,7 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
                                         </span>
                                     </td>
                                     <td className="px-4 py-3 w-28">
-                                        ₱ {formatPrice(p.product_type === "discounted" && p.discounted_price !== null ? p.discounted_price : p.price)}
+                                        ₱{formatPrice(p.product_type === "discounted" && p.discounted_price != null ? p.discounted_price : p.price)}
                                     </td>
                                     <td className="px-4 py-3 w-28">
                                         <button
@@ -194,21 +217,15 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
                 <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-[#0f172a] text-gray-100 rounded-2xl shadow-2xl w-full max-w-4xl h-[520px] overflow-hidden relative flex flex-col md:flex-row">
                         {/* Close Button */}
-                        <button onClick={() => setViewProduct(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl">
-                            ✕
-                        </button>
+                        <button onClick={() => setViewProduct(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl">✕</button>
 
                         {/* Image Section */}
                         <div className="flex-shrink-0 w-full md:w-1/2 h-full bg-gray-900 relative">
-                            {editedImage ? (
-                                <img src={URL.createObjectURL(editedImage)} alt="Preview" className="w-full h-full object-cover" />
-                            ) : editedProduct.image_url ? (
-                                <img src={editedProduct.image_url} alt={editedProduct.product_name} className="w-full h-full object-cover" />
-                            ) : (
-                                <div className="w-full h-full flex items-center justify-center bg-gray-800">
-                                    <Package size={90} className="text-gray-500" />
-                                </div>
-                            )}
+                            <img
+                                src={editedImage ? URL.createObjectURL(editedImage) : editedProduct.image_url || ""}
+                                alt="Product"
+                                className="w-full h-full object-cover"
+                            />
                             <button onClick={() => document.getElementById("editImageInput").click()} className="absolute bottom-4 right-4 bg-blue-600 hover:bg-blue-700 p-2 rounded-full">
                                 <Camera size={20} />
                             </button>
@@ -226,116 +243,72 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
                                             onChange={(e) => handleEditChange("product_name", e.target.value)}
                                             className="bg-gray-800 px-2 py-1 rounded w-full"
                                         />
-                                    ) : (
-                                        editedProduct.product_name
-                                    )}
+                                    ) : editedProduct.product_name}
                                     <button onClick={() => toggleEdit("product_name")}>{isEditing.product_name ? <Check size={18} /> : <Pencil size={18} />}</button>
                                 </h2>
 
                                 <hr className="border-gray-700 mb-5" />
 
-                                <div className="space-y-3.5 text-[1.05rem] leading-relaxed text-gray-200">
-                                    {/* Description */}
-                                    <p className="flex items-center gap-2">
-                                        <span className="font-semibold text-white w-32">Details:</span>
-                                        {isEditing.product_description ? (
-                                            <textarea
-                                                value={editedProduct.product_description}
-                                                onChange={(e) => handleEditChange("product_description", e.target.value)}
-                                                className="bg-gray-800 px-2 py-1 rounded w-full"
-                                            />
-                                        ) : (
-                                            editedProduct.product_description || "No details provided."
-                                        )}
-                                        <button onClick={() => toggleEdit("product_description")}>{isEditing.product_description ? <Check size={16} /> : <Pencil size={16} />}</button>
-                                    </p>
-
-                                    {/* Type */}
-                                    <p className="flex items-center gap-2">
-                                        <span className="font-semibold text-white w-32">Type:</span>
-                                        {isEditing.product_type ? (
-                                            <select
-                                                value={editedProduct.product_type}
-                                                onChange={(e) => handleEditChange("product_type", e.target.value)}
-                                                className="bg-gray-800 px-2 py-1 rounded"
-                                            >
-                                                <option value="regular">Regular</option>
-                                                <option value="discounted">Discounted</option>
-                                            </select>
-                                        ) : (
-                                            <span className="capitalize">{editedProduct.product_type}</span>
-                                        )}
-                                        <button onClick={() => toggleEdit("product_type")}>{isEditing.product_type ? <Check size={16} /> : <Pencil size={16} />}</button>
-                                    </p>
-
-                                    {/* Price */}
-                                    <p className="flex items-center gap-2">
-                                        <span className="font-semibold text-white w-32">Price:</span>
-                                        {isEditing.price ? (
-                                            <input
-                                                type="number"
-                                                value={editedProduct.price}
-                                                onChange={(e) => handleEditChange("price", e.target.value)}
-                                                className="bg-gray-800 px-2 py-1 rounded w-32"
-                                            />
-                                        ) : (
-                                            <span>₱{formatPrice(editedProduct.price)}</span>
-                                        )}
-                                        <button onClick={() => toggleEdit("price")}>{isEditing.price ? <Check size={16} /> : <Pencil size={16} />}</button>
-                                    </p>
-
-                                    {/* Refill Price (Regular) */}
-                                    {editedProduct.product_type === "regular" && (
-                                        <p className="flex items-center gap-2">
-                                            <span className="font-semibold text-white w-32">Refill Price:</span>
-                                            {isEditing.refill_price ? (
-                                                <input
-                                                    type="number"
-                                                    value={editedProduct.refill_price}
-                                                    onChange={(e) => handleEditChange("refill_price", e.target.value)}
-                                                    className="bg-gray-800 px-2 py-1 rounded w-32"
-                                                />
-                                            ) : (
-                                                <span>₱{formatPrice(editedProduct.refill_price)}</span>
-                                            )}
-                                            <button onClick={() => toggleEdit("refill_price")}>{isEditing.refill_price ? <Check size={16} /> : <Pencil size={16} />}</button>
-                                        </p>
-                                    )}
-
-                                    {/* Discounted (Discounted) */}
-                                    {editedProduct.product_type === "discounted" && (
-                                        <>
-                                            <p className="flex items-center gap-2">
-                                                <span className="font-semibold text-white w-32">Discounted Price:</span>
-                                                {isEditing.discounted_price ? (
-                                                    <input
-                                                        type="number"
-                                                        value={editedProduct.discounted_price}
-                                                        onChange={(e) => handleEditChange("discounted_price", e.target.value)}
-                                                        className="bg-gray-800 px-2 py-1 rounded w-32"
-                                                    />
+                                <div className="space-y-2 text-[1.05rem] leading-relaxed text-gray-200">
+                                    {/** Inline fields: Details, Type, Price, Refill Price, Discounted Price, Discount Until */}
+                                    {[
+                                        { label: "Details", field: "product_description", type: "textarea" },
+                                        { label: "Type", field: "product_type", type: "select", options: ["regular", "discounted"] },
+                                        { label: "Price", field: "price", type: "number" },
+                                        { label: "Refill Price", field: "refill_price", type: "number", condition: (p) => ["regular", "discounted"].includes(p.product_type) },
+                                        { label: "Discounted Price", field: "discounted_price", type: "number", condition: (p) => p.product_type === "discounted" },
+                                        { label: "Discount Until", field: "discount_until", type: "date", condition: (p) => p.product_type === "discounted" },
+                                    ].map(({ label, field, type, options, condition }) => {
+                                        if (condition && !condition(editedProduct)) return null;
+                                        const editing = isEditing[field];
+                                        return (
+                                            <p key={field} className="flex items-center gap-1">
+                                                <span className="font-semibold text-white">{label}:</span>
+                                                {editing ? (
+                                                    type === "textarea" ? (
+                                                        <textarea
+                                                            value={editedProduct[field]}
+                                                            onChange={(e) => handleEditChange(field, e.target.value)}
+                                                            className="bg-gray-800 px-2 py-1 rounded w-full"
+                                                        />
+                                                    ) : type === "select" ? (
+                                                        <select
+                                                            value={editedProduct[field]}
+                                                            onChange={(e) => handleEditChange(field, e.target.value)}
+                                                            className="bg-gray-800 px-2 py-1 rounded"
+                                                        >
+                                                            {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                                                        </select>
+                                                    ) : type === "date" ? (
+                                                        <div className="relative">
+                                                            <input
+                                                                type="date"
+                                                                value={editedProduct[field]?.split("T")[0] || ""}
+                                                                min={new Date(Date.now() + 86400000).toISOString().split("T")[0]}
+                                                                onChange={(e) => handleEditChange(field, e.target.value)}
+                                                                className="bg-gray-800 text-white px-2 py-1 rounded w-32 appearance-none"
+                                                            />
+                                                            <Calendar className="absolute right-2 top-1/2 -translate-y-1/2 text-white pointer-events-none" size={16} />
+                                                        </div>
+                                                    ) : (
+                                                        <input
+                                                            type="number"
+                                                            value={editedProduct[field]}
+                                                            onChange={(e) => handleEditChange(field, e.target.value)}
+                                                            className="bg-gray-800 px-2 py-1 rounded w-32"
+                                                        />
+                                                    )
+                                                ) : type === "date" ? (
+                                                    <span>{editedProduct[field] ? new Date(editedProduct[field]).toLocaleDateString() : "N/A"}</span>
+                                                ) : type === "number" ? (
+                                                    <span>₱{formatPrice(editedProduct[field])}</span>
                                                 ) : (
-                                                    <span>₱{formatPrice(editedProduct.discounted_price)}</span>
+                                                    <span>{editedProduct[field] || "N/A"}</span>
                                                 )}
-                                                <button onClick={() => toggleEdit("discounted_price")}>{isEditing.discounted_price ? <Check size={16} /> : <Pencil size={16} />}</button>
+                                                <button onClick={() => toggleEdit(field)}>{editing ? <Check size={16} /> : <Pencil size={16} />}</button>
                                             </p>
-
-                                            <p className="flex items-center gap-2">
-                                                <span className="font-semibold text-white w-32">Discount Until:</span>
-                                                {isEditing.discount_until ? (
-                                                    <input
-                                                        type="date"
-                                                        value={editedProduct.discount_until?.split("T")[0] || ""}
-                                                        onChange={(e) => handleEditChange("discount_until", e.target.value)}
-                                                        className="bg-gray-800 px-2 py-1 rounded w-32"
-                                                    />
-                                                ) : (
-                                                    <span>{editedProduct.discount_until ? new Date(editedProduct.discount_until).toLocaleDateString() : "N/A"}</span>
-                                                )}
-                                                <button onClick={() => toggleEdit("discount_until")}>{isEditing.discount_until ? <Check size={16} /> : <Pencil size={16} />}</button>
-                                            </p>
-                                        </>
-                                    )}
+                                        );
+                                    })}
                                 </div>
                             </div>
 
