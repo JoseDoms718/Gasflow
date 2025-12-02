@@ -209,8 +209,8 @@ export default function Buysection() {
             {
               product_id: product.product_id,
               quantity,
-              type: productType,
-              branch_id: product.branch_id,
+              type: productType,  // "regular" | "discounted" | "refill"
+              branch_id: product.branch_id
             },
           ],
           full_name: name,
@@ -219,6 +219,7 @@ export default function Buysection() {
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+
 
       toast.success(data.message || "Order placed successfully!");
       navigate("/orders");

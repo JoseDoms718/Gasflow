@@ -75,9 +75,9 @@ export default function Orderlist({ role: propRole }) {
           ),
         };
         if (existingIndex === -1) {
-          backendOrders.unshift(localCartOrder); // Only add if not already in orders
+          backendOrders.unshift(localCartOrder);
         } else {
-          backendOrders[existingIndex] = localCartOrder; // Update existing one
+          backendOrders[existingIndex] = localCartOrder;
         }
       }
 
@@ -90,7 +90,6 @@ export default function Orderlist({ role: propRole }) {
       setLoading(false);
     }
   }, [getUserCart]);
-
 
   useEffect(() => {
     fetchOrders();
@@ -327,7 +326,9 @@ export default function Orderlist({ role: propRole }) {
                         <h3 className={`font-semibold ${isRetailer ? "text-gray-900" : "text-white"} text-sm sm:text-base`}>
                           {firstItem?.product_name || "Unnamed Product"}
                         </h3>
-                        <p className={`text-xs sm:text-sm ${isRetailer ? "text-gray-500" : "text-gray-300"}`}>Status: {order.status}</p>
+                        <p className={`text-xs sm:text-sm ${isRetailer ? "text-gray-500" : "text-gray-300"}`}>
+                          Status: {order.status}
+                        </p>
                       </div>
                       <div className="flex items-center gap-2 sm:gap-3">
                         <p className={`font-bold text-sm sm:text-lg ${isRetailer ? "text-blue-700" : "text-blue-400"}`}>
@@ -387,7 +388,6 @@ export default function Orderlist({ role: propRole }) {
                                         );
                                         updateLocalCart(updatedItems);
                                       }}
-
                                       className="w-14 sm:w-16 px-2 py-1 rounded border border-gray-400 text-center text-[10px] sm:text-sm bg-transparent"
                                     />
                                     <button
@@ -407,12 +407,18 @@ export default function Orderlist({ role: propRole }) {
                                       : `Seller: ${item.branch_name || "Unknown"}`
                                     }
                                   </p>
-
                                 </div>
                               </div>
                             </div>
                           ))}
                         </div>
+
+                        {/* Delivered date for finished orders */}
+                        {activeTab === "finished" && order.status === "delivered" && order.delivered_at && (
+                          <div className="mt-2 text-sm text-green-400">
+                            Delivered at: {new Date(order.delivered_at).toLocaleString()}
+                          </div>
+                        )}
 
                         {order.order_id === "local_cart" && (
                           <div className="flex flex-wrap justify-end gap-2 sm:gap-3 pt-2 sm:pt-3 border-t border-gray-600">

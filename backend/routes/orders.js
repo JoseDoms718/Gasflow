@@ -340,9 +340,16 @@ router.post("/buy", authenticateToken, async (req, res) => {
 
     for (const item of orderItems) {
       const sql = `
-        SELECT p.product_id, p.price, p.discounted_price, p.refill_price, i.stock, i.branch_id
+        SELECT p.product_id,
+               bpp.price AS branch_price,
+               bpp.discounted_price AS branch_discounted_price,
+               bpp.refill_price AS branch_refill_price,
+               i.stock,
+               i.branch_id
         FROM products p
         INNER JOIN inventory i ON p.product_id = i.product_id
+        INNER JOIN branch_product_prices bpp 
+            ON p.product_id = bpp.product_id AND i.branch_id = bpp.branch_id
         WHERE p.product_id = ? AND i.branch_id = ? AND i.stock >= ?
         LIMIT 1
       `;
@@ -357,12 +364,13 @@ router.post("/buy", authenticateToken, async (req, res) => {
         });
       }
 
+      // Use branch-specific prices
       const finalPrice =
         item.type === "refill"
-          ? product.refill_price ?? 0
-          : item.type === "discounted" && product.discounted_price != null
-          ? product.discounted_price
-          : product.price;
+          ? product.branch_refill_price ?? 0
+          : item.type === "discounted" && product.branch_discounted_price != null
+          ? product.branch_discounted_price
+          : product.branch_price;
 
       if (!branchMap[product.branch_id]) branchMap[product.branch_id] = [];
       branchMap[product.branch_id].push({
