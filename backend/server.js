@@ -1,4 +1,3 @@
-// backend/server.js
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
@@ -20,13 +19,14 @@ const expensesRoutes = require("./routes/expenses");
 const verifyOtpRoute = require("./routes/verifyotp");
 const sendOtpRoute = require("./routes/sendotp");
 const businessOwnerRoutes = require("./routes/businessOwnerSignup");
-const branchInfoRoutes = require("./routes/branchinfo"); // branch routes
+const branchInfoRoutes = require("./routes/branchinfo");
 const bannersRoutes = require("./routes/banners");
 const damagedProductsRoute = require("./routes/damagedProducts");
-const chatRoutes = require("./routes/chat"); // renamed to match chat.js
+const chatRoutes = require("./routes/chat");
 const servicesRoutes = require("./routes/services");
 const branchesRoutes = require("./routes/branch");
 const deliveryfeesRoutes = require("./routes/deliveryfee");
+const bundlesRoute = require("./routes/bundles");
 /* -----------------------------------------
    ✅ Initialize App & Server
 ----------------------------------------- */
@@ -126,6 +126,7 @@ app.use("/damaged-products", damagedProductsRoute);
 app.use("/services", servicesRoutes);
 app.use("/branches", branchesRoutes);
 app.use("/fee", deliveryfeesRoutes);
+app.use("/bundles", bundlesRoute);
 /* -----------------------------------------
    ✅ Chat Routes (no /api prefix)
 ----------------------------------------- */

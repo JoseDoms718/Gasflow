@@ -66,8 +66,10 @@ export default function ReportsPage() {
         });
         if (transactionsRes.success) {
           setTransactions(
-            transactionsRes.orders.flatMap((order) =>
-              order.items.map((item, index) => {
+            transactionsRes.orders.flatMap((order) => {
+              if (!order.delivered_at) return []; // Skip undelivered orders
+
+              return order.items.map((item, index) => {
                 const itemQuantity = Number(item.quantity) || 0;
                 const itemPrice = Number(item.price) || 0;
                 const deliveryFee = Number(order.delivery_fee || 0);
@@ -81,17 +83,14 @@ export default function ReportsPage() {
                   price: itemPrice,
                   deliveryFee: deliveryFeePerItem,
                   totalPrice: itemQuantity * itemPrice + deliveryFeePerItem,
-                  date: order.delivered_at
-                    ? toLocalDate(order.delivered_at)
-                    : toLocalDate(order.ordered_at),
+                  date: toLocalDate(order.delivered_at), // guaranteed to exist
                   branch: order.municipality || "Unknown",
                   addedBy: item.seller_name || "N/A",
                   buyer: order.full_name || "N/A",
                 };
-              })
-            )
+              });
+            })
           );
-
         }
 
         // Damaged products endpoint

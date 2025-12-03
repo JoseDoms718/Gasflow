@@ -8,12 +8,14 @@ import ProductTable from "./ProductTable";
 import AddProductModal from "./AddProductModal";
 import RestockHistory from "./RestockHistory";
 import AdminProducts from "../Modals/AdminProducts";
+import AddBundleModal from "../Modals/AddBundleModal"; // <-- Make sure you create this
 
 export default function Inventory() {
   const [userRole, setUserRole] = useState(null);
   const [products, setProducts] = useState([]);
   const [restockHistory, setRestockHistory] = useState([]);
   const [showForm, setShowForm] = useState(false);
+  const [showBundleForm, setShowBundleForm] = useState(false); // <-- new state
   const [selectedBranch, setSelectedBranch] = useState("All");
   const [restockCounter, setRestockCounter] = useState(0);
 
@@ -113,12 +115,21 @@ export default function Inventory() {
               </button>
 
               {(userRole === "branch_manager" || userRole === "admin") && (
-                <button
-                  onClick={() => setShowForm(true)}
-                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow"
-                >
-                  <PlusCircle className="w-5 h-5" /> Add Product
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowForm(true)}
+                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow"
+                  >
+                    <PlusCircle className="w-5 h-5" /> Add Product
+                  </button>
+
+                  <button
+                    onClick={() => setShowBundleForm(true)}
+                    className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded shadow"
+                  >
+                    <PlusCircle className="w-5 h-5" /> Add Bundle
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -161,6 +172,9 @@ export default function Inventory() {
 
       {/* MODALS */}
       {showForm && <AddProductModal setShowForm={setShowForm} setProducts={setProducts} />}
+      {showBundleForm && (
+        <AddBundleModal setShowBundleForm={setShowBundleForm} refreshBundles={() => { }} />
+      )}
     </div>
   );
 }
