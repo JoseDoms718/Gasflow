@@ -41,6 +41,8 @@ export default function AddProductModal({ setShowForm, setProducts }) {
     const handleChange = (e) => updateField(e.target.name, e.target.value);
 
     const handleNumericInput = (e) => {
+        if (role !== "admin") return; // only admin uses this
+
         const { name, value } = e.target;
         if (/^\d*\.?\d{0,2}$/.test(value)) {
             let newVal = value;
@@ -69,6 +71,8 @@ export default function AddProductModal({ setShowForm, setProducts }) {
     };
 
     const handlePriceBlur = (e) => {
+        if (role !== "admin") return; // only admin uses this
+
         const { name, value } = e.target;
         let num = parseFloat(value);
         if (isNaN(num) || num <= 0) updateField(name, "");
@@ -101,16 +105,20 @@ export default function AddProductModal({ setShowForm, setProducts }) {
         if (file) updateField("image", file);
     };
 
-    const handleAddProduct = async (e) => {
+    // --- Admin handler ---
+    const handleAdminAddProduct = async (e) => {
         e.preventDefault();
+
+        // --- Basic validations ---
+        if (!newProduct.image) return toast.error("You must upload an image for the product.");
+        if (!newProduct.name) return toast.error("Product name is required.");
 
         const priceNum = parseFloat(newProduct.price);
         const refillNum = parseFloat(newProduct.refill_price);
         const discNum = parseFloat(newProduct.discounted_price);
-
+        const discountDate = newProduct.discount_until ? new Date(newProduct.discount_until) : null;
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const discountDate = newProduct.discount_until ? new Date(newProduct.discount_until) : null;
 
         if (isNaN(priceNum) || priceNum <= 0) return toast.error("Price must be greater than 0.");
 
@@ -131,57 +139,64 @@ export default function AddProductModal({ setShowForm, setProducts }) {
             }
         }
 
-        if (role === "admin" && !newProduct.image) {
-            return toast.error("You must upload an image for the product.");
-        }
-
+        // --- Submit form ---
         try {
-            let res, addedProduct;
+            const formData = new FormData();
+            formData.append("product_name", newProduct.name);
+            formData.append("product_description", newProduct.details);
+            formData.append("price", priceNum.toFixed(2));
+            formData.append("refill_price", !isNaN(refillNum) ? refillNum.toFixed(2) : "");
+            formData.append("product_type", newProduct.product_type);
+            formData.append("discount_until", newProduct.discount_until || "");
+            if (newProduct.product_type === "discounted") formData.append("discounted_price", discNum.toFixed(2));
+            formData.append("image", newProduct.image);
 
-            if (role === "admin") {
-                const formData = new FormData();
-                formData.append("product_name", newProduct.name);
-                formData.append("product_description", newProduct.details);
-                formData.append("price", newProduct.price);
-                formData.append("refill_price", newProduct.refill_price || "");
-                formData.append("product_type", newProduct.product_type);
-                formData.append("discount_until", newProduct.discount_until || "");
-                if (newProduct.product_type === "discounted") formData.append("discounted_price", newProduct.discounted_price);
-                if (newProduct.image) formData.append("image", newProduct.image);
+            const res = await axios.post(`${BASE_URL}/products/admin/add-product`, formData, {
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" },
+            });
 
-                res = await axios.post(`${BASE_URL}/products/admin/add-product`, formData, {
-                    headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" },
-                });
-                addedProduct = res.data.product || res.data;
-            } else if (role === "branch_manager") {
-                const payload = {
-                    product_id: newProduct.product_id,
-                    stock: newProduct.stock,
-                    stock_threshold: newProduct.stock_threshold,
-                };
-
-                res = await axios.post(`${BASE_URL}/products/branch/add-product`, payload, {
-                    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-                });
-                addedProduct = res.data.product || res.data;
-            }
-
-            setProducts((prev) => [addedProduct, ...prev]);
+            const addedProduct = res.data.product || res.data;
+            setProducts(prev => [addedProduct, ...prev]);
             toast.success("Product added!");
             setShowForm(false);
-        } catch (error) {
-            console.error("Error adding product:", error);
-            if (
-                role === "branch_manager" &&
-                error.response?.status === 400 &&
-                error.response.data?.error?.includes("already exists")
-            ) {
+        } catch (err) {
+            console.error(err);
+            toast.error("Failed to add product.");
+        }
+    };
+
+    // --- Branch Manager handler ---
+    const handleBranchAddProduct = async (e) => {
+        e.preventDefault();
+        if (!newProduct.product_id) return toast.error("Please select a product.");
+        if (newProduct.stock === "" || newProduct.stock < 0) return toast.error("Stock must be 0 or higher.");
+        if (newProduct.stock_threshold === "" || newProduct.stock_threshold < 0) return toast.error("Stock threshold must be 0 or higher.");
+
+        try {
+            const payload = {
+                product_id: newProduct.product_id,
+                stock: newProduct.stock,
+                stock_threshold: newProduct.stock_threshold,
+            };
+
+            const res = await axios.post(`${BASE_URL}/products/branch/add-product`, payload, {
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            });
+
+            const addedProduct = res.data.product || res.data;
+            setProducts(prev => [addedProduct, ...prev]);
+            toast.success("Product added!");
+            setShowForm(false);
+        } catch (err) {
+            console.error(err);
+            if (err.response?.status === 400 && err.response.data?.error?.includes("already exists")) {
                 toast.error("You already have this product in your branch inventory.");
             } else {
                 toast.error("Failed to add product.");
             }
         }
     };
+
 
     // Get tomorrow's date in YYYY-MM-DD format for min attribute
     const getTomorrowDate = () => {
@@ -197,7 +212,10 @@ export default function AddProductModal({ setShowForm, setProducts }) {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-gray-900 text-white p-6 rounded-lg shadow-lg w-full max-w-3xl">
                 <h3 className="text-xl font-bold mb-6 text-center">Add New Product</h3>
-                <form className="flex flex-col md:flex-row gap-6" onSubmit={handleAddProduct}>
+                <form
+                    className="flex flex-col md:flex-row gap-6"
+                    onSubmit={role === "admin" ? handleAdminAddProduct : handleBranchAddProduct}
+                >
                     {role === "admin" && (
                         <div className="flex-1 flex flex-col items-center">
                             <label className="block text-sm font-semibold mb-2">Insert Image</label>

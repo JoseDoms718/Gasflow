@@ -668,7 +668,7 @@ router.put("/restock/:id", authenticateToken, async (req, res) => {
       [newStock, id, branch_id]
     );
 
-    // Log restock without branch_id
+    // Log restock **without branch_id**
     await db.query(
       `INSERT INTO inventory_logs 
         (product_id, state, user_id, type, quantity, previous_stock, new_stock, description, created_at)

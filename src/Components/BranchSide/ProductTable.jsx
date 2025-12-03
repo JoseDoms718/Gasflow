@@ -115,9 +115,10 @@ export default function ProductTable({
         try {
             const res = await axios.put(
                 `${BASE_URL}/products/restock/${restockProduct.product_id}`,
-                { quantity, branch_price_id: restockProduct.branch_price_id },
+                { quantity, branch_id: restockProduct.branch_id }, // <-- replace branch_price_id with branch_id
                 { headers: { Authorization: `Bearer ${token}` } }
             );
+
 
             const newStock = res.data.newStock;
 

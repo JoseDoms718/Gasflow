@@ -34,9 +34,9 @@ export default function Buysection() {
   const [selectedBarangayId, setSelectedBarangayId] = useState("");
   const [loading, setLoading] = useState(true);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [userRole, setUserRole] = useState(null);
 
   const municipalities = ["Boac", "Mogpog", "Gasan", "Buenavista", "Torrijos", "Santa Cruz"];
-
   const branchId = new URLSearchParams(location.search).get("branch_id");
 
   // ───────── SOCKET.IO ─────────
@@ -83,6 +83,7 @@ export default function Buysection() {
         const user = data.user;
         if (!user) return;
 
+        setUserRole(user.role || null); // set role here
         setName(user.name || "");
         setPhone(user.contact_number || "+63");
         setMunicipality(user.municipality || "");
@@ -209,7 +210,7 @@ export default function Buysection() {
             {
               product_id: product.product_id,
               quantity,
-              type: productType,  // "regular" | "discounted" | "refill"
+              type: productType,
               branch_id: product.branch_id
             },
           ],
@@ -219,7 +220,6 @@ export default function Buysection() {
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-
 
       toast.success(data.message || "Order placed successfully!");
       navigate("/orders");
@@ -265,86 +265,91 @@ export default function Buysection() {
 
         {/* Info */}
         <div className="bg-gray-800 p-10 rounded-2xl shadow-lg flex flex-col justify-between h-[600px] max-h-[85vh] overflow-y-auto">
-          <div>
-            <h2 className="text-3xl font-bold mb-2">{product.product_name}</h2>
-            <p className="text-gray-300 mb-2">{product.product_description || "No description available."}</p>
-            {product.branch_name && (
-              <p className="text-gray-400 mb-4 text-sm">
-                Sold by: <span className="font-medium">{product.branch_name}</span>
-              </p>
-            )}
-            {outOfStock && <p className="text-red-400 font-semibold mb-4">⚠️ Out of stock.</p>}
-            <p className="text-2xl font-semibold mb-2">₱{totalPrice.toLocaleString()}.00</p>
+          {/* Header row with title and X button */}
+          <div className="flex justify-between items-start mb-4">
+            <h2 className="text-3xl font-bold">{product.product_name}</h2>
+            <button onClick={() => navigate(-1)} className="ml-4 bg-gray-700 hover:bg-gray-600 rounded-lg p-2">
+              <X size={22} />
+            </button>
+          </div>
 
-            {/* Type & Quantity */}
-            <div className="flex flex-col mb-6 gap-2">
-              <label className="block text-sm font-medium">Type & Quantity</label>
-              <div className="flex items-center gap-4">
-                <select
-                  value={productType}
-                  onChange={(e) => setProductType(e.target.value)}
-                  className="px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg"
-                >
-                  {getDropdownOptions().map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  value={quantity ?? ""}
-                  onChange={handleQuantityChange}
-                  min={0}
-                  max={product.stock}
-                  className="w-20 px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg text-center"
-                  placeholder="0"
-                />
-              </div>
-            </div>
+          <p className="text-gray-300 mb-2">{product.product_description || "No description available."}</p>
+          {product.branch_name && (
+            <p className="text-gray-400 mb-4 text-sm">
+              Sold by: <span className="font-medium">{product.branch_name}</span>
+            </p>
+          )}
+          {outOfStock && <p className="text-red-400 font-semibold mb-4">⚠️ Out of stock.</p>}
+          <p className="text-2xl font-semibold mb-2">₱{totalPrice.toLocaleString()}.00</p>
 
-            {/* User Info */}
-            <div className="space-y-4 mb-6">
-              <input
-                type="text"
-                value={name}
-                onChange={handleNameChange}
-                placeholder="Full Name"
-                className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700"
-              />
-              <input
-                type="tel"
-                value={phone}
-                onChange={handlePhoneChange}
-                placeholder="+639XXXXXXXXX"
-                maxLength={13}
-                className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700"
-              />
+          {/* Type & Quantity */}
+          <div className="flex flex-col mb-6 gap-2">
+            <label className="block text-sm font-medium">Type & Quantity</label>
+            <div className="flex items-center gap-4">
               <select
-                value={municipality}
-                onChange={(e) => setMunicipality(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700"
+                value={productType}
+                onChange={(e) => setProductType(e.target.value)}
+                className="px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg"
               >
-                <option value="">Select municipality</option>
-                {municipalities.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
+                {getDropdownOptions().map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
                   </option>
                 ))}
               </select>
-              <select
-                value={selectedBarangayId}
-                onChange={(e) => setSelectedBarangayId(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700"
-              >
-                <option value="">Select barangay</option>
-                {barangays.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
+              <input
+                type="number"
+                value={quantity ?? ""}
+                onChange={handleQuantityChange}
+                min={0}
+                max={product.stock}
+                className="w-20 px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg text-center"
+                placeholder="0"
+              />
             </div>
+          </div>
+
+          {/* User Info */}
+          <div className="space-y-4 mb-6">
+            <input
+              type="text"
+              value={name}
+              onChange={handleNameChange}
+              placeholder="Full Name"
+              className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700"
+            />
+            <input
+              type="tel"
+              value={phone}
+              onChange={handlePhoneChange}
+              placeholder="+639XXXXXXXXX"
+              maxLength={13}
+              className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700"
+            />
+            <select
+              value={municipality}
+              onChange={(e) => setMunicipality(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700"
+            >
+              <option value="">Select municipality</option>
+              {municipalities.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            <select
+              value={selectedBarangayId}
+              onChange={(e) => setSelectedBarangayId(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700"
+            >
+              <option value="">Select barangay</option>
+              {barangays.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Actions */}
@@ -355,8 +360,17 @@ export default function Buysection() {
               className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold ${outOfStock ? "bg-yellow-500 cursor-not-allowed" : "bg-yellow-600 hover:bg-yellow-700"
                 }`}
             >
-              <ShoppingCart size={20} /> Add to Cart
+              <ShoppingCart size={20} /> Cart
             </button>
+
+            {userRole === "business_owner" && (
+              <button
+                onClick={() => toast.success("Loan request submitted!")}
+                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold bg-purple-600 hover:bg-purple-700"
+              >
+                <CreditCard size={20} /> Loan
+              </button>
+            )}
 
             <button
               onClick={handleCheckout}
@@ -365,13 +379,6 @@ export default function Buysection() {
                 }`}
             >
               <CreditCard size={20} /> {outOfStock ? "Out of Stock" : isPlacingOrder ? "Placing Order..." : "Checkout"}
-            </button>
-
-            <button
-              onClick={() => navigate(-1)}
-              className="w-14 flex items-center justify-center bg-gray-700 hover:bg-gray-600 rounded-lg"
-            >
-              <X size={22} />
             </button>
           </div>
         </div>

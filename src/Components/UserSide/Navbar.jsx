@@ -30,7 +30,7 @@ export default function NavBar() {
     axios
       .get(`${BASE_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => {
-        if (res.data.success) {
+        if (res.data.user) {
           setUser(res.data.user);
           localStorage.setItem("user", JSON.stringify(res.data.user));
         } else {
@@ -78,6 +78,10 @@ export default function NavBar() {
     }
   };
 
+  const navItems = ["Home", "Products", "Services", "Orders"];
+  if (user?.role === "business_owner") navItems.push("Loan");
+  navItems.push("Contact");
+
   return (
     <nav className="fixed z-20 top-0 left-0 w-full bg-white text-gray-800 shadow-md transition-all duration-300">
       <div className="container mx-auto px-4 md:px-6 py-3 md:py-4 flex items-center justify-between">
@@ -92,11 +96,14 @@ export default function NavBar() {
 
           {/* Desktop Links */}
           <div className="hidden md:flex items-center gap-8 text-lg font-medium">
-            {["Home", "Products", "Services", "Orders", "Contact"].map((item) => (
+            {navItems.map((item) => (
               <Link
                 key={item}
                 to={`/${item === "Home" ? "" : item.toLowerCase()}`}
-                onClick={(e) => handleNav(e, `/${item.toLowerCase()}`)}
+                onClick={(e) => {
+                  handleNav(e, `/${item.toLowerCase()}`);
+                  if (item === "Loan") navigate("/loan");
+                }}
                 className="relative group hover:text-blue-500 transition"
               >
                 {item}
@@ -171,12 +178,13 @@ export default function NavBar() {
       {/* Mobile Menu */}
       {mobileMenuOpen && (
         <div className="md:hidden bg-white shadow-md border-t border-gray-200 px-4 py-3 space-y-3">
-          {["Home", "Products", "Services", "Orders", "Contact"].map((item) => (
+          {navItems.map((item) => (
             <Link
               key={item}
               to={`/${item === "Home" ? "" : item.toLowerCase()}`}
               onClick={(e) => {
                 handleNav(e, `/${item.toLowerCase()}`);
+                if (item === "Loan") navigate("/loan");
                 setMobileMenuOpen(false);
               }}
               className="block text-gray-800 font-medium hover:text-blue-500 transition"
