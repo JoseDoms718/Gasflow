@@ -6,8 +6,6 @@ import { toast } from "react-hot-toast";
 import { io } from "socket.io-client";
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;
-const API_BASE = BASE_URL;
-const SOCKET_URL = BASE_URL;
 
 export default function IncomingOrderSection() {
   const [activeTab, setActiveTab] = useState("pending");
@@ -30,13 +28,39 @@ export default function IncomingOrderSection() {
       const token = localStorage.getItem("token");
       if (!token) throw new Error("Not logged in");
 
-      // 🔥 FIXED ENDPOINT
-      const res = await axios.get(`${API_BASE}/orders/branch-orders`, {
+      const res = await axios.get(`${BASE_URL}/orders/my-sold`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       if (res.data.success && Array.isArray(res.data.orders)) {
-        setOrders(res.data.orders);
+        const normalizedOrders = res.data.orders.map((order) => {
+          const delivery_fee = Number(order.delivery_fee) || 0;
+          let total_price = Number(order.total_price) || 0;
+
+          if (!total_price && Array.isArray(order.items)) {
+            total_price = order.items.reduce(
+              (sum, item) =>
+                sum +
+                (Number(item.price) || 0) * (Number(item.quantity) || 0),
+              0
+            );
+          }
+
+          const items = order.items.map((item) => ({
+            ...item,
+            price: Number(item.price) || 0,
+            quantity: Number(item.quantity) || 0,
+          }));
+
+          return {
+            ...order,
+            delivery_fee,
+            total_price,
+            items,
+          };
+        });
+
+        setOrders(normalizedOrders);
       } else {
         toast.error("Failed to fetch orders.");
       }
@@ -48,29 +72,19 @@ export default function IncomingOrderSection() {
     }
   };
 
-  const mergeOrders = (existing, updated) => ({
-    ...existing,
-    ...updated,
-  });
-
   useEffect(() => {
     const token = localStorage.getItem("token");
-    socketRef.current = io(SOCKET_URL, {
+    socketRef.current = io(BASE_URL, {
       auth: { token },
       transports: ["websocket"],
     });
 
     socketRef.current.on("order-updated", (updatedOrder) => {
-      setOrders((prev) => {
-        const idx = prev.findIndex((o) => o.order_id === updatedOrder.order_id);
-        if (idx >= 0) {
-          const merged = mergeOrders(prev[idx], updatedOrder);
-          const copy = [...prev];
-          copy[idx] = merged;
-          return copy;
-        }
-        return [updatedOrder, ...prev];
-      });
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.order_id === updatedOrder.order_id ? { ...o, ...updatedOrder } : o
+        )
+      );
     });
 
     socketRef.current.on("newOrder", (order) => {
@@ -111,7 +125,7 @@ export default function IncomingOrderSection() {
 
     try {
       const res = await axios.put(
-        `${API_BASE}/orders/branch/update-status/${order_id}`,
+        `${BASE_URL}/orders/branch/update-status/${order_id}`,
         { status: newStatus },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -159,15 +173,15 @@ export default function IncomingOrderSection() {
 
   return (
     <div className="p-6 w-full flex flex-col min-h-[80vh]">
-      {/* Header */}
+      {/* HEADER */}
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Order Management</h2>
       </div>
 
-      {/* Tabs */}
+      {/* TABS */}
       <div className="flex justify-between items-center border-b mb-3 pb-1">
         <div className="flex space-x-2">
-          {["pending", "preparing", "on_delivery", "delivered"].map((k) => (
+          {Object.keys(statusLabels).map((k) => (
             <button
               key={k}
               onClick={() => {
@@ -203,18 +217,21 @@ export default function IncomingOrderSection() {
             const open = expanded.includes(order.order_id);
             const nextStatus = getNextStatus(order.status);
 
+            const totalWithDelivery =
+              order.total_price + order.delivery_fee;
+
             return (
               <div
                 key={order.order_id}
-                className={`rounded-xl overflow-hidden mb-4 border bg-white ${open
-                  ? "shadow-2xl"
-                  : "shadow-md hover:shadow-xl"
+                className={`rounded-xl overflow-hidden mb-4 border bg-white ${open ? "shadow-2xl" : "shadow-md hover:shadow-xl"
                   }`}
               >
                 {/* COLLAPSE HEADER */}
                 <div
                   onClick={() => toggleExpand(order.order_id)}
-                  className={`flex justify-between items-center px-5 py-3 cursor-pointer ${open ? "bg-gray-200" : "bg-gray-100 hover:bg-gray-200"
+                  className={`flex justify-between items-center px-5 py-3 cursor-pointer ${open
+                    ? "bg-gray-200"
+                    : "bg-gray-100 hover:bg-gray-200"
                     }`}
                 >
                   <div>
@@ -223,12 +240,15 @@ export default function IncomingOrderSection() {
                     </p>
                     <p className="text-sm text-gray-700">
                       Buyer:{" "}
-                      <span className="font-bold">{order.buyer_name}</span>
+                      <span className="font-bold">
+                        {order.buyer_name}
+                      </span>
                     </p>
                   </div>
+
                   <div className="flex items-center gap-3">
                     <p className="text-blue-600 font-extrabold">
-                      ₱{order.total_price?.toLocaleString()}
+                      ₱{totalWithDelivery.toLocaleString()}
                     </p>
                     {open ? <ChevronUp /> : <ChevronDown />}
                   </div>
@@ -238,12 +258,12 @@ export default function IncomingOrderSection() {
                 {open && (
                   <div className="p-5 border-t border-gray-200 bg-gray-50">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* LEFT SIDE */}
-                      <div className="w-full h-[350px] overflow-y-auto rounded-xl bg-white shadow-md p-4 scroll-smooth snap-y snap-mandatory space-y-4">
+                      {/* LEFT SIDE - ITEMS */}
+                      <div className="w-full h-[350px] overflow-y-auto rounded-xl bg-white shadow-md p-4 space-y-4">
                         {order.items?.map((item, idx) => (
                           <div
                             key={idx}
-                            className="flex items-start gap-4 p-4 snap-start min-h-[150px] bg-gray-50 rounded-lg shadow-sm"
+                            className="flex items-start gap-4 p-4 min-h-[150px] bg-gray-50 rounded-lg shadow-sm"
                           >
                             <img
                               src={item.image_url}
@@ -257,56 +277,71 @@ export default function IncomingOrderSection() {
                               </h3>
 
                               <p className="text-sm text-gray-700 mt-1">
-                                Qty: <span className="font-bold">{item.quantity}</span> × ₱
-                                {item.price.toLocaleString()}
+                                Qty:{" "}
+                                <span className="font-bold">
+                                  {item.quantity}
+                                </span>{" "}
+                                × ₱{item.price.toLocaleString()}
                               </p>
 
                               <p className="text-blue-600 font-semibold mt-1">
-                                Subtotal: ₱{(item.quantity * item.price).toLocaleString()}
+                                Subtotal: ₱
+                                {(item.quantity * item.price).toLocaleString()}
                               </p>
                             </div>
                           </div>
                         ))}
                       </div>
 
-                      {/* RIGHT SIDE */}
-                      <div className="bg-white rounded-xl shadow-md border p-6 text-sm text-gray-800 space-y-4">
-                        <div>
-                          <p className="font-semibold text-gray-900">Delivery Address</p>
-                          <p className="text-gray-700">
-                            {order.barangay}, {order.municipality}
-                          </p>
+                      {/* RIGHT SIDE - INFO */}
+                      <div className="bg-white rounded-xl shadow-md border p-6 text-sm text-gray-800 flex flex-col h-full">
+
+                        {/* INFO GRID (2 columns only) */}
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="font-semibold text-gray-900">Delivery Address</p>
+                            <p className="text-gray-700">{order.barangay}, {order.municipality}</p>
+                          </div>
+
+                          <div>
+                            <p className="font-semibold text-gray-900">Email</p>
+                            <p className="text-gray-700">{order.buyer_email}</p>
+                          </div>
+
+                          <div>
+                            <p className="font-semibold text-gray-900">Contact Number</p>
+                            <p className="text-gray-700">{order.contact_number}</p>
+                          </div>
+
+                          <div>
+                            <p className="font-semibold text-gray-900">Ordered At</p>
+                            <p className="text-gray-700">
+                              {order.ordered_at
+                                ? new Date(order.ordered_at).toLocaleString()
+                                : "—"}
+                            </p>
+                          </div>
+
+                          {order.status === "delivered" && order.delivered_at && (
+                            <div>
+                              <p className="font-semibold text-gray-900">Delivered At</p>
+                              <p className="text-gray-700">
+                                {new Date(order.delivered_at).toLocaleString()}
+                              </p>
+                            </div>
+                          )}
+
+                          <div>
+                            <p className="font-semibold text-gray-900">Delivery Fee</p>
+                            <p className="text-gray-700">₱{order.delivery_fee.toLocaleString()}</p>
+                          </div>
                         </div>
 
-                        <div>
-                          <p className="font-semibold text-gray-900">Email</p>
-                          <p className="text-gray-700">{order.buyer_email}</p>
-                        </div>
-
-                        <div>
-                          <p className="font-semibold text-gray-900">
-                            Contact Number
-                          </p>
-                          <p className="text-gray-700">
-                            {order.contact_number}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="font-semibold text-gray-900">Ordered At</p>
-                          <p className="text-gray-700">
-                            {order.ordered_at
-                              ? new Date(order.ordered_at).toLocaleString()
-                              : "—"}
-                          </p>
-                        </div>
-
-                        <hr className="border-gray-300" />
-
-                        <div>
+                        {/* TOTAL ALWAYS AT BOTTOM */}
+                        <div className="mt-auto pt-4 border-t">
                           <p className="font-semibold text-gray-900">Total Amount</p>
                           <p className="text-xl font-bold text-blue-700">
-                            ₱{order.total_price?.toLocaleString()}
+                            ₱{totalWithDelivery.toLocaleString()}
                           </p>
                         </div>
                       </div>

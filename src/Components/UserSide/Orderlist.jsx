@@ -434,10 +434,18 @@ export default function Orderlist({ role: propRole }) {
 
                         {/* Delivery fee & totals */}
                         <div className="mt-2 text-sm sm:text-base">
-                          <div>Items Total: ₱{orderTotal.toLocaleString()}</div>
-                          <div>Delivery Fee: ₱{deliveryFee.toLocaleString()}</div>
-                          <div className="font-bold">Total: ₱{grandTotal.toLocaleString()}</div>
+                          {order.status === "cart" ? (
+                            <div className="text-yellow-400 font-bold text-sm sm:text-base">
+                              ⚠️ Delivery fee may vary
+                            </div>
+                          ) : (
+                            <div>Delivery Fee: ₱{deliveryFee.toLocaleString()}</div>
+                          )}
+                          <div className="font-bold">
+                            Total: ₱{(orderTotal + (order.status === "cart" ? 0 : deliveryFee)).toLocaleString()}
+                          </div>
                         </div>
+
 
                         {/* Delivered date for finished orders */}
                         {activeTab === "finished" && order.status === "delivered" && order.delivered_at && (

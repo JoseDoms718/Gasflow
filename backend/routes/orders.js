@@ -578,6 +578,7 @@ router.get(
           o.contact_number,
           o.status,
           o.total_price,
+          o.delivery_fee,          -- always include delivery_fee
           o.ordered_at,
           o.delivered_at,
           o.inventory_deducted,
@@ -599,30 +600,29 @@ router.get(
         LEFT JOIN users u ON o.buyer_id = u.user_id
         LEFT JOIN branches br ON oi.branch_id = br.branch_id
         LEFT JOIN barangays b ON o.barangay_id = b.barangay_id
-        WHERE o.status = 'delivered'
+        WHERE 1
       `;
 
       const params = [];
 
-      // Branch manager: filter by all assigned branches
+      // Filter by branch_manager's branches
       if (req.user.role === "branch_manager" && req.user.branches && req.user.branches.length > 0) {
         query += ` AND oi.branch_id IN (${req.user.branches.map(() => "?").join(",")})`;
         params.push(...req.user.branches);
       }
 
-      // Retailer: filter by their user_id (if needed)
+      // Filter by retailer's branch
       if (req.user.role === "retailer") {
         query += " AND oi.branch_id = ?";
-        params.push(req.user.branch_id); // make sure branch_id is set for retailer
+        params.push(req.user.branch_id);
       }
 
-      query += " ORDER BY o.delivered_at DESC";
+      query += " ORDER BY o.ordered_at DESC";
 
       const [rows] = await db.query(query, params);
 
       if (!rows.length) return res.status(200).json({ success: true, orders: [] });
 
-      // Group items by order
       const grouped = rows.reduce((acc, row) => {
         let order = acc.find((o) => o.order_id === row.order_id);
         if (!order) {
@@ -634,7 +634,8 @@ router.get(
             full_name: row.full_name,
             contact_number: row.contact_number,
             status: row.status,
-            total_price: row.total_price,
+            total_price: parseFloat(row.total_price) || 0,
+            delivery_fee: parseFloat(row.delivery_fee) || 0, // coerce to number here
             ordered_at: row.ordered_at,
             delivered_at: row.delivered_at,
             inventory_deducted: row.inventory_deducted,
@@ -651,7 +652,7 @@ router.get(
           product_description: row.product_description,
           image_url: formatImageUrl(row.image_url),
           quantity: row.quantity,
-          price: row.price,
+          price: parseFloat(row.price) || 0, // coerce item price too
           branch_id: row.branch_id,
           branch_name: row.branch_name || "Unknown",
         });
@@ -666,8 +667,6 @@ router.get(
     }
   }
 );
-
-
 
 // Helper function to group orders
 function groupOrders(rows, mapItem) {
@@ -697,98 +696,6 @@ function groupOrders(rows, mapItem) {
 
   return Object.values(ordersMap);
 }
-
-
-/* -------------------------------------------------------------------
-   RETAILER DASHBOARD: /retailer-orders
-------------------------------------------------------------------- */
-router.get(
-  "/branch-orders",
-  authenticateToken,
-  requireRole("retailer", "branch_manager"),
-  async (req, res) => {
-    try {
-      const user = req.user;
-
-      // STEP 1: Resolve branch_id based on user ownership
-      const [branchRows] = await db.query(
-        `SELECT branch_id FROM branches WHERE user_id = ? LIMIT 1`,
-        [user.id]
-      );
-
-      if (branchRows.length === 0) {
-        return res.status(400).json({
-          success: false,
-          error: "User does not belong to any branch.",
-        });
-      }
-
-      const branch_id = branchRows[0].branch_id;
-
-      // STEP 2: Fetch orders belonging to this branch
-      const [rows] = await db.query(
-        `
-        SELECT
-          o.order_id,
-          o.full_name,
-          o.contact_number,
-          o.status,
-          o.total_price,
-          o.ordered_at,
-          o.delivered_at,
-          o.inventory_deducted,
-          b.barangay_name AS barangay,
-          b.municipality AS municipality,
-          oi.quantity,
-          oi.price,
-          oi.branch_id AS item_branch_id,
-          p.product_id,
-          p.product_name,
-          p.product_description,
-          p.image_url,
-          COALESCE(u.name, o.full_name) AS buyer_name,
-          u.email AS buyer_email
-
-        FROM orders o
-        JOIN order_items oi ON o.order_id = oi.order_id
-        JOIN products p ON oi.product_id = p.product_id
-        LEFT JOIN users u ON o.buyer_id = u.user_id
-        LEFT JOIN barangays b ON o.barangay_id = b.barangay_id
-        WHERE oi.branch_id = ?
-        ORDER BY o.ordered_at DESC
-      `,
-        [branch_id]
-      );
-
-      // Format images
-      const rowsWithImages = rows.map((row) => ({
-        ...row,
-        image_url: row.image_url ? formatImageUrl(row.image_url) : null,
-      }));
-
-      // Group items by order
-      const grouped = groupOrders(rowsWithImages, (row) => ({
-        product_id: row.product_id,
-        product_name: row.product_name,
-        product_description: row.product_description,
-        image_url: row.image_url,
-        quantity: row.quantity,
-        price: row.price,
-        buyer_name: row.buyer_name,
-        buyer_email: row.buyer_email,
-      }));
-
-      return res.status(200).json({ success: true, orders: grouped });
-    } catch (err) {
-      console.error("❌ Error fetching branch-orders:", err);
-      return res.status(500).json({
-        success: false,
-        error: "Failed to fetch branch orders.",
-      });
-    }
-  }
-);
-
 
 /* -------------------------------------------------------------------
    BUYER: UPDATE ORDER STATUS (cancel)

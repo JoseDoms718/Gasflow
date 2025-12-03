@@ -6,7 +6,6 @@ import {
   LogOut,
   Users,
   Settings,
-  User,
   MessageCircle,
 } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -61,6 +60,14 @@ export default function Sidebar({ role }) {
   const userRole = role || user?.role || "guest";
   const isActive = (path) => location.pathname === path;
 
+  // Friendly role labels
+  const roleLabels = {
+    admin: "Admin",
+    branch_manager: "Branch Manager",
+    retailer: "Retailer",
+    guest: "Guest",
+  };
+
   // Determine which page should receive order notifications
   const ordersPath =
     userRole === "admin"
@@ -103,13 +110,12 @@ export default function Sidebar({ role }) {
       { to: "/adminmaintenance", label: "Maintenance", icon: <Settings className="w-5 h-5" /> },
     ],
 
-
     branch_manager: [
       { to: "/branchorder", label: "Orders", icon: <ShoppingCart className="w-5 h-5" />, showBadge: true },
       { to: "/branchinventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
       { to: "/branchsalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
       { to: "/branchretailer", label: "Manage Retailers", icon: <Users className="w-5 h-5" /> },
-      { to: "/branchinquiries", label: "Inquiries", icon: <MessageCircle className="w-5 h-5" /> }, // added
+      { to: "/branchinquiries", label: "Inquiries", icon: <MessageCircle className="w-5 h-5" /> },
     ],
 
     retailer: [
@@ -126,18 +132,19 @@ export default function Sidebar({ role }) {
   return (
     <>
       <aside className="bg-gray-900 text-white w-64 min-h-screen flex flex-col fixed left-0 top-0">
+        {/* Logo */}
         <div className="flex items-center gap-3 p-6 border-b border-gray-700">
           <img src={LogoWhite} alt="Gasflow Logo" className="w-10 h-10 object-contain" />
           <h1 className="text-xl font-bold">Gasflow</h1>
         </div>
 
-        <div className="flex items-center gap-4 p-6 border-b border-gray-700">
-          <div className="w-12 h-12 bg-gray-800 rounded-full flex items-center justify-center">
-            <User className="w-6 h-6 text-gray-400" />
-          </div>
-          <p className="text-lg font-medium truncate max-w-[140px]">{user?.name || "Guest"}</p>
+        {/* User Info */}
+        <div className="flex flex-col items-start gap-1 p-6 border-b border-gray-700">
+          <p className="text-lg font-medium truncate">{user?.name || "Guest"}</p>
+          <p className="text-sm text-gray-400 capitalize">{roleLabels[user?.role] || "Guest"}</p>
         </div>
 
+        {/* Navigation */}
         <nav className="flex-1 p-4 overflow-y-auto">
           <ul className="space-y-2">
             {menuItems.length > 0 ? (
@@ -165,6 +172,7 @@ export default function Sidebar({ role }) {
           </ul>
         </nav>
 
+        {/* Profile & Logout */}
         <div className="p-4 border-t border-gray-700 space-y-2">
           <button
             onClick={() => setShowEditModal(true)}

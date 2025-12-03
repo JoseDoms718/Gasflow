@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
+import { toast } from "react-hot-toast";
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 
@@ -7,8 +8,9 @@ export default function SetDeliveryfeeSection() {
     const [branches, setBranches] = useState([]);
     const [insideBarangays, setInsideBarangays] = useState([]);
     const [selectedBranch, setSelectedBranch] = useState(null);
-    const [selectedBarangays, setSelectedBarangays] = useState({}); // {id: 'free' | 'near' | 'far'}
+    const [selectedBarangays, setSelectedBarangays] = useState({});
     const [fees, setFees] = useState({ near: "", far: "", outside: "" });
+    const [hasExistingFees, setHasExistingFees] = useState(false);
 
     useEffect(() => {
         fetchBranches();
@@ -20,47 +22,74 @@ export default function SetDeliveryfeeSection() {
             setBranches(res.data.branches || res.data);
         } catch (err) {
             console.error("Failed to fetch branches", err);
+            toast.error("Failed to fetch branches");
         }
     };
 
     const fetchInsideBarangays = async (municipality) => {
         try {
-            const res = await axios.get(`${BASE_URL}/barangays`, { params: { municipality } });
-            setInsideBarangays(res.data);
+            const res = await axios.get(`${BASE_URL}/barangays/`, { params: { municipality } });
+            return res.data;
         } catch (err) {
             console.error("Failed to fetch barangays", err);
+            toast.error("Failed to fetch barangays");
+            return [];
         }
     };
 
-    const handleBranchSelect = (branchId) => {
+    const fetchExistingFees = async (branchId) => {
+        try {
+            const res = await axios.get(`${BASE_URL}/fee/get/${branchId}`);
+            if (res.data.success && res.data.fees) {
+                const barangayFees = {};
+                let near = "", far = "", outside = "";
+
+                res.data.fees.forEach((f) => {
+                    if (f.barangay_id) barangayFees[f.barangay_id] = f.fee_type;
+                    if (f.fee_type === "near") near = f.fee_amount;
+                    if (f.fee_type === "far") far = f.fee_amount;
+                    if (f.fee_type === "outside") outside = f.fee_amount;
+                });
+
+                setSelectedBarangays(barangayFees);
+                setFees({ near, far, outside });
+                setHasExistingFees(true);
+            } else {
+                setHasExistingFees(false);
+            }
+        } catch (err) {
+            console.error("Failed to fetch existing delivery fees", err);
+            toast.error("Failed to fetch existing delivery fees");
+            setHasExistingFees(false);
+        }
+    };
+
+    const handleBranchSelect = async (branchId) => {
         const branch = branches.find((b) => Number(b.branch_id) === Number(branchId));
         setSelectedBranch(branch);
         setSelectedBarangays({});
-        if (branch) {
-            fetchInsideBarangays(branch.municipality);
-        }
+        setFees({ near: "", far: "", outside: "" });
+        setHasExistingFees(false);
+
+        if (!branch) return;
+
+        const barangays = await fetchInsideBarangays(branch.municipality);
+        setInsideBarangays(barangays);
+
+        await fetchExistingFees(branch.branch_id);
     };
 
-    const toggleBarangay = (b, defaultType = "near") => {
-        setSelectedBarangays((prev) => {
-            const copy = { ...prev };
-            if (copy[b.id]) delete copy[b.id];
-            else copy[b.id] = defaultType;
-            return copy;
-        });
-    };
-
-    const handleFeeChange = (id, value) => {
+    const handleBarangayTypeChange = (b, type) => {
         setSelectedBarangays((prev) => ({
             ...prev,
-            [id]: value,
+            [b.id]: prev[b.id] === type ? "" : type,
         }));
     };
 
-    const handleSave = async () => {
-        if (!selectedBranch) return alert("Please select a branch");
-        if (Object.keys(selectedBarangays).length === 0) return alert("Select at least one barangay");
-        if (!fees.near || !fees.far || !fees.outside) return alert("Enter all fee values");
+    const handleSaveOrUpdate = async () => {
+        if (!selectedBranch) return toast.error("Please select a branch");
+        if (Object.keys(selectedBarangays).length === 0) return toast.error("Select at least one barangay");
+        if (!fees.near || !fees.far || !fees.outside) return toast.error("Enter all fee values");
 
         try {
             const payload = Object.keys(selectedBarangays).map((id) => ({
@@ -73,56 +102,55 @@ export default function SetDeliveryfeeSection() {
                 fees: payload,
                 near_fee: fees.near,
                 far_fee: fees.far,
-                outside_fee: fees.outside, // the endpoint handles outside automatically
+                outside_fee: fees.outside,
             });
 
-            alert("Delivery fees updated successfully");
+            toast.success(hasExistingFees ? "Delivery fees updated successfully" : "Delivery fees set successfully");
+            setHasExistingFees(true);
         } catch (err) {
             console.error(err);
-            alert("Failed to update fees");
+            toast.error("Failed to save/update fees");
         }
     };
 
     const renderBarangayRow = (b) => {
-        const selected = !!selectedBarangays[b.id];
+        const selectedType = selectedBarangays[b.id] || "";
 
         return (
-            <div key={b.id} className="flex items-center justify-between border p-2 rounded mb-2 bg-white">
-                <label className="cursor-pointer">{b.name}</label>
-
-                {selected ? (
-                    <select
-                        value={selectedBarangays[b.id]}
-                        onChange={(e) => handleFeeChange(b.id, e.target.value)}
-                        className="border rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-blue-100"
-                    >
-                        <option value="free">Free</option>
-                        <option value="near">Near</option>
-                        <option value="far">Far</option>
-                    </select>
-                ) : (
-                    <button
-                        onClick={() => toggleBarangay(b, "near")}
-                        className="bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600"
-                    >
-                        Select
-                    </button>
-                )}
+            <div
+                key={b.id}
+                className={`flex items-center justify-between p-3 rounded-lg border hover:shadow-md transition ${selectedType ? "bg-blue-50 border-blue-300" : "bg-white"
+                    }`}
+            >
+                <span className="text-gray-700 font-medium">{b.name}</span>
+                <div className="flex space-x-3 items-center">
+                    {["free", "near", "far"].map((type) => (
+                        <label key={type} className="flex items-center space-x-1 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={selectedType === type}
+                                onChange={() => handleBarangayTypeChange(b, type)}
+                                className="accent-blue-500 w-4 h-4"
+                            />
+                            <span className="capitalize text-sm">{type}</span>
+                        </label>
+                    ))}
+                </div>
             </div>
         );
     };
 
     return (
-        <div className="p-6 space-y-6 w-full max-w-6xl mx-auto">
-            <h1 className="text-3xl font-semibold mb-6">Set Delivery Fee</h1>
+        <div className="p-6 w-full max-w-6xl mx-auto space-y-6">
+            <h1 className="text-3xl font-bold text-gray-800">Set Delivery Fee</h1>
 
-            <div className="bg-white shadow rounded-xl p-6 space-y-6">
+            <div className="bg-white rounded-xl shadow-lg p-6 space-y-6">
                 {/* Branch Selector */}
                 <div>
-                    <label className="font-medium text-gray-700">Select Branch</label>
+                    <label className="font-medium text-gray-700 mb-1 block">Select Branch</label>
                     <select
                         onChange={(e) => handleBranchSelect(e.target.value)}
-                        className="mt-2 w-full border p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                         <option value="">Choose a branch</option>
                         {branches.map((branch) => (
@@ -133,13 +161,13 @@ export default function SetDeliveryfeeSection() {
                     </select>
                 </div>
 
-                {/* Inside Municipality */}
+                {/* Barangay List */}
                 {selectedBranch && insideBarangays.length > 0 && (
                     <div>
-                        <h2 className="font-medium text-gray-700 mt-4">
+                        <h2 className="text-gray-700 font-medium mb-2">
                             Barangays in {selectedBranch.municipality} (Inside Municipality)
                         </h2>
-                        <div className="mt-2 grid grid-cols-2 gap-3 max-h-96 overflow-y-auto">
+                        <div className="grid grid-cols-2 gap-3 max-h-96 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
                             {insideBarangays.map((b) => renderBarangayRow(b))}
                         </div>
                     </div>
@@ -149,44 +177,45 @@ export default function SetDeliveryfeeSection() {
                 {selectedBranch && (
                     <div className="grid grid-cols-3 gap-4 mt-4">
                         <div>
-                            <label className="font-medium text-gray-700">Near Fee</label>
+                            <label className="text-gray-700 font-medium">Near Fee</label>
                             <input
                                 type="number"
                                 value={fees.near}
                                 onChange={(e) => setFees({ ...fees, near: e.target.value })}
-                                className="mt-2 w-full border p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-full border rounded-lg p-2 mt-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 placeholder="e.g. 50"
                             />
                         </div>
                         <div>
-                            <label className="font-medium text-gray-700">Far Fee</label>
+                            <label className="text-gray-700 font-medium">Far Fee</label>
                             <input
                                 type="number"
                                 value={fees.far}
                                 onChange={(e) => setFees({ ...fees, far: e.target.value })}
-                                className="mt-2 w-full border p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-full border rounded-lg p-2 mt-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 placeholder="e.g. 100"
                             />
                         </div>
                         <div>
-                            <label className="font-medium text-gray-700">Outside Fee</label>
+                            <label className="text-gray-700 font-medium">Outside Fee</label>
                             <input
                                 type="number"
                                 value={fees.outside}
                                 onChange={(e) => setFees({ ...fees, outside: e.target.value })}
-                                className="mt-2 w-full border p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-full border rounded-lg p-2 mt-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 placeholder="e.g. 120"
                             />
                         </div>
                     </div>
                 )}
 
+                {/* Save/Update Button */}
                 {selectedBranch && (
                     <button
-                        onClick={handleSave}
-                        className="w-full mt-6 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition"
+                        onClick={handleSaveOrUpdate}
+                        className="w-full mt-6 bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 transition"
                     >
-                        Save Delivery Fees
+                        {hasExistingFees ? "Update Delivery Fees" : "Save Delivery Fees"}
                     </button>
                 )}
             </div>

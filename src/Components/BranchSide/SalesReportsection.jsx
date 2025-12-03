@@ -67,21 +67,31 @@ export default function ReportsPage() {
         if (transactionsRes.success) {
           setTransactions(
             transactionsRes.orders.flatMap((order) =>
-              order.items.map((item, index) => ({
-                id: `${order.order_id}-${item.product_id}-${index}`,
-                product_id: item.product_id,
-                productName: item.product_name,
-                quantity: item.quantity,
-                totalPrice: parseFloat(item.price) * parseFloat(item.quantity),
-                date: order.delivered_at
-                  ? toLocalDate(order.delivered_at)
-                  : toLocalDate(order.ordered_at),
-                branch: order.municipality || "Unknown",
-                addedBy: item.seller_name || "N/A",
-                buyer: order.full_name || "N/A",
-              }))
+              order.items.map((item, index) => {
+                const itemQuantity = Number(item.quantity) || 0;
+                const itemPrice = Number(item.price) || 0;
+                const deliveryFee = Number(order.delivery_fee || 0);
+                const deliveryFeePerItem = deliveryFee / order.items.length;
+
+                return {
+                  id: `${order.order_id}-${item.product_id}-${index}`,
+                  product_id: item.product_id,
+                  productName: item.product_name,
+                  quantity: itemQuantity,
+                  price: itemPrice,
+                  deliveryFee: deliveryFeePerItem,
+                  totalPrice: itemQuantity * itemPrice + deliveryFeePerItem,
+                  date: order.delivered_at
+                    ? toLocalDate(order.delivered_at)
+                    : toLocalDate(order.ordered_at),
+                  branch: order.municipality || "Unknown",
+                  addedBy: item.seller_name || "N/A",
+                  buyer: order.full_name || "N/A",
+                };
+              })
             )
           );
+
         }
 
         // Damaged products endpoint
@@ -291,6 +301,7 @@ export default function ReportsPage() {
                     {userRole === "admin" && <th className="px-4 py-3 border-b border-gray-700">Municipality</th>}
                     <th className="px-4 py-3 border-b border-gray-700">Product</th>
                     <th className="px-4 py-3 border-b border-gray-700">Quantity</th>
+                    <th className="px-4 py-3 border-b border-gray-700">Delivery Fee</th>
                     <th className="px-4 py-3 border-b border-gray-700">Total Price</th>
                     <th className="px-4 py-3 border-b border-gray-700">Delivery Date</th>
                   </tr>
@@ -301,6 +312,7 @@ export default function ReportsPage() {
                       {userRole === "admin" && <td className="px-4 py-3">{t.branch}</td>}
                       <td className="px-4 py-3 font-semibold">{t.productName}</td>
                       <td className="px-4 py-3">{t.quantity}</td>
+                      <td className="px-4 py-3 text-purple-600 font-medium">₱{t.deliveryFee.toFixed(2)}</td>
                       <td className="px-4 py-3 text-green-600 font-medium">₱{t.totalPrice.toFixed(2)}</td>
                       <td className="px-4 py-3">{t.date}</td>
                     </tr>
