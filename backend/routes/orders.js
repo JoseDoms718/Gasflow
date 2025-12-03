@@ -387,16 +387,38 @@ router.post("/buy", authenticateToken, async (req, res) => {
     for (const [branch_id, branchItems] of Object.entries(branchMap)) {
       const totalBranchPrice = branchItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
+      // --- Fetch delivery fee for this branch and barangay ---
+      let [feeRows] = await connection.query(
+        `SELECT fee_amount FROM delivery_fees 
+         WHERE branch_id = ? AND barangay_id = ? 
+         LIMIT 1`,
+        [branch_id, barangay_id]
+      );
+
+      // Fallback if no specific barangay fee
+      if (!feeRows.length) {
+        [feeRows] = await connection.query(
+          `SELECT fee_amount FROM delivery_fees 
+           WHERE branch_id = ? AND fee_type = 'outside'
+           LIMIT 1`,
+          [branch_id]
+        );
+      }
+
+      const delivery_fee = feeRows[0]?.fee_amount ?? 0;
+
+      // --- Insert order with delivery fee ---
       const [orderResult] = await connection.query(
         `INSERT INTO orders (
-          buyer_id, full_name, contact_number, barangay_id,
-          status, total_price, is_active, ordered_at, inventory_deducted
-        ) VALUES (?, ?, ?, ?, 'pending', ?, 1, NOW(), 0)`,
-        [buyer_id, full_name, contact_number, barangay_id, totalBranchPrice]
+           buyer_id, full_name, contact_number, barangay_id,
+           status, total_price, delivery_fee, is_active, ordered_at, inventory_deducted
+         ) VALUES (?, ?, ?, ?, 'pending', ?, ?, 1, NOW(), 0)`,
+        [buyer_id, full_name, contact_number, barangay_id, totalBranchPrice, delivery_fee]
       );
 
       const order_id = orderResult.insertId;
 
+      // Insert order items and deduct stock
       for (const item of branchItems) {
         await connection.query(
           `INSERT INTO order_items (order_id, product_id, quantity, price, type, branch_id)
@@ -419,10 +441,12 @@ router.post("/buy", authenticateToken, async (req, res) => {
         io.emit("stock-updated", { product_id: item.product_id, branch_id, stock: updatedStock });
       }
 
+      // Emit new order
       const newOrder = {
         order_id,
         branch_id,
         total_price: totalBranchPrice,
+        delivery_fee,
         status: "pending",
         items: branchItems,
       };
@@ -440,7 +464,6 @@ router.post("/buy", authenticateToken, async (req, res) => {
     return res.status(500).json({ success: false, error: "Failed to process order." });
   }
 });
-
 
 // routes/orders.js
 router.get(
@@ -460,6 +483,7 @@ router.get(
           o.contact_number,
           o.status,
           o.total_price,
+          o.delivery_fee,
           o.ordered_at,
           o.delivered_at,
           o.inventory_deducted,
@@ -488,25 +512,52 @@ router.get(
         return res.status(200).json({ success: true, orders: [] });
       }
 
-      // Group items by order_id and branch_id to avoid duplicates
-      const grouped = groupOrders(rows, (row) => ({
-        product_id: row.product_id,
-        product_name: row.product_name,
-        product_description: row.product_description,
-        image_url: formatImageUrl(row.image_url),
-        quantity: row.quantity,
-        price: row.price,
-        branch_id: row.branch_id,
-        branch_name: row.branch_name,
-      }));
+      // Group orders manually with items and include delivery_fee
+      const ordersMap = {};
 
-      return res.status(200).json({ success: true, orders: grouped });
+      for (const row of rows) {
+        if (!ordersMap[row.order_id]) {
+          ordersMap[row.order_id] = {
+            order_id: row.order_id,
+            buyer_id: row.buyer_id,
+            full_name: row.full_name,
+            contact_number: row.contact_number,
+            status: row.status,
+            total_price: row.total_price,
+            delivery_fee: row.delivery_fee, // <-- delivery_fee included
+            ordered_at: row.ordered_at,
+            delivered_at: row.delivered_at,
+            inventory_deducted: row.inventory_deducted,
+            barangay: row.barangay,
+            municipality: row.municipality,
+            items: [],
+          };
+        }
+
+        if (row.product_id) {
+          ordersMap[row.order_id].items.push({
+            product_id: row.product_id,
+            product_name: row.product_name,
+            product_description: row.product_description,
+            image_url: formatImageUrl(row.image_url),
+            quantity: row.quantity,
+            price: row.price,
+            branch_id: row.branch_id,
+            branch_name: row.branch_name,
+          });
+        }
+      }
+
+      const groupedOrders = Object.values(ordersMap);
+
+      return res.status(200).json({ success: true, orders: groupedOrders });
     } catch (err) {
       console.error("❌ Error fetching my-orders:", err);
       return res.status(500).json({ success: false, error: "Failed to fetch buyer orders." });
     }
   }
 );
+
 
 /* -------------------------------------------------------------------
    RETAILER / SELLER VIEW: /my-sold

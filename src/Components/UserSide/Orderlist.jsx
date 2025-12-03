@@ -73,6 +73,7 @@ export default function Orderlist({ role: propRole }) {
             (sum, i) => sum + (Number(i.price) || 0) * (Number(i.quantity) || 0),
             0
           ),
+          delivery_fee: 0, // default for local cart
         };
         if (existingIndex === -1) {
           backendOrders.unshift(localCartOrder);
@@ -127,7 +128,11 @@ export default function Orderlist({ role: propRole }) {
         order_id: "local_cart",
         status: "cart",
         items: updatedCart.map((i) => ({ ...i, image_url: normalizeImageUrl(i.image_url) })),
-        total_price: updatedCart.reduce((sum, i) => sum + (Number(i.price) || 0) * (Number(i.quantity) || 0), 0),
+        total_price: updatedCart.reduce(
+          (sum, i) => sum + (Number(i.price) || 0) * (Number(i.quantity) || 0),
+          0
+        ),
+        delivery_fee: 0,
       };
 
       if (index === -1 && updatedCart.length) {
@@ -311,6 +316,9 @@ export default function Orderlist({ role: propRole }) {
               {filteredOrders.map((order) => {
                 const isExpanded = expandedOrder === order.order_id;
                 const firstItem = order.items?.[0];
+                const orderTotal = Number(order.total_price || 0);
+                const deliveryFee = Number(order.delivery_fee || 0);
+                const grandTotal = orderTotal + deliveryFee;
 
                 return (
                   <div
@@ -332,7 +340,7 @@ export default function Orderlist({ role: propRole }) {
                       </div>
                       <div className="flex items-center gap-2 sm:gap-3">
                         <p className={`font-bold text-sm sm:text-lg ${isRetailer ? "text-blue-700" : "text-blue-400"}`}>
-                          ₱{order.total_price?.toLocaleString()}
+                          ₱{grandTotal.toLocaleString()}
                         </p>
                         {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                       </div>
@@ -382,16 +390,13 @@ export default function Orderlist({ role: propRole }) {
                                       value={item.quantity}
                                       onChange={(e) => {
                                         const value = e.target.value;
-
                                         const localCartItems = orders.find(o => o.order_id === "local_cart")?.items || [];
                                         const updatedItems = localCartItems.map(c =>
                                           c.product_id === item.product_id ? { ...c, quantity: value === "" ? "" : Number(value) } : c
                                         );
-
                                         updateLocalCart(updatedItems);
                                       }}
                                       onBlur={(e) => {
-                                        // If user leaves input empty or less than 1, reset to 1
                                         const value = e.target.value;
                                         if (!value || Number(value) < 1) {
                                           const localCartItems = orders.find(o => o.order_id === "local_cart")?.items || [];
@@ -425,6 +430,13 @@ export default function Orderlist({ role: propRole }) {
                               </div>
                             </div>
                           ))}
+                        </div>
+
+                        {/* Delivery fee & totals */}
+                        <div className="mt-2 text-sm sm:text-base">
+                          <div>Items Total: ₱{orderTotal.toLocaleString()}</div>
+                          <div>Delivery Fee: ₱{deliveryFee.toLocaleString()}</div>
+                          <div className="font-bold">Total: ₱{grandTotal.toLocaleString()}</div>
                         </div>
 
                         {/* Delivered date for finished orders */}
