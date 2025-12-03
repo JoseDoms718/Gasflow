@@ -381,15 +381,29 @@ export default function Orderlist({ role: propRole }) {
                                       min="1"
                                       value={item.quantity}
                                       onChange={(e) => {
-                                        const newQty = Math.max(1, Number(e.target.value));
+                                        const value = e.target.value;
+
                                         const localCartItems = orders.find(o => o.order_id === "local_cart")?.items || [];
                                         const updatedItems = localCartItems.map(c =>
-                                          c.product_id === item.product_id ? { ...c, quantity: newQty } : c
+                                          c.product_id === item.product_id ? { ...c, quantity: value === "" ? "" : Number(value) } : c
                                         );
+
                                         updateLocalCart(updatedItems);
+                                      }}
+                                      onBlur={(e) => {
+                                        // If user leaves input empty or less than 1, reset to 1
+                                        const value = e.target.value;
+                                        if (!value || Number(value) < 1) {
+                                          const localCartItems = orders.find(o => o.order_id === "local_cart")?.items || [];
+                                          const updatedItems = localCartItems.map(c =>
+                                            c.product_id === item.product_id ? { ...c, quantity: 1 } : c
+                                          );
+                                          updateLocalCart(updatedItems);
+                                        }
                                       }}
                                       className="w-14 sm:w-16 px-2 py-1 rounded border border-gray-400 text-center text-[10px] sm:text-sm bg-transparent"
                                     />
+
                                     <button
                                       onClick={() => handleOrderAction(order.order_id, "pending", item)}
                                       className="bg-blue-600 hover:bg-blue-700 text-white px-2 sm:px-3 py-1 rounded text-[10px] sm:text-xs"
