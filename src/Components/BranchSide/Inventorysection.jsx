@@ -10,6 +10,7 @@ import RestockHistory from "./RestockHistory";
 import AdminProducts from "../Modals/AdminProducts";
 import AdminBundles from "../Modals/AdminBundles";
 import AddBundleModal from "../Modals/AddBundleModal";
+import AddBranchBundleModal from "../Modals/AddBranchBundleModal";
 
 export default function Inventory() {
   const [userRole, setUserRole] = useState(null);
@@ -175,7 +176,12 @@ export default function Inventory() {
 
       {/* MODALS */}
       {showForm && <AddProductModal setShowForm={setShowForm} setProducts={setProducts} />}
-      {showBundleForm && (
+
+      {showBundleForm && userRole === "branch_manager" && (
+        <AddBranchBundleModal setShowBundleForm={setShowBundleForm} refreshBundles={() => { }} />
+      )}
+
+      {showBundleForm && userRole !== "branch_manager" && (
         <AddBundleModal setShowBundleForm={setShowBundleForm} refreshBundles={() => { }} />
       )}
     </div>
