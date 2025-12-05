@@ -8,20 +8,20 @@ import ProductTable from "./ProductTable";
 import AddProductModal from "./AddProductModal";
 import RestockHistory from "./RestockHistory";
 import AdminProducts from "../Modals/AdminProducts";
-import AddBundleModal from "../Modals/AddBundleModal"; // <-- Make sure you create this
+import AdminBundles from "../Modals/AdminBundles";
+import AddBundleModal from "../Modals/AddBundleModal";
 
 export default function Inventory() {
   const [userRole, setUserRole] = useState(null);
   const [products, setProducts] = useState([]);
   const [restockHistory, setRestockHistory] = useState([]);
   const [showForm, setShowForm] = useState(false);
-  const [showBundleForm, setShowBundleForm] = useState(false); // <-- new state
+  const [showBundleForm, setShowBundleForm] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState("All");
   const [restockCounter, setRestockCounter] = useState(0);
 
   const branches = ["All", "Boac", "Mogpog", "Gasan", "Buenavista", "Torrijos", "Santa Cruz"];
 
-  // Load user role from localStorage once
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
@@ -75,7 +75,6 @@ export default function Inventory() {
     saveAs(new Blob([wbout]), fileName);
   };
 
-  // Only render ProductTable once userRole is loaded
   if (!userRole) return null;
 
   return (
@@ -153,10 +152,14 @@ export default function Inventory() {
         </div>
 
         {/* RIGHT PANEL */}
-        <div className="w-[380px] overflow-hidden">
-          <div className="overflow-y-auto h-full">
+        <div className="w-[380px] h-full">
+          {/* Make the entire right panel scrollable */}
+          <div className="overflow-y-auto h-full flex flex-col gap-4">
             {userRole === "admin" ? (
-              <AdminProducts refreshTrigger={restockCounter} borderless />
+              <>
+                <AdminProducts refreshTrigger={restockCounter} borderless />
+                <AdminBundles refreshTrigger={restockCounter} borderless />
+              </>
             ) : (
               <RestockHistory
                 userRole={userRole}

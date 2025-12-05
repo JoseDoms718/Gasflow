@@ -19,7 +19,7 @@ export default function AddBundleModal({ setShowBundleForm, refreshBundles }) {
     const [previewImage, setPreviewImage] = useState(null);
     const [allProducts, setAllProducts] = useState([]);
 
-    // Fetch products
+    // Fetch universal products
     useEffect(() => {
         axios
             .get(`${BASE_URL}/products/universal`, { headers: { Authorization: `Bearer ${token}` } })
@@ -27,7 +27,7 @@ export default function AddBundleModal({ setShowBundleForm, refreshBundles }) {
             .catch((err) => console.error("Failed to fetch universal products:", err));
     }, []);
 
-    // Recalculate total price and validate discounted price
+    // Recalculate total price + validate discounted price continuously
     useEffect(() => {
         const total = newBundle.products.reduce((sum, item) => {
             const product = allProducts.find((p) => p.product_id === item.product_id);
@@ -36,6 +36,7 @@ export default function AddBundleModal({ setShowBundleForm, refreshBundles }) {
 
         let discount = parseFloat(newBundle.discounted_price) || 0;
         const maxDiscount = Math.max(total - 1, 0);
+
         if (discount > maxDiscount) discount = maxDiscount;
         if (discount < 0) discount = 0;
 
@@ -81,6 +82,7 @@ export default function AddBundleModal({ setShowBundleForm, refreshBundles }) {
             const products = exists
                 ? prev.products.filter((p) => p.product_id !== productId)
                 : [...prev.products, { product_id: productId, quantity: 1 }];
+
             return { ...prev, products };
         });
     };
@@ -103,22 +105,31 @@ export default function AddBundleModal({ setShowBundleForm, refreshBundles }) {
         setPreviewImage(URL.createObjectURL(file));
     };
 
+    // -------------------------------------------------
+    // FINAL SUBMIT — FULLY PROTECTED AGAINST LOOPHOLES
+    // -------------------------------------------------
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        // Ensure quantities are valid
-        if (newBundle.products.some((p) => !p.quantity || p.quantity <= 0)) {
-            return toast.error("Quantity cannot be zero or empty for selected products.");
-        }
-
         const price = parseFloat(newBundle.price);
         let discount = parseFloat(newBundle.discounted_price);
-        const maxDiscount = Math.max(price - 1, 0);
-        if (isNaN(discount) || discount <= 0) discount = 1;
-        if (discount > maxDiscount) discount = maxDiscount;
 
-        // Prevent saving if discounted price exceeds total price
-        if (discount > price) return toast.error("Discounted price cannot exceed total price.");
+        if (isNaN(price) || price <= 0) {
+            return toast.error("Bundle must have at least 1 product.");
+        }
+
+        if (isNaN(discount) || discount <= 0) {
+            return toast.error("Discounted price must be at least ₱1.");
+        }
+
+        // Hard block — cannot bypass!!
+        if (discount > price) {
+            return toast.error("Discounted price cannot be higher than total price.");
+        }
+
+        if (newBundle.products.some((p) => !p.quantity || p.quantity <= 0)) {
+            return toast.error("Quantity cannot be zero or empty.");
+        }
 
         const formData = new FormData();
         formData.append("bundle_name", newBundle.bundle_name);
