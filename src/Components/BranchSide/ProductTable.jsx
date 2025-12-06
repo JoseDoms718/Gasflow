@@ -186,7 +186,8 @@ export default function ProductTable({
             return toast.error("⚠️ Please enter a valid positive number.");
         if (!token) return toast.error("You must be logged in to restock.");
 
-        if (!restockProduct?.branch_product_id) return toast.error("⚠️ Missing branch product ID.");
+        if (!restockProduct?.product_id || !restockProduct?.branch_id)
+            return toast.error("⚠️ Missing product ID or branch ID.");
 
         try {
             const res = await axios.put(
@@ -196,7 +197,9 @@ export default function ProductTable({
             );
 
             const newStock = res.data.newStock;
+            // Update product using branch_product_id if available, otherwise fallback to product_id
             updateProductList({ ...restockProduct, stock: newStock });
+
             onRestock?.();
             setRestockProduct(null);
             setRestockQuantity("");
@@ -206,6 +209,7 @@ export default function ProductTable({
             toast.error(err.response?.data?.error || "Failed to restock product.");
         }
     };
+
 
     return (
         <div className="flex-1 border border-gray-200 rounded-lg overflow-hidden flex flex-col">
