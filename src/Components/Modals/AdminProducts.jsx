@@ -12,7 +12,6 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
     const [hasEdits, setHasEdits] = useState(false);
     const BASE_URL = import.meta.env.VITE_BASE_URL;
 
-    // Fetch products
     useEffect(() => {
         const fetchProducts = async () => {
             try {
@@ -46,10 +45,8 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
         fetchProducts();
     }, [refreshTrigger]);
 
-    // Format price
     const formatPrice = (value) => (isNaN(Number(value)) ? "0.00" : Number(value).toFixed(2));
 
-    // Open modal
     const openEditModal = (product) => {
         setViewProduct(product);
         setEditedProduct({ ...product, discount_until_prev: product.discount_until });
@@ -58,13 +55,10 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
         setHasEdits(false);
     };
 
-    // Toggle field editing
     const toggleEdit = (field) => setIsEditing((prev) => ({ ...prev, [field]: !prev[field] }));
 
-    // Handle input changes
     const handleEditChange = (field, value) => {
         let newValue = value;
-
         if (["price", "discounted_price", "refill_price"].includes(field)) {
             newValue = value === "" ? "" : Number(value);
             const price = Number(editedProduct.price);
@@ -88,9 +82,7 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
             const selectedDate = new Date(value);
             const today = new Date();
             today.setHours(0, 0, 0, 0);
-
             const prevDate = editedProduct.discount_until_prev ? new Date(editedProduct.discount_until_prev) : null;
-
             if (selectedDate <= today) return toast.error("Discount until date must be a future date.");
             if (prevDate && selectedDate.getTime() === prevDate.getTime())
                 return toast.error("Please choose a different date than the current discount until date.");
@@ -100,7 +92,6 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
         setHasEdits(true);
     };
 
-    // Handle image change
     const handleEditImage = (e) => {
         const file = e.target.files[0];
         if (file) {
@@ -109,7 +100,6 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
         }
     };
 
-    // Get tomorrow's date in YYYY-MM-DD for min attribute
     const getTomorrowDate = () => {
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
@@ -119,10 +109,8 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
         return `${yyyy}-${mm}-${dd}`;
     };
 
-    // Save edits
     const handleSaveEdits = async () => {
         if (!editedProduct) return;
-
         const requiredFields = ["price", "refill_price"];
         if (editedProduct.product_type === "discounted") requiredFields.push("discounted_price");
 
@@ -132,7 +120,6 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
                 return toast.error(`${field.replace("_", " ")} must be greater than 0.`);
         }
 
-        // Price safeguards
         if (editedProduct.refill_price > editedProduct.price - 1)
             return toast.error("Refill price cannot exceed the main price minus 1.");
 
@@ -181,24 +168,40 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
         }
     };
 
+    // === RENDER ===
+    // We use a table-fixed approach and a shared colgroup so header and body columns align exactly.
+    // The second and third columns are fixed to 112px (w-28 -> 7rem -> 112px). Adjust if you want different width.
+    // The first column uses calc(100% - 224px) so it fills remaining space and stays aligned.
+
     return (
-        <div className="flex-1 border border-gray-200 rounded-lg overflow-hidden flex flex-col">
-            {/* HEADER */}
-            <div className="bg-gray-900 text-white sticky top-0 z-20 shadow-md">
-                <table className="min-w-full text-center text-sm">
+        <div className="flex-1 border border-gray-200 rounded-lg flex flex-col overflow-hidden">
+            {/* HEADER TABLE */}
+            <div className="overflow-hidden pr-2">
+                <table className="min-w-full table-fixed text-center text-sm bg-gray-900 text-white sticky top-0 z-20">
+                    <colgroup>
+                        <col style={{ width: "calc(100% - 224px)" }} />
+                        <col style={{ width: "112px" }} />
+                        <col style={{ width: "112px" }} />
+                    </colgroup>
                     <thead>
                         <tr>
-                            <th className="px-4 py-3 rounded-tl-lg text-left">Product</th>
-                            <th className="px-4 py-3 w-28">Price (₱)</th>
-                            <th className="px-4 py-3 w-28 rounded-tr-lg">Action</th>
+                            <th className="px-4 py-3 pl-6 text-left">Product</th>
+                            <th className="px-4 py-3 text-left w-28">Price (₱)</th>
+                            <th className="px-4 py-3 rounded-tr-lg">Action</th>
                         </tr>
                     </thead>
                 </table>
             </div>
 
-            {/* BODY */}
-            <div className="flex-1 overflow-y-auto max-h-[70vh]">
-                <table className="min-w-full text-gray-800 text-sm text-center border-collapse">
+            {/* BODY TABLE */}
+            <div className="flex-1 overflow-y-auto max-h-[70vh] pr-2">
+                <table className="min-w-full table-fixed text-gray-800 text-sm text-center border-collapse">
+                    <colgroup>
+                        <col style={{ width: "calc(100% - 224px)" }} />
+                        <col style={{ width: "112px" }} />
+                        <col style={{ width: "112px" }} />
+                    </colgroup>
+
                     <tbody>
                         {products.length === 0 ? (
                             <tr>
@@ -209,24 +212,52 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
                         ) : (
                             products.map((p) => (
                                 <tr key={p.product_id} className={`hover:bg-gray-50 ${borderless ? "" : "border-b"}`}>
-                                    <td className="px-4 py-3 flex items-center gap-3 justify-start">
-                                        <div className="w-14 h-14 flex-shrink-0">
-                                            {p.image_url ? (
-                                                <img src={p.image_url} alt={p.product_name} className="w-full h-full object-cover rounded-lg" />
-                                            ) : (
-                                                <div className="w-full h-full bg-gray-200 flex items-center justify-center rounded-lg text-gray-400">
-                                                    <Package size={20} />
-                                                </div>
+                                    {/* PRODUCT CELL */}
+                                    <td className="px-4 py-3 align-top text-left">
+                                        <div className="flex items-start gap-3">
+                                            {/* IMAGE */}
+                                            <div className="w-14 h-14 flex-shrink-0">
+                                                {p.image_url ? (
+                                                    <img
+                                                        src={p.image_url}
+                                                        alt={p.product_name}
+                                                        className="w-full h-full object-cover rounded-lg"
+                                                    />
+                                                ) : (
+                                                    <div className="w-full h-full bg-gray-200 flex items-center justify-center rounded-lg text-gray-400">
+                                                        <Package size={20} />
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* NAME: allow word-by-word wrapping, and force-break single very long words */}
+                                            <div className="flex-1">
+                                                <span
+                                                    className="font-semibold text-gray-900 block leading-tight"
+                                                    style={{ maxWidth: "100%" }}
+                                                >
+                                                    {/* Tailwind: use both break-words (good for normal long words) and break-all (force-breaking very long unbroken strings) */}
+                                                    <span className="break-words break-all whitespace-normal">
+                                                        {p.product_name}
+                                                    </span>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </td>
+
+                                    {/* PRICE */}
+                                    <td className="px-4 py-3 align-top">
+                                        <div className="w-full text-left">
+                                            ₱{formatPrice(
+                                                p.product_type === "discounted" && p.discounted_price != null
+                                                    ? p.discounted_price
+                                                    : p.price
                                             )}
                                         </div>
-                                        <span className="font-semibold text-gray-900 break-words whitespace-normal max-w-[200px]" title={p.product_name}>
-                                            {p.product_name}
-                                        </span>
                                     </td>
-                                    <td className="px-4 py-3 w-28">
-                                        ₱{formatPrice(p.product_type === "discounted" && p.discounted_price != null ? p.discounted_price : p.price)}
-                                    </td>
-                                    <td className="px-4 py-3 w-28">
+
+                                    {/* ACTION */}
+                                    <td className="px-4 py-3 align-top">
                                         <button
                                             onClick={() => openEditModal(p)}
                                             className="flex items-center justify-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm w-full"
@@ -241,14 +272,12 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
                 </table>
             </div>
 
-            {/* EDIT MODAL */}
+            {/* EDIT MODAL: unchanged from your version (kept same structure) */}
             {viewProduct && (
                 <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-[#0f172a] text-gray-100 rounded-2xl shadow-2xl w-full max-w-4xl h-[520px] overflow-hidden relative flex flex-col md:flex-row">
-                        {/* Close Button */}
                         <button onClick={() => setViewProduct(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl">✕</button>
 
-                        {/* Image Section */}
                         <div className="flex-shrink-0 w-full md:w-1/2 h-full bg-gray-900 relative">
                             <img
                                 src={editedImage ? URL.createObjectURL(editedImage) : editedProduct.image_url || ""}
@@ -261,7 +290,6 @@ export default function AdminProducts({ refreshTrigger, borderless = true }) {
                             <input id="editImageInput" type="file" accept="image/*" className="hidden" onChange={handleEditImage} />
                         </div>
 
-                        {/* Product Info */}
                         <div className="flex-1 p-7 flex flex-col justify-between overflow-y-auto">
                             <div>
                                 <h2 className="text-3xl font-bold text-white mb-3 flex items-center gap-2">

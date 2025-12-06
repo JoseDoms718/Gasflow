@@ -78,11 +78,26 @@ export default function AdminBundles({ refreshTrigger, borderless = true }) {
         ) || 0;
 
     const handleEditChange = (field, value) => {
-        if (field === "discounted_price" && Number(value) > calculateTotalPrice()) {
-            toast.error("Discounted price cannot exceed bundle price.");
-            value = calculateTotalPrice();
-        }
-        setEditedBundle(prev => ({ ...prev, [field]: value }));
+        setEditedBundle(prev => {
+            let newValue = value;
+
+            // Only allow integers for discounted price and price
+            if (field === "discounted_price" || field === "bundle_price") {
+                newValue = newValue.replace(/\D/g, ""); // remove non-digits
+                newValue = newValue ? parseInt(newValue) : 0;
+            }
+
+            // Auto-adjust discounted price if it exceeds total
+            if (field === "discounted_price") {
+                const total = calculateTotalPrice();
+                if (Number(newValue) >= total) {
+                    newValue = total - 1;
+                    toast.error("Discounted price cannot exceed total price. Adjusted automatically.");
+                }
+            }
+
+            return { ...prev, [field]: newValue };
+        });
         setHasEdits(true);
     };
 
@@ -118,15 +133,21 @@ export default function AdminBundles({ refreshTrigger, borderless = true }) {
             setEditedBundle(prev => ({
                 ...prev,
                 bundle_image_file: file,
-                bundle_image: URL.createObjectURL(file), // preview
+                bundle_image: URL.createObjectURL(file),
             }));
             setHasEdits(true);
         }
     };
 
     const handleSaveEdits = async () => {
-        if (Number(editedBundle.discounted_price) > calculateTotalPrice()) {
-            return toast.error("Cannot save. Discounted price exceeds bundle total.");
+        const total = calculateTotalPrice();
+        let discounted = Number(editedBundle.discounted_price) || 0;
+
+        if (discounted >= total) {
+            discounted = total - 1;
+            toast.error("Discounted price cannot exceed total price. Adjusted automatically.");
+            setEditedBundle(prev => ({ ...prev, discounted_price: discounted }));
+            return;
         }
 
         try {
@@ -135,8 +156,8 @@ export default function AdminBundles({ refreshTrigger, borderless = true }) {
 
             formData.append("bundle_name", editedBundle.bundle_name);
             formData.append("description", editedBundle.description);
-            formData.append("price", calculateTotalPrice());
-            formData.append("discounted_price", editedBundle.discounted_price || 0);
+            formData.append("price", total);
+            formData.append("discounted_price", discounted);
             formData.append("role", editedBundle.role || "retailer");
             formData.append("products", JSON.stringify(
                 editedBundle.items.map(i => ({
@@ -292,7 +313,6 @@ export default function AdminBundles({ refreshTrigger, borderless = true }) {
                                         <input
                                             type="number"
                                             min={0}
-                                            max={calculateTotalPrice()}
                                             value={editedBundle.discounted_price}
                                             onChange={e => handleEditChange("discounted_price", e.target.value)}
                                             className="bg-gray-800 px-2 py-1 rounded w-24"
