@@ -858,17 +858,19 @@ router.get("/:id", async (req, res) => {
 
     const bundle = bundleRows[0];
 
-    // Get all branch prices for this bundle
+    // Get all branch prices for this bundle with branch_bundle_id
     const [branchPrices] = await db.execute(
       `SELECT 
-         id AS branch_bundle_price_id,
-         branch_id,
-         bundle_id,
-         price AS branch_price,
-         discounted_price AS branch_discounted_price,
-         updated_at
-       FROM branch_bundle_prices
-       WHERE bundle_id = ?`,
+         bb.id AS branch_bundle_id,
+         bb.branch_id,
+         bb.bundle_id,
+         bbp.price AS branch_price,
+         bbp.discounted_price AS branch_discounted_price,
+         bbp.updated_at
+       FROM branch_bundles bb
+       LEFT JOIN branch_bundle_prices bbp
+         ON bb.id = bbp.bundle_id AND bb.branch_id = bbp.branch_id
+       WHERE bb.bundle_id = ?`,
       [bundleId]
     );
 
@@ -902,5 +904,6 @@ router.get("/:id", async (req, res) => {
     res.status(500).json({ success: false, error: "Failed to load bundle" });
   }
 });
+
 
 module.exports = router;

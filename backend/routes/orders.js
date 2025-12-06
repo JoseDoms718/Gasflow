@@ -306,7 +306,7 @@ router.post("/buy", authenticateToken, async (req, res) => {
     let { items, full_name, contact_number, barangay_id } = req.body;
     const buyer_id = req.user.id;
 
-    // Validate buyer info
+    // --- Validate buyer info ---
     if (!full_name || !contact_number || !barangay_id) {
       connection.release();
       return res.status(400).json({ success: false, error: "Missing required buyer fields." });
@@ -322,92 +322,122 @@ router.post("/buy", authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, error: "No items provided." });
     }
 
-    // Validate all items
-    const orderItems = items.filter(i => i.product_id && i.quantity && i.type && i.branch_id);
-    if (orderItems.length === 0) {
-      connection.release();
-      return res.status(400).json({ success: false, error: "Invalid items provided. Each item must include branch_id." });
-    }
-
     const barangayRow = await fetchBarangay(barangay_id);
     if (!barangayRow) {
       connection.release();
       return res.status(404).json({ success: false, error: "Barangay not found." });
     }
 
-    // Group items by branch
+    // --- Group items by branch ---
     const branchMap = {};
 
-    for (const item of orderItems) {
-      const sql = `
-        SELECT p.product_id,
-               bpp.price AS branch_price,
-               bpp.discounted_price AS branch_discounted_price,
-               bpp.refill_price AS branch_refill_price,
-               i.stock,
-               i.branch_id
-        FROM products p
-        INNER JOIN inventory i ON p.product_id = i.product_id
-        INNER JOIN branch_product_prices bpp 
-            ON p.product_id = bpp.product_id AND i.branch_id = bpp.branch_id
-        WHERE p.product_id = ? AND i.branch_id = ? AND i.stock >= ?
-        LIMIT 1
-      `;
-      const [rows] = await db.query(sql, [item.product_id, item.branch_id, item.quantity]);
-      const product = rows[0];
+    for (const item of items) {
+      if (item.product_id) {
+        // --- Regular product logic ---
+        const sql = `
+          SELECT p.product_id,
+                 bpp.price AS branch_price,
+                 bpp.discounted_price AS branch_discounted_price,
+                 bpp.refill_price AS branch_refill_price,
+                 i.branch_id
+          FROM products p
+          INNER JOIN inventory i ON p.product_id = i.product_id
+          INNER JOIN branch_product_prices bpp 
+              ON p.product_id = bpp.product_id AND i.branch_id = bpp.branch_id
+          WHERE p.product_id = ? AND i.branch_id = ?
+          LIMIT 1
+        `;
+        const [rows] = await db.query(sql, [item.product_id, item.branch_id]);
+        const product = rows[0];
+        if (!product) {
+          connection.release();
+          return res.status(400).json({
+            success: false,
+            error: `Product ${item.product_id} not available in the selected branch.`,
+          });
+        }
 
-      if (!product) {
+        const finalPrice =
+          item.type === "refill"
+            ? product.branch_refill_price ?? 0
+            : item.type === "discounted" && product.branch_discounted_price != null
+            ? product.branch_discounted_price
+            : product.branch_price;
+
+        branchMap[product.branch_id] = branchMap[product.branch_id] || [];
+        branchMap[product.branch_id].push({
+          product_id: product.product_id,
+          quantity: item.quantity,
+          price: finalPrice,
+          type: item.type,
+        });
+
+      } else if (item.branch_bundle_id) {
+        // --- Branch bundle logic ---
+        if (!item.branch_id) {
+          connection.release();
+          return res.status(400).json({
+            success: false,
+            error: `branch_id is required for branch_bundle_id ${item.branch_bundle_id}.`
+          });
+        }
+
+        const [bundleRows] = await db.query(
+          `SELECT bb.id AS branch_bundle_id,
+                  bb.branch_id,
+                  COALESCE(bbp.discounted_price, bbp.price, 0) AS final_price
+           FROM branch_bundles bb
+           LEFT JOIN branch_bundle_prices bbp
+                  ON bb.bundle_id = bbp.bundle_id AND bb.branch_id = bbp.branch_id
+           WHERE bb.id = ? AND bb.branch_id = ?`,
+          [item.branch_bundle_id, item.branch_id]
+        );
+
+        const bundle = bundleRows[0];
+        if (!bundle) {
+          connection.release();
+          return res.status(400).json({
+            success: false,
+            error: `Branch bundle ${item.branch_bundle_id} not found for branch ${item.branch_id}.`
+          });
+        }
+
+        branchMap[bundle.branch_id] = branchMap[bundle.branch_id] || [];
+        branchMap[bundle.branch_id].push({
+          branch_bundle_id: bundle.branch_bundle_id,
+          quantity: item.quantity,
+          price: bundle.final_price,
+          type: "bundle",
+        });
+
+      } else {
         connection.release();
         return res.status(400).json({
           success: false,
-          error: `Insufficient stock or product ${item.product_id} not available in the selected branch.`,
+          error: "Item must include product_id or branch_bundle_id."
         });
       }
-
-      // Use branch-specific prices
-      const finalPrice =
-        item.type === "refill"
-          ? product.branch_refill_price ?? 0
-          : item.type === "discounted" && product.branch_discounted_price != null
-          ? product.branch_discounted_price
-          : product.branch_price;
-
-      if (!branchMap[product.branch_id]) branchMap[product.branch_id] = [];
-      branchMap[product.branch_id].push({
-        product_id: product.product_id,
-        quantity: item.quantity,
-        price: finalPrice,
-        type: item.type,
-      });
     }
 
+    // --- Transaction and order creation ---
     await connection.beginTransaction();
     const createdOrders = [];
 
     for (const [branch_id, branchItems] of Object.entries(branchMap)) {
       const totalBranchPrice = branchItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
-      // --- Fetch delivery fee for this branch and barangay ---
       let [feeRows] = await connection.query(
-        `SELECT fee_amount FROM delivery_fees 
-         WHERE branch_id = ? AND barangay_id = ? 
-         LIMIT 1`,
+        `SELECT fee_amount FROM delivery_fees WHERE branch_id = ? AND barangay_id = ? LIMIT 1`,
         [branch_id, barangay_id]
       );
-
-      // Fallback if no specific barangay fee
       if (!feeRows.length) {
         [feeRows] = await connection.query(
-          `SELECT fee_amount FROM delivery_fees 
-           WHERE branch_id = ? AND fee_type = 'outside'
-           LIMIT 1`,
+          `SELECT fee_amount FROM delivery_fees WHERE branch_id = ? AND fee_type = 'outside' LIMIT 1`,
           [branch_id]
         );
       }
-
       const delivery_fee = feeRows[0]?.fee_amount ?? 0;
 
-      // --- Insert order with delivery fee ---
       const [orderResult] = await connection.query(
         `INSERT INTO orders (
            buyer_id, full_name, contact_number, barangay_id,
@@ -415,33 +445,25 @@ router.post("/buy", authenticateToken, async (req, res) => {
          ) VALUES (?, ?, ?, ?, 'pending', ?, ?, 1, NOW(), 0)`,
         [buyer_id, full_name, contact_number, barangay_id, totalBranchPrice, delivery_fee]
       );
-
       const order_id = orderResult.insertId;
 
-      // Insert order items and deduct stock
+      // Insert order items (NO stock deduction)
       for (const item of branchItems) {
         await connection.query(
-          `INSERT INTO order_items (order_id, product_id, quantity, price, type, branch_id)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [order_id, item.product_id, item.quantity, item.price, item.type, branch_id]
+          `INSERT INTO order_items (order_id, product_id, branch_bundle_id, quantity, price, type, branch_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            order_id,
+            item.product_id || null,
+            item.branch_bundle_id || null,
+            item.quantity,
+            item.price,
+            item.type,
+            branch_id,
+          ]
         );
-
-        // Deduct stock
-        await connection.query(
-          `UPDATE inventory SET stock = stock - ? WHERE product_id = ? AND branch_id = ?`,
-          [item.quantity, item.product_id, branch_id]
-        );
-
-        // Emit stock update
-        const [inventoryRows] = await connection.query(
-          `SELECT stock FROM inventory WHERE product_id = ? AND branch_id = ?`,
-          [item.product_id, branch_id]
-        );
-        const updatedStock = inventoryRows[0]?.stock ?? 0;
-        io.emit("stock-updated", { product_id: item.product_id, branch_id, stock: updatedStock });
       }
 
-      // Emit new order
       const newOrder = {
         order_id,
         branch_id,
@@ -450,7 +472,6 @@ router.post("/buy", authenticateToken, async (req, res) => {
         status: "pending",
         items: branchItems,
       };
-
       createdOrders.push(newOrder);
       io.emit("newOrder", newOrder);
     }
@@ -458,6 +479,7 @@ router.post("/buy", authenticateToken, async (req, res) => {
     await connection.commit();
     connection.release();
     return res.status(201).json({ success: true, message: "✅ Orders created successfully.", orders: createdOrders });
+
   } catch (err) {
     try { await connection.rollback(); connection.release(); } catch (e) {}
     console.error("❌ Error (buy):", err);
@@ -492,7 +514,11 @@ router.get(
           oi.product_id,
           p.product_name,
           p.product_description,
-          p.image_url AS image_url,
+          p.image_url AS product_image,
+          oi.branch_bundle_id,
+          bl.bundle_name,
+          bl.description AS bundle_description,
+          bl.bundle_image,
           oi.quantity,
           oi.price,
           oi.branch_id,
@@ -501,6 +527,7 @@ router.get(
         LEFT JOIN order_items oi ON o.order_id = oi.order_id
         LEFT JOIN products p ON oi.product_id = p.product_id
         LEFT JOIN branches br ON oi.branch_id = br.branch_id
+        LEFT JOIN bundles bl ON oi.branch_bundle_id = bl.bundle_id
         LEFT JOIN barangays b ON o.barangay_id = b.barangay_id
         WHERE o.buyer_id = ?
         ORDER BY o.ordered_at DESC
@@ -512,7 +539,17 @@ router.get(
         return res.status(200).json({ success: true, orders: [] });
       }
 
-      // Group orders manually with items and include delivery_fee
+      // FORMATTER FIX HERE
+      const formatBundleImage = (file) => {
+        if (!file) return null;
+        return `${process.env.BACKEND_URL || "http://localhost:5000"}/products/bundles/${file}`;
+      };
+
+      const formatProductImage = (file) => {
+        if (!file) return null;
+        return `${process.env.BACKEND_URL || "http://localhost:5000"}/products/images/${file}`;
+      };
+
       const ordersMap = {};
 
       for (const row of rows) {
@@ -524,7 +561,7 @@ router.get(
             contact_number: row.contact_number,
             status: row.status,
             total_price: row.total_price,
-            delivery_fee: row.delivery_fee, // <-- delivery_fee included
+            delivery_fee: row.delivery_fee,
             ordered_at: row.ordered_at,
             delivered_at: row.delivered_at,
             inventory_deducted: row.inventory_deducted,
@@ -535,11 +572,28 @@ router.get(
         }
 
         if (row.product_id) {
+          // PRODUCT
           ordersMap[row.order_id].items.push({
+            type: "product",
             product_id: row.product_id,
             product_name: row.product_name,
             product_description: row.product_description,
-            image_url: formatImageUrl(row.image_url),
+            image_url: formatProductImage(row.product_image),
+            quantity: row.quantity,
+            price: row.price,
+            branch_id: row.branch_id,
+            branch_name: row.branch_name,
+          });
+        }
+
+        if (row.branch_bundle_id) {
+          // BUNDLE
+          ordersMap[row.order_id].items.push({
+            type: "bundle",
+            branch_bundle_id: row.branch_bundle_id,
+            bundle_name: row.bundle_name,
+            bundle_description: row.bundle_description,
+            image_url: formatBundleImage(row.bundle_image),
             quantity: row.quantity,
             price: row.price,
             branch_id: row.branch_id,
@@ -548,16 +602,13 @@ router.get(
         }
       }
 
-      const groupedOrders = Object.values(ordersMap);
-
-      return res.status(200).json({ success: true, orders: groupedOrders });
+      return res.status(200).json({ success: true, orders: Object.values(ordersMap) });
     } catch (err) {
       console.error("❌ Error fetching my-orders:", err);
       return res.status(500).json({ success: false, error: "Failed to fetch buyer orders." });
     }
   }
 );
-
 
 /* -------------------------------------------------------------------
    RETAILER / SELLER VIEW: /my-sold

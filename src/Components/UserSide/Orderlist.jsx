@@ -73,7 +73,7 @@ export default function Orderlist({ role: propRole }) {
             (sum, i) => sum + (Number(i.price) || 0) * (Number(i.quantity) || 0),
             0
           ),
-          delivery_fee: 0, // default for local cart
+          delivery_fee: 0,
         };
         if (existingIndex === -1) {
           backendOrders.unshift(localCartOrder);
@@ -257,8 +257,7 @@ export default function Orderlist({ role: propRole }) {
   if (loading) {
     return (
       <section
-        className={`${isRetailer ? "bg-white text-gray-900 py-6 mt-0 min-h-[80vh]" : "bg-gray-900 text-white py-12 mt-12 h-dvh"
-          } flex items-center justify-center`}
+        className={`${isRetailer ? "bg-white text-gray-900 py-6 mt-0 min-h-[80vh]" : "bg-gray-900 text-white py-12 mt-12 h-dvh"} flex items-center justify-center`}
       >
         <p>Loading your orders...</p>
       </section>
@@ -273,8 +272,7 @@ export default function Orderlist({ role: propRole }) {
 
   return (
     <section
-      className={`${isRetailer ? "text-gray-900 bg-transparent py-6 mt-0 min-h-[80vh]" : "bg-gray-900 text-white py-12 mt-12 h-dvh"
-        } flex flex-col`}
+      className={`${isRetailer ? "text-gray-900 bg-transparent py-6 mt-0 min-h-[80vh]" : "bg-gray-900 text-white py-12 mt-12 h-dvh"} flex flex-col`}
     >
       <div className="container mx-auto px-4 md:px-6">
         {!isRetailer && (
@@ -285,8 +283,7 @@ export default function Orderlist({ role: propRole }) {
         )}
 
         <div
-          className={`flex flex-wrap items-center gap-3 ${isRetailer ? "justify-start mb-4 border-b border-gray-200 pb-2" : "justify-start mb-8"
-            }`}
+          className={`flex flex-wrap items-center gap-3 ${isRetailer ? "justify-start mb-4 border-b border-gray-200 pb-2" : "justify-start mb-8"}`}
         >
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -308,14 +305,13 @@ export default function Orderlist({ role: propRole }) {
         </div>
 
         <div
-          className={`${isRetailer ? "bg-white border border-gray-200" : "bg-gray-800"
-            } rounded-lg shadow-md flex flex-col h-[55vh] sm:h-[60vh] overflow-y-auto p-4 sm:p-6`}
+          className={`${isRetailer ? "bg-white border border-gray-200" : "bg-gray-800"} rounded-lg shadow-md flex flex-col h-[55vh] sm:h-[60vh] overflow-y-auto p-4 sm:p-6`}
         >
           {filteredOrders.length ? (
             <div className={`space-y-4 pr-2 flex-1 ${isRetailer ? "text-gray-800" : "text-white"}`}>
               {filteredOrders.map((order) => {
                 const isExpanded = expandedOrder === order.order_id;
-                const firstItem = order.items?.[0];
+                const firstItem = order.items?.find(i => i.image_url) || order.items?.[0] || {};
                 const orderTotal = Number(order.total_price || 0);
                 const deliveryFee = Number(order.delivery_fee || 0);
                 const grandTotal = orderTotal + deliveryFee;
@@ -327,12 +323,11 @@ export default function Orderlist({ role: propRole }) {
                   >
                     <button
                       onClick={() => toggleOrder(order.order_id)}
-                      className={`w-full flex justify-between items-center p-3 sm:p-4 text-left transition ${isRetailer ? "hover:bg-gray-100" : "hover:bg-gray-600"
-                        }`}
+                      className={`w-full flex justify-between items-center p-3 sm:p-4 text-left transition ${isRetailer ? "hover:bg-gray-100" : "hover:bg-gray-600"}`}
                     >
                       <div>
                         <h3 className={`font-semibold ${isRetailer ? "text-gray-900" : "text-white"} text-sm sm:text-base`}>
-                          {firstItem?.product_name || "Unnamed Product"}
+                          {firstItem?.type === "bundle" ? firstItem.bundle_name : firstItem?.product_name || "Unnamed Product"}
                         </h3>
                         <p className={`text-xs sm:text-sm ${isRetailer ? "text-gray-500" : "text-gray-300"}`}>
                           Status: {order.status}
@@ -348,26 +343,37 @@ export default function Orderlist({ role: propRole }) {
 
                     {isExpanded && (
                       <div
-                        className={`p-2 sm:p-4 border-t space-y-2 sm:space-y-3 ${isRetailer ? "border-gray-200 bg-gray-50" : "border-gray-600 bg-gray-800"
-                          }`}
+                        className={`p-2 sm:p-4 border-t space-y-2 sm:space-y-3 ${isRetailer ? "border-gray-200 bg-gray-50" : "border-gray-600 bg-gray-800"}`}
                       >
                         <div className="max-h-[250px] sm:max-h-[300px] overflow-y-auto space-y-2 sm:space-y-3 pr-1">
                           {order.items.map((item, index) => (
                             <div
                               key={index}
-                              className={`flex flex-col sm:flex-row items-start gap-2 sm:gap-4 rounded-md p-2 sm:p-3 ${isRetailer ? "bg-white border border-gray-200" : "bg-gray-700"
-                                }`}
+                              className={`flex flex-col sm:flex-row items-start gap-2 sm:gap-4 rounded-md p-2 sm:p-3 ${isRetailer ? "bg-white border border-gray-200" : "bg-gray-700"}`}
                             >
                               {item.image_url && (
-                                <div className="flex-shrink-0 w-full sm:w-24 h-24 rounded-md overflow-hidden border border-gray-300">
-                                  <img src={item.image_url} alt={item.product_name} className="w-full h-full object-cover" />
+                                <div className="flex-shrink-0 w-full sm:w-24 h-24 rounded-md overflow-hidden border border-gray-300 relative">
+                                  <img
+                                    src={item.image_url}
+                                    alt={item.type === "bundle" ? item.bundle_name : item.product_name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                  {item.type === "bundle" && (
+                                    <span className="absolute top-1 left-1 bg-blue-600 text-white text-[10px] px-1 py-0.5 rounded">
+                                      BUNDLE
+                                    </span>
+                                  )}
                                 </div>
                               )}
                               <div className="flex-1 flex flex-col justify-between w-full">
                                 <div className="flex justify-between items-start flex-wrap">
                                   <div className="flex-1 min-w-0">
-                                    <h4 className="font-semibold text-xs sm:text-sm md:text-base truncate">{item.product_name}</h4>
-                                    <p className="text-[10px] sm:text-xs italic text-gray-400 mt-1 truncate">{item.product_description || "No description"}</p>
+                                    <h4 className="font-semibold text-xs sm:text-sm md:text-base truncate">
+                                      {item.type === "bundle" ? item.bundle_name + " (Bundle)" : item.product_name}
+                                    </h4>
+                                    <p className="text-[10px] sm:text-xs italic text-gray-400 mt-1 truncate">
+                                      {item.type === "bundle" ? item.bundle_description || "No description" : item.product_description || "No description"}
+                                    </p>
                                   </div>
 
                                   {order.order_id === "local_cart" && (
@@ -390,18 +396,22 @@ export default function Orderlist({ role: propRole }) {
                                       value={item.quantity}
                                       onChange={(e) => {
                                         const value = e.target.value;
-                                        const localCartItems = orders.find(o => o.order_id === "local_cart")?.items || [];
-                                        const updatedItems = localCartItems.map(c =>
-                                          c.product_id === item.product_id ? { ...c, quantity: value === "" ? "" : Number(value) } : c
+                                        const localCartItems = orders.find((o) => o.order_id === "local_cart")?.items || [];
+                                        const updatedItems = localCartItems.map((c) =>
+                                          c.product_id === item.product_id || c.branch_bundle_id === item.branch_bundle_id
+                                            ? { ...c, quantity: value === "" ? "" : Number(value) }
+                                            : c
                                         );
                                         updateLocalCart(updatedItems);
                                       }}
                                       onBlur={(e) => {
                                         const value = e.target.value;
                                         if (!value || Number(value) < 1) {
-                                          const localCartItems = orders.find(o => o.order_id === "local_cart")?.items || [];
-                                          const updatedItems = localCartItems.map(c =>
-                                            c.product_id === item.product_id ? { ...c, quantity: 1 } : c
+                                          const localCartItems = orders.find((o) => o.order_id === "local_cart")?.items || [];
+                                          const updatedItems = localCartItems.map((c) =>
+                                            c.product_id === item.product_id || c.branch_bundle_id === item.branch_bundle_id
+                                              ? { ...c, quantity: 1 }
+                                              : c
                                           );
                                           updateLocalCart(updatedItems);
                                         }
@@ -419,7 +429,9 @@ export default function Orderlist({ role: propRole }) {
                                 )}
 
                                 <div className="mt-1 sm:mt-2">
-                                  <p className="font-medium text-xs sm:text-sm md:text-base">₱{item.price?.toLocaleString()} each</p>
+                                  <p className="font-medium text-xs sm:text-sm md:text-base">
+                                    ₱{item.price?.toLocaleString()} each
+                                  </p>
                                   <p className="text-[10px] sm:text-xs text-gray-500 truncate">
                                     {isRetailer
                                       ? `Buyer: ${order.full_name || "Unknown"}`
@@ -435,9 +447,7 @@ export default function Orderlist({ role: propRole }) {
                         {/* Delivery fee & totals */}
                         <div className="mt-2 text-sm sm:text-base">
                           {order.status === "cart" ? (
-                            <div className="text-yellow-400 font-bold text-sm sm:text-base">
-                              ⚠️ Delivery fee may vary
-                            </div>
+                            <div className="text-yellow-400 font-bold text-sm sm:text-base">⚠️ Delivery fee may vary</div>
                           ) : (
                             <div>Delivery Fee: ₱{deliveryFee.toLocaleString()}</div>
                           )}
@@ -445,7 +455,6 @@ export default function Orderlist({ role: propRole }) {
                             Total: ₱{(orderTotal + (order.status === "cart" ? 0 : deliveryFee)).toLocaleString()}
                           </div>
                         </div>
-
 
                         {/* Delivered date for finished orders */}
                         {activeTab === "finished" && order.status === "delivered" && order.delivered_at && (

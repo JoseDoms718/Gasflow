@@ -110,7 +110,7 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // ADD THIS
 app.use(
-  "/bundles/images",
+  "/products/bundles",
   express.static(path.join(__dirname, "uploads/products/bundle"))
 );
 
