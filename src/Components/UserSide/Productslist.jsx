@@ -26,6 +26,9 @@ export default function Productslist() {
   const [discountedProducts, setDiscountedProducts] = useState([]);
   const [discountTimers, setDiscountTimers] = useState({});
 
+  // 🔵 BUNDLES
+  const [bundles, setBundles] = useState([]);
+
   const formatPrice = (value) => {
     const num = Number(value);
     if (isNaN(num)) return "0.00";
@@ -63,7 +66,6 @@ export default function Productslist() {
 
         setRegularProducts(formatProducts(regularRes.data));
 
-        // Keep discounted products with either null discount_until or still active
         const now = new Date();
         const validDiscounted = formatProducts(discountedRes.data).filter(
           (p) => !p.discount_until || new Date(p.discount_until) > now
@@ -75,6 +77,33 @@ export default function Productslist() {
     };
 
     fetchProducts();
+  }, []);
+
+  // ───────── FETCH BUNDLES ─────────
+  useEffect(() => {
+    const fetchBundles = async () => {
+      try {
+        const token = localStorage.getItem("token");
+
+        const res = await axios.get(`${BASE_URL}/bundles/buyer/bundles`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        // 🔵 FIXED: IMAGE NOW INCLUDED
+        const formatted = res.data.bundles.map((b) => ({
+          ...b,
+          image_url: b.bundle_image
+            ? `${BASE_URL}/bundles/images/${b.bundle_image}`
+            : null,
+        }));
+
+        setBundles(formatted);
+      } catch (err) {
+        console.error("❌ Failed to fetch bundles:", err);
+      }
+    };
+
+    fetchBundles();
   }, []);
 
   // ───────── DISCOUNT TIMERS ─────────
@@ -91,7 +120,9 @@ export default function Productslist() {
         if (diff <= 0) newTimers[p.product_id] = "Discount expired";
         else {
           const hours = Math.floor(diff / (1000 * 60 * 60));
-          const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+          const minutes = Math.floor(
+            (diff % (1000 * 60 * 60)) / (1000 * 60)
+          );
           const seconds = Math.floor((diff % (1000 * 60)) / 1000);
           newTimers[p.product_id] = `${hours}h ${minutes}m ${seconds}s`;
         }
@@ -104,7 +135,7 @@ export default function Productslist() {
     return () => clearInterval(interval);
   }, [discountedProducts]);
 
-  // ───────── FILTERED PRODUCTS ─────────
+  // ───────── FILTERS ─────────
   const filteredRegular = regularProducts.filter((p) =>
     selectedMunicipality ? p.seller.municipality === selectedMunicipality : true
   );
@@ -113,17 +144,27 @@ export default function Productslist() {
     selectedMunicipality ? p.seller.municipality === selectedMunicipality : true
   );
 
+  // 🔵 FILTER BUNDLES BY MUNICIPALITY
+  const filteredBundles = bundles.filter((b) =>
+    selectedMunicipality ? b.branch_municipality === selectedMunicipality : true
+  );
+
   const handleBuyClick = (product) => {
     const token = localStorage.getItem("token");
     if (!token) {
       navigate("/login");
       return;
     }
-
     navigate(`/buy/${product.product_id}?branch_id=${product.branch_id}`);
   };
 
-  // ───────── PLACEHOLDER LOGIC ─────────
+  const handleBundleBuy = (bundle) => {
+    navigate(
+      `/buy-bundle/${bundle.bundle_id}?branch_bundle_id=${bundle.branch_bundle_id}`
+    );
+  };
+
+  // ───────── PLACEHOLDERS ─────────
   const addPlaceholders = (list, min = 3) => {
     const result = [...list];
     while (result.length < min) {
@@ -134,44 +175,17 @@ export default function Productslist() {
 
   const displayDiscounted = addPlaceholders(filteredDiscounted, 3);
   const displayRegular = addPlaceholders(filteredRegular, 3);
+  const displayBundles = addPlaceholders(filteredBundles, 3);
 
   const renderCard = (item) => (
     <div className="bg-white rounded-lg shadow-md hover:shadow-xl transition duration-300 border border-gray-200 overflow-hidden flex flex-col h-[450px] relative">
-      {/* Top-right badge */}
-      {!item.placeholder && discountedProducts.some(p => p.product_id === item.product_id) && (
-        <div className="absolute top-2 right-2 z-20">
-          {item.discount_until ? (
-            discountTimers[item.product_id] && (
-              <span className="bg-red-600 text-white text-xs md:text-sm font-bold px-3 py-1 rounded-full shadow-lg animate-pulse">
-                {discountTimers[item.product_id]}
-              </span>
-            )
-          ) : (
-            <span className="bg-yellow-500 text-gray-900 text-xs md:text-sm font-bold px-3 py-1 rounded-full shadow-lg animate-bounce">
-              Limited Stock
-            </span>
-          )}
-        </div>
-      )}
+      {item.placeholder ? (
+        <>
+          <div className="w-full h-48 bg-gray-200 flex items-center justify-center flex-shrink-0">
+            <Package className="w-12 h-12 text-gray-400" />
+          </div>
 
-
-      <div className="w-full h-48 bg-gray-200 flex items-center justify-center flex-shrink-0">
-        {item.placeholder ? (
-          <Package className="w-12 h-12 text-gray-400" />
-        ) : item.image_url ? (
-          <img
-            src={item.image_url}
-            alt={item.product_name}
-            className="w-full h-48 object-cover"
-          />
-        ) : (
-          <Package className="w-12 h-12 text-gray-400" />
-        )}
-      </div>
-
-      <div className="p-4 flex flex-col flex-grow">
-        {item.placeholder ? (
-          <>
+          <div className="p-4 flex flex-col flex-grow">
             <h3 className="text-lg font-semibold text-gray-800 mb-3">
               Coming Soon
             </h3>
@@ -188,28 +202,48 @@ export default function Productslist() {
             >
               Buy Now
             </button>
-          </>
-        ) : (
-          <>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* IMAGE FIXED HERE */}
+          <div className="w-full h-48 bg-gray-200 flex items-center justify-center flex-shrink-0">
+            {item.image_url ? (
+              <img
+                src={item.image_url}
+                alt={item.product_name || item.bundle_name}
+                className="w-full h-48 object-cover"
+              />
+            ) : (
+              <Package className="w-12 h-12 text-gray-400" />
+            )}
+          </div>
+
+          <div className="p-4 flex flex-col flex-grow">
             <h3 className="text-lg font-semibold text-gray-800 mb-2">
-              {item.product_name}
+              {item.product_name || item.bundle_name}
             </h3>
+
             <p className="text-gray-600 text-sm mb-2 line-clamp-2">
-              {item.product_description || "No description available."}
+              {item.product_description || item.description || "No description."}
             </p>
 
             <div className="flex items-start justify-between mt-auto mb-2">
               <div className="flex flex-col text-gray-500 text-sm">
-                <div className="flex items-center gap-1">
-                  <User className="w-4 h-4" />
-                  <span>{item.seller.name}</span>
-                </div>
-                <div className="flex items-center gap-1 mt-1">
-                  <MapPin className="w-4 h-4" />
-                  <span>
-                    {item.seller.barangay}, {item.seller.municipality}
-                  </span>
-                </div>
+                {item.seller && (
+                  <>
+                    <div className="flex items-center gap-1">
+                      <User className="w-4 h-4" />
+                      <span>{item.seller.name}</span>
+                    </div>
+                    <div className="flex items-center gap-1 mt-1">
+                      <MapPin className="w-4 h-4" />
+                      <span>
+                        {item.seller.barangay}, {item.seller.municipality}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="text-right">
@@ -231,17 +265,18 @@ export default function Productslist() {
             </div>
 
             <button
-              onClick={() => handleBuyClick(item)}
+              onClick={() =>
+                item.bundle_id ? handleBundleBuy(item) : handleBuyClick(item)
+              }
               className="mt-4 w-full py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition"
             >
               Buy Now
             </button>
-          </>
-        )}
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
-
 
   return (
     <section className="bg-gray-900 py-16 mt-8">
@@ -249,13 +284,13 @@ export default function Productslist() {
         <h2 className="text-3xl font-bold text-white mb-2">Our Products</h2>
         <p className="text-gray-300 max-w-2xl mb-10">
           Browse our available Solane LPG products and accessories. Filter by
-          municipality to find what you need.
+          municipality.
         </p>
 
         {/* Municipality Filter */}
         <div className="flex flex-col md:flex-row gap-4 mb-12">
           <select
-            className="w-48 md:w-64 p-3 border border-gray-500 bg-gray-800 text-white rounded-lg focus:outline-none focus:border-blue-500"
+            className="w-48 md:w-64 p-3 border border-gray-500 bg-gray-800 text-white rounded-lg"
             value={selectedMunicipality}
             onChange={(e) => setSelectedMunicipality(e.target.value)}
           >
@@ -266,6 +301,44 @@ export default function Productslist() {
               </option>
             ))}
           </select>
+        </div>
+
+        {/* 🔵 BUNDLES */}
+        <div className="mb-20 relative">
+          <h3 className="text-2xl font-bold text-white mb-6">Bundles</h3>
+
+          <Swiper
+            key={displayBundles.length}
+            modules={[Navigation]}
+            navigation={
+              displayBundles.length > 3
+                ? { nextEl: ".bundle-next", prevEl: ".bundle-prev" }
+                : false
+            }
+            loop={displayBundles.length > 3}
+            spaceBetween={20}
+            slidesPerView={1}
+            breakpoints={{
+              640: { slidesPerView: Math.min(displayBundles.length, 1) },
+              768: { slidesPerView: Math.min(displayBundles.length, 2) },
+              1024: { slidesPerView: Math.min(displayBundles.length, 3) },
+            }}
+          >
+            {displayBundles.map((item, index) => (
+              <SwiperSlide key={index}>{renderCard(item)}</SwiperSlide>
+            ))}
+          </Swiper>
+
+          {displayBundles.length > 3 && (
+            <>
+              <div className="hidden md:block bundle-prev absolute -left-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full">
+                ❮
+              </div>
+              <div className="hidden md:block bundle-next absolute -right-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full">
+                ❯
+              </div>
+            </>
+          )}
         </div>
 
         {/* Discounted Products */}
@@ -298,11 +371,11 @@ export default function Productslist() {
 
           {displayDiscounted.length > 3 && (
             <>
-              <div className="hidden md:block discount-prev absolute -left-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full hover:bg-gray-100">
-                <span className="text-gray-900 text-3xl font-bold">❮</span>
+              <div className="hidden md:block discount-prev absolute -left-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full">
+                ❮
               </div>
-              <div className="hidden md:block discount-next absolute -right-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full hover:bg-gray-100">
-                <span className="text-gray-900 text-3xl font-bold">❯</span>
+              <div className="hidden md:block discount-next absolute -right-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full">
+                ❯
               </div>
             </>
           )}
@@ -310,7 +383,9 @@ export default function Productslist() {
 
         {/* Regular Products */}
         <div className="relative">
-          <h3 className="text-2xl font-bold text-white mb-6">Regular Products</h3>
+          <h3 className="text-2xl font-bold text-white mb-6">
+            Regular Products
+          </h3>
 
           <Swiper
             key={displayRegular.length}
@@ -336,21 +411,23 @@ export default function Productslist() {
 
           {displayRegular.length > 3 && (
             <>
-              <div className="hidden md:block products-prev absolute -left-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full hover:bg-gray-100">
-                <span className="text-gray-900 text-3xl font-bold">❮</span>
+              <div className="hidden md:block products-prev absolute -left-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full">
+                ❮
               </div>
-              <div className="hidden md:block products-next absolute -right-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full hover:bg-gray-100">
-                <span className="text-gray-900 text-3xl font-bold">❯</span>
+              <div className="hidden md:block products-next absolute -right-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full">
+                ❯
               </div>
             </>
           )}
         </div>
 
-        {filteredRegular.length === 0 && filteredDiscounted.length === 0 && (
-          <p className="text-gray-300 mt-6 text-center">
-            No products found for the selected municipality.
-          </p>
-        )}
+        {filteredRegular.length === 0 &&
+          filteredDiscounted.length === 0 &&
+          filteredBundles.length === 0 && (
+            <p className="text-gray-300 mt-6 text-center">
+              No items found for the selected municipality.
+            </p>
+          )}
       </div>
     </section>
   );

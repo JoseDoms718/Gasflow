@@ -99,13 +99,21 @@ app.use(
 app.use(express.json());
 
 /* -----------------------------------------
-   ✅ Serve Static Images
+   Serve Static Images
 ----------------------------------------- */
 app.use(
   "/products/images",
   express.static(path.join(__dirname, "../src/assets/products"))
 );
+
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// ADD THIS
+app.use(
+  "/bundles/images",
+  express.static(path.join(__dirname, "uploads/products/bundle"))
+);
+
 
 /* -----------------------------------------
    ✅ Mount Routes
