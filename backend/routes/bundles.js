@@ -314,6 +314,57 @@ router.put("/edit/:id", upload.single("bundle_image"), async (req, res) => {
     }
 });
 
+
+// -----------------------------------------------------
+// EDIT BRANCH BUNDLE
+// -----------------------------------------------------
+router.put("/branch/edit/bundle/:id", authenticateToken, async (req, res) => {
+  try {
+    const branchBundlePriceId = req.params.id;
+    let { branch_price, branch_discounted_price } = req.body;
+
+    // Validate input
+    branch_price = Number(branch_price);
+    branch_discounted_price = branch_discounted_price ? Number(branch_discounted_price) : null;
+
+    if (isNaN(branch_price) || branch_price <= 0) {
+      return res.status(400).json({ success: false, error: "Invalid branch_price" });
+    }
+
+    if (branch_discounted_price !== null && branch_discounted_price > branch_price) {
+      branch_discounted_price = branch_price; // clamp discounted price to branch_price
+    }
+
+    // Update branch_bundle_prices
+    await db.query(
+      `UPDATE branch_bundle_prices 
+       SET price = ?, discounted_price = ?, updated_at = CURRENT_TIMESTAMP 
+       WHERE id = ?`,
+      [branch_price, branch_discounted_price, branchBundlePriceId]
+    );
+
+    // Return updated record
+    const [updatedRows] = await db.query(
+      `SELECT * FROM branch_bundle_prices WHERE id = ?`,
+      [branchBundlePriceId]
+    );
+
+    if (!updatedRows.length) {
+      return res.status(404).json({ success: false, error: "Branch bundle price not found" });
+    }
+
+    res.json({
+      success: true,
+      data: updatedRows[0],
+      message: "Branch bundle price updated successfully",
+    });
+  } catch (err) {
+    console.error("Error updating branch bundle price:", err);
+    res.status(500).json({ success: false, error: "Failed to update branch bundle price" });
+  }
+});
+
+
 router.put("/branch/bundle/sync/:id", authenticateToken, async (req, res) => {
   try {
     const branchBundlePriceId = req.params.id;

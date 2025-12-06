@@ -3,9 +3,10 @@ import axios from "axios";
 import { Package, Check, Pencil, X } from "lucide-react";
 import { toast } from "react-hot-toast";
 
-export default function EditBundleModal({ selectedBundle, setSelectedBundle, onSave }) {
+export default function EditBundleModal({ selectedBundle, setSelectedBundle, onSave, userRole }) {
     const BASE_URL = import.meta.env.VITE_BASE_URL;
     const token = localStorage.getItem("token");
+    const isAdmin = userRole === "admin";
 
     const [editedBundle, setEditedBundle] = useState(null);
     const [isEditing, setIsEditing] = useState({});
@@ -13,63 +14,60 @@ export default function EditBundleModal({ selectedBundle, setSelectedBundle, onS
     const [touched, setTouched] = useState(false);
     const [loading, setLoading] = useState(false);
 
-    // Initialize editedBundle whenever selectedBundle changes
+    // Load selected bundle and set prices only from branch, not from items
     useEffect(() => {
         if (!selectedBundle) {
             setEditedBundle(null);
             return;
         }
 
-        // Determine preferred branch id:
         const currentBranchId =
             selectedBundle.selected_branch_id ??
             selectedBundle.branch_id ??
             selectedBundle.branch_prices?.[0]?.branch_id ??
             null;
 
-        // Find the matching branch price
         const branchPrice =
             (selectedBundle.branch_prices || []).find((b) => b.branch_id === currentBranchId) ||
             selectedBundle.branch_prices?.[0] ||
             {};
 
-        // Safely get branch_bundle_price_id (fall back to top-level)
         const branch_bundle_price_id =
             branchPrice.branch_bundle_price_id ??
             selectedBundle.branch_prices?.[0]?.branch_bundle_price_id ??
-            selectedBundle.branch_bundle_price_id ?? // <--- fallback for admin bundles
+            selectedBundle.branch_bundle_price_id ??
             null;
 
         const computedBranchPrice = branchPrice.branch_price ?? selectedBundle.branch_price ?? selectedBundle.price ?? 0;
-        const computedBranchDiscounted =
-            branchPrice.branch_discounted_price ?? selectedBundle.branch_discounted_price ?? selectedBundle.discounted_price ?? 0;
+        const computedBranchDiscounted = branchPrice.branch_discounted_price ?? selectedBundle.branch_discounted_price ?? null;
 
         setEditedBundle({
             ...selectedBundle,
             branch_price: computedBranchPrice,
             branch_discounted_price: computedBranchDiscounted,
             branch_bundle_price_id,
-            items: selectedBundle.items || [],
             selected_branch_id: currentBranchId,
+            items: selectedBundle.items || [], // items for display only
         });
 
         setTouched(false);
         setIsEditing({});
     }, [selectedBundle]);
 
-    // Track if price fields are valid and changed
+    // Validate changes
     useEffect(() => {
         if (!editedBundle || !selectedBundle) return;
 
         const priceValid = Number(editedBundle.branch_price) > 0;
-        const discountedValid = Number(editedBundle.branch_discounted_price) >= 0;
-        const discountCheck = Number(editedBundle.branch_discounted_price) <= Number(editedBundle.branch_price);
+        const discountedValid = editedBundle.branch_discounted_price === null || Number(editedBundle.branch_discounted_price) >= 0;
+        const discountCheck =
+            editedBundle.branch_discounted_price === null ||
+            Number(editedBundle.branch_discounted_price) <= Number(editedBundle.branch_price);
 
         const changed =
-            Number(editedBundle.branch_price) !==
-            Number(selectedBundle.branch_price ?? selectedBundle.price ?? 0) ||
-            Number(editedBundle.branch_discounted_price) !==
-            Number(selectedBundle.branch_discounted_price ?? selectedBundle.discounted_price ?? 0);
+            Number(editedBundle.branch_price) !== Number(selectedBundle.branch_price ?? selectedBundle.price ?? 0) ||
+            (editedBundle.branch_discounted_price !== null &&
+                Number(editedBundle.branch_discounted_price) !== Number(selectedBundle.branch_discounted_price ?? 0));
 
         setHasChanges(priceValid && discountedValid && discountCheck && changed);
     }, [editedBundle, selectedBundle]);
@@ -80,41 +78,33 @@ export default function EditBundleModal({ selectedBundle, setSelectedBundle, onS
 
     const handleEditChange = (field, value) => {
         setTouched(true);
-        let val = value;
-
-        if (field === "branch_discounted_price") {
-            const price = Number(editedBundle.branch_price);
-            const discounted = Number(val);
-            if (!isNaN(price) && !isNaN(discounted) && discounted > price) {
-                val = price;
-            }
-        }
-
-        setEditedBundle((prev) => ({ ...prev, [field]: val }));
+        setEditedBundle((prev) => ({
+            ...prev,
+            [field]: value
+        }));
     };
 
     const formatPrice = (value) => {
+        if (value === null || value === undefined || value === "") return "0.00";
         const num = Number(value);
         return isNaN(num) ? "0.00" : num.toFixed(2);
     };
 
-    // Save updated prices
     const handleSave = async () => {
         if (!hasChanges || !editedBundle?.branch_bundle_price_id) return;
 
         setLoading(true);
         try {
             const res = await axios.put(
-                `${BASE_URL}/bundles/branch/bundle/sync/${editedBundle.branch_bundle_price_id}`,
+                `${BASE_URL}/bundles/branch/edit/bundle/${editedBundle.branch_bundle_price_id}`,
                 {
                     branch_price: editedBundle.branch_price,
                     branch_discounted_price: editedBundle.branch_discounted_price,
                 },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
-
             toast.success("Bundle prices updated successfully!");
-            onSave?.(res.data ?? editedBundle);
+            onSave?.(res.data?.data ?? editedBundle);
             setSelectedBundle(null);
             setTouched(false);
         } catch (err) {
@@ -125,7 +115,6 @@ export default function EditBundleModal({ selectedBundle, setSelectedBundle, onS
         }
     };
 
-    // Sync prices from backend
     const handleSync = async () => {
         if (!editedBundle?.branch_bundle_price_id) {
             toast.error("Cannot sync: Branch bundle price ID is missing.");
@@ -188,51 +177,60 @@ export default function EditBundleModal({ selectedBundle, setSelectedBundle, onS
                         <hr className="border-gray-700" />
 
                         <div className="flex flex-col gap-3 text-gray-200">
-                            {/* Branch Price */}
                             <div className="flex items-center gap-2">
                                 <span className="font-semibold text-white">Price:</span>
                                 <div className="flex items-center gap-2">
-                                    {isEditing.branch_price ? (
-                                        <input
-                                            type="number"
-                                            step="0.01"
-                                            min="0"
-                                            className="bg-gray-800 px-2 py-1 rounded w-32"
-                                            value={editedBundle.branch_price ?? ""}
-                                            onChange={(e) => handleEditChange("branch_price", e.target.value)}
-                                        />
+                                    {isAdmin ? (
+                                        isEditing.branch_price ? (
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                className="bg-gray-800 px-2 py-1 rounded w-32"
+                                                value={editedBundle.branch_price ?? ""}
+                                                onChange={(e) => handleEditChange("branch_price", e.target.value)}
+                                            />
+                                        ) : (
+                                            <span>₱{formatPrice(editedBundle.branch_price)}</span>
+                                        )
                                     ) : (
                                         <span>₱{formatPrice(editedBundle.branch_price)}</span>
                                     )}
-                                    <button onClick={() => toggleEdit("branch_price")}>
-                                        {isEditing.branch_price ? <Check size={16} /> : <Pencil size={16} />}
-                                    </button>
+                                    {isAdmin && (
+                                        <button onClick={() => toggleEdit("branch_price")}>
+                                            {isEditing.branch_price ? <Check size={16} /> : <Pencil size={16} />}
+                                        </button>
+                                    )}
                                 </div>
                             </div>
 
-                            {/* Discounted Price */}
                             <div className="flex items-center gap-2">
                                 <span className="font-semibold text-white">Discounted Price:</span>
                                 <div className="flex items-center gap-2">
-                                    {isEditing.branch_discounted_price ? (
-                                        <input
-                                            type="number"
-                                            step="0.01"
-                                            min="0"
-                                            className="bg-gray-800 px-2 py-1 rounded w-32"
-                                            value={editedBundle.branch_discounted_price ?? ""}
-                                            onChange={(e) => handleEditChange("branch_discounted_price", e.target.value)}
-                                        />
+                                    {isAdmin ? (
+                                        isEditing.branch_discounted_price ? (
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                className="bg-gray-800 px-2 py-1 rounded w-32"
+                                                value={editedBundle.branch_discounted_price ?? ""}
+                                                onChange={(e) => handleEditChange("branch_discounted_price", e.target.value)}
+                                            />
+                                        ) : (
+                                            <span>₱{editedBundle.branch_discounted_price !== null ? formatPrice(editedBundle.branch_discounted_price) : "-"}</span>
+                                        )
                                     ) : (
-                                        <span>₱{formatPrice(editedBundle.branch_discounted_price)}</span>
+                                        <span>₱{editedBundle.branch_discounted_price !== null ? formatPrice(editedBundle.branch_discounted_price) : "-"}</span>
                                     )}
-                                    <button onClick={() => toggleEdit("branch_discounted_price")}>
-                                        {isEditing.branch_discounted_price ? <Check size={16} /> : <Pencil size={16} />}
-                                    </button>
+                                    {isAdmin && (
+                                        <button onClick={() => toggleEdit("branch_discounted_price")}>
+                                            {isEditing.branch_discounted_price ? <Check size={16} /> : <Pencil size={16} />}
+                                        </button>
+                                    )}
                                 </div>
                             </div>
 
-                            {/* Description */}
                             <div className="flex flex-col gap-1">
                                 <span className="font-semibold text-white">Description:</span>
                                 <span className="text-gray-400">{editedBundle.description || "No description"}</span>
@@ -257,8 +255,7 @@ export default function EditBundleModal({ selectedBundle, setSelectedBundle, onS
                                         <div className="flex-1">
                                             <p className="font-semibold">{p.product_name}</p>
                                             <p className="text-gray-400 text-sm">
-                                                Price: ₱{formatPrice(p.price ?? p.product_price)}{" "}
-                                                {p.discounted_price ? `(Discounted: ₱${formatPrice(p.discounted_price)})` : ""}
+                                                Price: ₱{formatPrice(p.price ?? p.product_price)}
                                             </p>
                                         </div>
                                         <p className="text-gray-200 text-sm">Qty: {p.quantity}</p>
@@ -271,16 +268,17 @@ export default function EditBundleModal({ selectedBundle, setSelectedBundle, onS
                     </div>
                 </div>
 
-                {/* SYNC / SAVE BUTTON */}
-                <div className="p-5">
-                    <button
-                        onClick={touched ? handleSave : handleSync}
-                        disabled={!canClickButton}
-                        className={`w-full py-3 ${touched ? "bg-green-600 hover:bg-green-700" : "bg-blue-600 hover:bg-blue-700"} text-white rounded-lg font-semibold transition active:scale-95 ${!canClickButton ? "opacity-50 cursor-not-allowed" : ""}`}
-                    >
-                        {loading ? "Processing..." : touched ? "Save Changes" : "Sync Bundle Prices"}
-                    </button>
-                </div>
+                {isAdmin && (
+                    <div className="p-5">
+                        <button
+                            onClick={touched ? handleSave : handleSync}
+                            disabled={!canClickButton}
+                            className={`w-full py-3 ${touched ? "bg-green-600 hover:bg-green-700" : "bg-blue-600 hover:bg-blue-700"} text-white rounded-lg font-semibold transition active:scale-95 ${!canClickButton ? "opacity-50 cursor-not-allowed" : ""}`}
+                        >
+                            {loading ? "Processing..." : touched ? "Save Changes" : "Sync Bundle Prices"}
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );

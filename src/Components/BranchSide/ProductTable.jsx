@@ -41,7 +41,7 @@ export default function ProductTable({
                     branch_product_id: p.id,
                     branch_price: p.branch_price,
                     branch_refill_price: p.branch_refill_price,
-                    branch_discounted_price: p.branch_discounted_price,
+                    branch_discounted_price: p.branch_discounted_price ?? null, // null if no discount
                     stock: p.stock,
                     stock_threshold: p.stock_threshold,
                     branch_id: p.branch_id,
@@ -61,24 +61,26 @@ export default function ProductTable({
                         headers: { Authorization: `Bearer ${token}` },
                     });
 
-                    const branchBundles = (resBundles.data.branchBundles || []).map((b) => ({
-                        branch_bundle_id: b.branch_bundle_id,
-                        bundle_id: b.bundle_id,
-                        product_name: b.bundle_name,
-                        description: b.description,
-                        // keep whole branch_prices array but also set sensible top-level defaults
-                        branch_price: b.branch_prices?.[0]?.branch_price ?? b.price,
-                        branch_discounted_price:
-                            b.branch_prices?.[0]?.branch_discounted_price ?? b.discounted_price,
-                        branch_bundle_price_id: b.branch_prices?.[0]?.branch_bundle_price_id ?? null,
-                        stock: null,
-                        items: b.items,
-                        isBundle: true,
-                        bundle_image: b.bundle_image,
-                        branch_id: b.branch_id,
-                        branch_name: b.branch_name,
-                        branch_prices: b.branch_prices ?? [],
-                    }));
+                    const branchBundles = (resBundles.data.branchBundles || []).map((b) => {
+                        return {
+                            branch_bundle_id: b.branch_bundle_id,
+                            bundle_id: b.bundle_id,
+                            product_name: b.bundle_name,
+                            description: b.description,
+                            branch_price: b.branch_price ?? b.price ?? 0,
+                            branch_discounted_price: b.branch_discounted_price ?? null,
+                            branch_bundle_price_id: b.branch_bundle_price_id ?? null,
+                            stock: null,
+                            isBundle: true,
+                            bundle_image: b.bundle_image,
+                            branch_id: b.branch_id,
+                            branch_name: b.branch_name,
+                            items: (b.items || []).map((item) => ({
+                                ...item,
+                                quantity: item.quantity ?? item.product_quantity ?? item.qty ?? 0,
+                            })),
+                        };
+                    });
 
                     fetchedProducts = [...branchBundles, ...fetchedProducts];
                 }
@@ -94,16 +96,18 @@ export default function ProductTable({
                         bundle_id: b.bundle_id,
                         product_name: b.bundle_name,
                         description: b.description,
-                        branch_price: b.price,
-                        branch_discounted_price: b.discounted_price,
+                        branch_price: b.price ?? 0,
+                        branch_discounted_price: b.discounted_price ?? null,
                         stock: null,
-                        items: b.products,
+                        items: (b.products || []).map((item) => ({
+                            ...item,
+                            quantity: item.quantity ?? item.product_quantity ?? item.qty ?? 0,
+                        })),
                         isBundle: true,
                         bundle_image: b.bundle_image,
                         branch_id: b.branch_id,
                         branch_name: b.branch_name,
-                        branch_prices: b.branch_prices ?? [],
-                        branch_bundle_price_id: b.branch_bundle_price_id ?? null, // <--- ADD THIS
+                        branch_bundle_price_id: b.branch_bundle_price_id ?? null,
                     }));
 
                     fetchedProducts = [...adminBundles, ...fetchedProducts];
@@ -118,10 +122,8 @@ export default function ProductTable({
         };
 
         fetchProducts();
-        // include token in deps so fetch runs if token changes
     }, [userRole, selectedBranch, refreshTrigger, token]);
 
-    // Update list safely using explicit id resolution
     const resolveRowId = (row) =>
         row.branch_product_id ?? row.branch_bundle_id ?? row.product_id ?? row.id ?? null;
 
@@ -152,21 +154,17 @@ export default function ProductTable({
         });
     };
 
-    // Product view
     const handleViewProduct = (product) => setSelectedProduct(product);
 
     const handleViewBundle = (bundle) => {
-        // Determine which branch to use
         const chosenBranchId =
             bundle.branch_id ?? selectedBranch ?? bundle.branch_prices?.[0]?.branch_id;
 
-        // Find the matching branch price object
         const branchPrice =
             (bundle.branch_prices || []).find((b) => b.branch_id === chosenBranchId) ||
             bundle.branch_prices?.[0] ||
             {};
 
-        // Use branch_bundle_price_id if available, fallback to top-level branch_bundle_id
         const branch_bundle_price_id =
             branchPrice.branch_bundle_price_id ?? bundle.branch_bundle_price_id ?? bundle.branch_bundle_id ?? null;
 
@@ -175,14 +173,12 @@ export default function ProductTable({
             bundle_name: bundle.product_name ?? bundle.bundle_name,
             items: bundle.items || [],
             branch_price: branchPrice.branch_price ?? bundle.branch_price ?? bundle.price ?? 0,
-            branch_discounted_price:
-                branchPrice.branch_discounted_price ?? bundle.branch_discounted_price ?? bundle.discounted_price ?? 0,
-            branch_bundle_price_id, // <-- always set
+            branch_discounted_price: branchPrice.branch_discounted_price ?? bundle.branch_discounted_price ?? null,
+            branch_bundle_price_id,
             branch_prices: bundle.branch_prices ?? [],
-            selected_branch_id: chosenBranchId ?? null, // <-- branch context
+            selected_branch_id: chosenBranchId ?? null,
         });
     };
-
 
     const handleRestockSubmit = async () => {
         const quantity = Number(restockQuantity);
@@ -190,7 +186,6 @@ export default function ProductTable({
             return toast.error("⚠️ Please enter a valid positive number.");
         if (!token) return toast.error("You must be logged in to restock.");
 
-        // use branch_product_id (mapped earlier) rather than a non-existent `branch_price_id`
         if (!restockProduct?.branch_product_id) return toast.error("⚠️ Missing branch product ID.");
 
         try {
@@ -298,7 +293,16 @@ export default function ProductTable({
                                     </td>
 
                                     <td className="px-4 py-3 align-middle">
-                                        <div className="flex justify-center">₱{formatPrice(p.branch_discounted_price ?? p.branch_price ?? p.price)}</div>
+                                        <div className="flex justify-center flex-col items-center">
+                                            {p.branch_discounted_price && p.branch_discounted_price !== p.branch_price ? (
+                                                <>
+                                                    <span className="line-through text-gray-400 text-sm">₱{formatPrice(p.branch_price)}</span>
+                                                    <span className="font-semibold text-green-600">₱{formatPrice(p.branch_discounted_price)}</span>
+                                                </>
+                                            ) : (
+                                                <span>₱{formatPrice(p.branch_price)}</span>
+                                            )}
+                                        </div>
                                     </td>
 
                                     <td className="px-4 py-3 align-middle">
@@ -356,7 +360,14 @@ export default function ProductTable({
             )}
 
             {/* Bundle Modal */}
-            {viewBundle && <EditBundle selectedBundle={viewBundle} setSelectedBundle={setViewBundle} onSave={updateProductList} />}
+            {viewBundle && (
+                <EditBundle
+                    selectedBundle={viewBundle}
+                    setSelectedBundle={setViewBundle}
+                    onSave={updateProductList}
+                    userRole={userRole}
+                />
+            )}
         </div>
     );
 }
