@@ -300,12 +300,32 @@ export default function Buysection() {
               <input
                 type="number"
                 value={quantity ?? ""}
-                onChange={handleQuantityChange}
-                min={0}
+                onChange={(e) => {
+                  // Remove non-digit characters
+                  let val = e.target.value.replace(/\D/g, "");
+                  if (val === "" || parseInt(val) <= 0) {
+                    setQuantity(""); // allow deleting temporarily
+                  } else {
+                    // Don't allow more than stock
+                    let num = parseInt(val);
+                    if (product && num > product.stock) num = product.stock;
+                    setQuantity(num);
+                  }
+                }}
+                onBlur={() => {
+                  // If user leaves empty or zero, reset to 1
+                  if (!quantity || quantity <= 0) setQuantity(1);
+                }}
+                min={1}
                 max={product.stock}
-                className="w-20 px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg text-center"
-                placeholder="0"
+                className="w-20 px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg text-center
+                          appearance-none
+                          [&::-webkit-outer-spin-button]:appearance-none
+                          [&::-webkit-inner-spin-button]:appearance-none
+                          [&::-moz-appearance]:textfield"
+                placeholder="1"
               />
+
             </div>
           </div>
 

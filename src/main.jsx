@@ -17,6 +17,7 @@ import Contactpage from "./Pages/User/Contactpage";
 import Servicespage from "./Pages/User/Servicespage";
 import Loginpage from "./Pages/Loginpage";
 import Buypage from "./Pages/User/Buypage";
+import BuyBundlepage from "./Pages/User/BuyBundlepage";
 import Inquirypage from "./Pages/User/Inquirypage";
 // Business Owner
 import Loanpage from "./Pages/User/Loanpage"
@@ -60,6 +61,7 @@ createRoot(document.getElementById("root")).render(
         <Route path="/login" element={<Loginpage />} />
         <Route path="/products" element={<Productspage />} />
         <Route path="/buy/:id" element={<Buypage />} />
+        <Route path="/buybundle/:id" element={<BuyBundlepage />} />
         <Route path="/orders" element={<Orderspage />} />
         <Route path="/contact" element={<Contactpage />} />
         <Route path="/services" element={<Servicespage />} />

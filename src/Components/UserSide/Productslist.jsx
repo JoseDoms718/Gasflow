@@ -25,8 +25,6 @@ export default function Productslist() {
   const [regularProducts, setRegularProducts] = useState([]);
   const [discountedProducts, setDiscountedProducts] = useState([]);
   const [discountTimers, setDiscountTimers] = useState({});
-
-  // 🔵 BUNDLES
   const [bundles, setBundles] = useState([]);
 
   const formatPrice = (value) => {
@@ -89,7 +87,6 @@ export default function Productslist() {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        // 🔵 ADD BRANCH INFO TO BUNDLE
         const formatted = res.data.bundles.map((b) => ({
           ...b,
           image_url: b.bundle_image
@@ -97,8 +94,8 @@ export default function Productslist() {
             : null,
           seller: {
             name: b.branch_name || "-",
-            barangay: b.barangay_name || "-", // if you want barangay name
-            municipality: b.municipality || "-", // optional: fetch from API if needed
+            barangay: b.barangay_name || "-",
+            municipality: b.municipality || "-",
           },
         }));
 
@@ -162,7 +159,7 @@ export default function Productslist() {
 
   const handleBundleBuy = (bundle) => {
     navigate(
-      `/buy-bundle/${bundle.bundle_id}?branch_bundle_id=${bundle.branch_bundle_id}`
+      `/buybundle/${bundle.bundle_id}?branch_bundle_id=${bundle.branch_bundle_id}`
     );
   };
 
