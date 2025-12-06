@@ -160,6 +160,115 @@ router.get("/branch/my-bundles", authenticateToken, async (req, res) => {
 });
 
 // -----------------------------------------------------
+// GET BUNDLES ADDED BY BRANCH MANAGER (ADMIN VIEW)
+// -----------------------------------------------------
+router.get("/admin/get-bundles", authenticateToken, async (req, res) => {
+    try {
+        // ✅ Only allow admin
+        if (req.user.role !== "admin") {
+            return res.status(403).json({
+                message: "Access denied. Admins only.",
+            });
+        }
+
+        const sql = `
+            SELECT 
+                bb.id AS branch_bundle_id,
+                bb.branch_id,
+                b.branch_name,
+
+                bl.bundle_id,
+                bl.bundle_name,
+                bl.description,
+                bl.bundle_image,
+                bl.price AS default_price,
+                bl.discounted_price AS default_discounted_price,
+                bl.is_active,
+
+                bbp.id AS branch_bundle_price_id,
+                bbp.price AS branch_price,
+                bbp.discounted_price AS branch_discounted_price,
+
+                bi.product_id,
+                p.product_name,
+                p.image_url AS product_image,
+                p.price AS product_price,
+                p.discounted_price AS product_discounted_price,
+                bi.quantity
+
+            FROM branch_bundles bb
+            JOIN branches b ON b.branch_id = bb.branch_id
+            JOIN bundles bl ON bl.bundle_id = bb.bundle_id
+            LEFT JOIN branch_bundle_prices bbp 
+                ON bbp.branch_id = bb.branch_id 
+                AND bbp.bundle_id = bb.bundle_id
+            LEFT JOIN bundle_items bi
+                ON bi.bundle_id = bl.bundle_id
+            LEFT JOIN products p
+                ON p.product_id = bi.product_id
+
+            ORDER BY bb.branch_id, bl.bundle_name, bi.id
+        `;
+
+        const [rows] = await db.query(sql);
+
+        // Group by bundle
+        const bundlesMap = {};
+
+        rows.forEach(item => {
+            const bundleId = item.branch_bundle_id;
+
+            if (!bundlesMap[bundleId]) {
+                bundlesMap[bundleId] = {
+                    branch_bundle_id: item.branch_bundle_id,
+                    branch_id: item.branch_id,
+                    branch_name: item.branch_name,
+
+                    bundle_id: item.bundle_id,
+                    bundle_name: item.bundle_name,
+                    description: item.description,
+                    bundle_image: item.bundle_image,
+                    is_active: item.is_active,
+
+                    branch_bundle_price_id: item.branch_bundle_price_id ?? null,
+                    price:
+                        item.branch_price !== null
+                            ? item.branch_price
+                            : item.default_price,
+                    discounted_price:
+                        item.branch_discounted_price !== null
+                            ? item.branch_discounted_price
+                            : item.default_discounted_price,
+
+                    products: []
+                };
+            }
+
+            // Add products if exists
+            if (item.product_id) {
+                bundlesMap[bundleId].products.push({
+                    product_id: item.product_id,
+                    product_name: item.product_name,
+                    product_image: item.product_image,
+                    price: item.product_price,
+                    discounted_price: item.product_discounted_price,
+                    quantity: item.quantity
+                });
+            }
+        });
+
+        res.json({ bundles: Object.values(bundlesMap) });
+
+    } catch (error) {
+        console.error("SERVER ERROR:", error);
+        res.status(500).json({
+            message: "Server error",
+            error
+        });
+    }
+});
+
+// -----------------------------------------------------
 // EDIT BUNDLE
 // -----------------------------------------------------
 router.put("/edit/:id", upload.single("bundle_image"), async (req, res) => {
@@ -203,6 +312,91 @@ router.put("/edit/:id", upload.single("bundle_image"), async (req, res) => {
         console.error("Error editing bundle:", err);
         res.status(500).json({ success: false, error: "Failed to edit bundle" });
     }
+});
+
+router.put("/branch/bundle/sync/:id", authenticateToken, async (req, res) => {
+  try {
+    const branchBundlePriceId = req.params.id;
+
+    // Only admin can sync
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ error: "Unauthorized: Admins only." });
+    }
+
+    // Get the branch_bundle_prices row
+    const [branchRows] = await db.execute(
+      `SELECT id AS branch_bundle_price_id, branch_id, bundle_id
+       FROM branch_bundle_prices
+       WHERE id = ?`,
+      [branchBundlePriceId]
+    );
+
+    if (!branchRows.length) {
+      return res.status(404).json({ error: "Branch bundle price not found." });
+    }
+
+    const { branch_id, bundle_id } = branchRows[0];
+
+    // Get main bundle info
+    const [bundleRows] = await db.execute(
+      `SELECT * FROM bundles WHERE bundle_id = ?`,
+      [bundle_id]
+    );
+
+    if (!bundleRows.length) {
+      return res.status(404).json({ error: "Main bundle not found." });
+    }
+
+    const bundle = bundleRows[0];
+
+    // Update branch_bundle_prices
+    await db.execute(
+      `UPDATE branch_bundle_prices
+       SET price = ?, discounted_price = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [bundle.price, bundle.discounted_price, branchBundlePriceId]
+    );
+
+    // Get branch info
+    const [branchInfo] = await db.execute(
+      `SELECT b.branch_name, b.branch_contact, br.municipality, br.barangay_name
+       FROM branches b
+       LEFT JOIN barangays br ON b.barangay_id = br.barangay_id
+       WHERE b.branch_id = ?`,
+      [branch_id]
+    );
+
+    // Get bundle items with product info
+    const [items] = await db.execute(
+      `SELECT 
+         bi.product_id,
+         bi.quantity,
+         p.product_name,
+         p.image_url AS product_image,
+         p.price AS product_price,
+         p.discounted_price AS product_discounted_price
+       FROM bundle_items bi
+       LEFT JOIN products p ON p.product_id = bi.product_id
+       WHERE bi.bundle_id = ?`,
+      [bundle_id]
+    );
+
+    // Return combined response
+    res.json({
+      branch_bundle_price_id: branchBundlePriceId,
+      branch_id,
+      bundle_id,
+      branch_price: bundle.price,
+      branch_discounted_price: bundle.discounted_price,
+      branch_price_updated_at: new Date(),
+      ...branchInfo[0],
+      ...bundle,
+      items
+    });
+  } catch (err) {
+    console.error("❌ Error syncing branch bundle price:", err);
+    res.status(500).json({ error: "Failed to sync branch bundle price" });
+  }
 });
 
 // -----------------------------------------------------
@@ -473,44 +667,64 @@ router.post("/branch/add-bundles", authenticateToken, async (req, res) => {
 // GET SINGLE BUNDLE
 // -----------------------------------------------------
 router.get("/:id", async (req, res) => {
-    try {
-        const bundleId = req.params.id;
+  try {
+    const bundleId = req.params.id;
 
-        // Get bundle info
-        const [rows] = await db.query(
-            `SELECT * FROM bundles WHERE bundle_id = ?`,
-            [bundleId]
-        );
+    // Get main bundle info
+    const [bundleRows] = await db.execute(
+      `SELECT * FROM bundles WHERE bundle_id = ?`,
+      [bundleId]
+    );
 
-        if (!rows.length) {
-            return res.status(404).json({ success: false, error: "Bundle not found" });
-        }
-
-        // Get bundle items with product info
-        const [items] = await db.query(
-            `SELECT 
-                bi.product_id,
-                bi.quantity,
-                p.product_name,
-                p.image_url AS product_image,
-                p.price AS product_price,
-                p.discounted_price AS product_discounted_price,
-                p.refill_price,
-                p.product_type,
-                p.discount_until,
-                p.is_active AS product_is_active
-            FROM bundle_items bi
-            LEFT JOIN products p ON p.product_id = bi.product_id
-            WHERE bi.bundle_id = ?`,
-            [bundleId]
-        );
-
-        res.json({ success: true, bundle: rows[0], items });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ success: false, error: "Failed to load bundle" });
+    if (!bundleRows.length) {
+      return res.status(404).json({ success: false, error: "Bundle not found" });
     }
-});
 
+    const bundle = bundleRows[0];
+
+    // Get all branch prices for this bundle
+    const [branchPrices] = await db.execute(
+      `SELECT 
+         id AS branch_bundle_price_id,
+         branch_id,
+         bundle_id,
+         price AS branch_price,
+         discounted_price AS branch_discounted_price,
+         updated_at
+       FROM branch_bundle_prices
+       WHERE bundle_id = ?`,
+      [bundleId]
+    );
+
+    // Get bundle items with product info
+    const [items] = await db.execute(
+      `SELECT 
+         bi.product_id,
+         bi.quantity,
+         p.product_name,
+         p.image_url AS product_image,
+         p.price AS product_price,
+         p.discounted_price AS product_discounted_price,
+         p.refill_price,
+         p.product_type,
+         p.discount_until,
+         p.is_active AS product_is_active
+       FROM bundle_items bi
+       LEFT JOIN products p ON p.product_id = bi.product_id
+       WHERE bi.bundle_id = ?`,
+      [bundleId]
+    );
+
+    res.json({
+      success: true,
+      bundle,
+      branch_prices: branchPrices,
+      items
+    });
+  } catch (err) {
+    console.error("❌ Error loading bundle:", err);
+    res.status(500).json({ success: false, error: "Failed to load bundle" });
+  }
+});
 
 module.exports = router;

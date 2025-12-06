@@ -131,13 +131,19 @@ export default function AddProductModal({ setShowForm, setProducts }) {
         }
 
         if (newProduct.product_type === "discounted") {
-            if (!discountDate || discountDate <= today) {
-                return toast.error("Discount until must be a future date.");
+            // Allow null discount_until
+            if (newProduct.discount_until) {
+                const discountDate = new Date(newProduct.discount_until);
+                if (discountDate <= today) {
+                    return toast.error("Discount until must be a future date.");
+                }
             }
+
             if (!isNaN(discNum) && discNum >= priceNum) {
                 return toast.error("Discounted price cannot exceed main price − 1.");
             }
         }
+
 
         // --- Submit form ---
         try {

@@ -114,22 +114,31 @@ export default function AddBundleModal({ setShowBundleForm, refreshBundles }) {
         const price = parseFloat(newBundle.price);
         let discount = parseFloat(newBundle.discounted_price);
 
+        // -------------------- VALIDATION --------------------
+        if (!newBundle.bundle_name.trim()) {
+            return toast.error("Bundle name is required.");
+        }
+
+        if (!newBundle.products.length) {
+            return toast.error("Bundle must include at least 1 product.");
+        }
+
         if (isNaN(price) || price <= 0) {
-            return toast.error("Bundle must have at least 1 product.");
+            return toast.error("Bundle price must be greater than ₱0.");
         }
 
         if (isNaN(discount) || discount <= 0) {
-            return toast.error("Discounted price must be at least ₱1.");
+            return toast.error("Discounted price must be greater than ₱0.");
         }
 
-        // Hard block — cannot bypass!!
         if (discount > price) {
             return toast.error("Discounted price cannot be higher than total price.");
         }
 
         if (newBundle.products.some((p) => !p.quantity || p.quantity <= 0)) {
-            return toast.error("Quantity cannot be zero or empty.");
+            return toast.error("All product quantities must be greater than 0.");
         }
+        // ----------------------------------------------------
 
         const formData = new FormData();
         formData.append("bundle_name", newBundle.bundle_name);
