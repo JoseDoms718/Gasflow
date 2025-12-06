@@ -272,124 +272,126 @@ router.get("/admin/get-bundles", authenticateToken, async (req, res) => {
 // GET BUNDLES FOR BUYERS
 // -----------------------------------------------------
 router.get("/buyer/bundles", authenticateToken, async (req, res) => {
-    try {
-        const user = req.user;
-        const buyerRole = user.role; // "users" | "retailer" | "business_owner"
-        const branchId = user.branches && user.branches.length > 0
-            ? user.branches[0]
-            : null;
+  try {
+    const user = req.user;
+    const buyerRole = user.role; // "users" | "retailer" | "business_owner"
+    const branchId = user.branches && user.branches.length > 0 ? user.branches[0] : null;
 
-        if (!buyerRole) {
-            return res.status(400).json({ success: false, error: "User role missing." });
-        }
-
-        // 🔥 Retailers & business owners MUST have a branch
-        if ((buyerRole === "retailer" || buyerRole === "business_owner") && !branchId) {
-            return res.status(400).json({ success: false, error: "Branch required for this role." });
-        }
-
-        // 🔥 USERS don't have branch, so they should see ALL bundles (role-based only)
-        const branchFilter = branchId ? "bb.branch_id = ?" : "1=1";
-        const params = branchId ? [branchId, buyerRole] : [buyerRole];
-
-        const sql = `
-            SELECT 
-                bb.id AS branch_bundle_id,
-                bb.branch_id,
-
-                bl.bundle_id,
-                bl.bundle_name,
-                bl.description,
-                bl.bundle_image,
-                bl.role AS allowed_role,
-                bl.price AS default_price,
-                bl.discounted_price AS default_discounted_price,
-                bl.is_active,
-
-                bbp.id AS branch_bundle_price_id,
-                bbp.price AS branch_price,
-                bbp.discounted_price AS branch_discounted_price,
-
-                bi.product_id,
-                p.product_name,
-                p.image_url AS product_image,
-                p.price AS product_price,
-                p.discounted_price AS product_discounted_price,
-                bi.quantity
-
-            FROM branch_bundles bb
-            JOIN bundles bl ON bl.bundle_id = bb.bundle_id
-            LEFT JOIN branch_bundle_prices bbp 
-                ON bbp.branch_id = bb.branch_id 
-                AND bbp.bundle_id = bb.bundle_id
-            LEFT JOIN bundle_items bi 
-                ON bi.bundle_id = bl.bundle_id
-            LEFT JOIN products p 
-                ON p.product_id = bi.product_id
-
-            WHERE ${branchFilter}
-            AND bl.is_active = 1
-            AND (bl.role = 'all' OR bl.role = ?)
-
-            ORDER BY bl.bundle_name, bi.id
-        `;
-
-        const [rows] = await db.query(sql, params);
-
-        const bundlesMap = {};
-
-        rows.forEach(item => {
-            const bundleId = item.branch_bundle_id;
-
-            if (!bundlesMap[bundleId]) {
-                bundlesMap[bundleId] = {
-                    branch_bundle_id: item.branch_bundle_id,
-                    branch_id: item.branch_id,
-
-                    bundle_id: item.bundle_id,
-                    bundle_name: item.bundle_name,
-                    description: item.description,
-                    bundle_image: item.bundle_image,
-                    role: item.allowed_role,
-                    is_active: item.is_active,
-
-                    branch_bundle_price_id: item.branch_bundle_price_id ?? null,
-                    price:
-                        item.branch_price !== null
-                            ? item.branch_price
-                            : item.default_price,
-                    discounted_price:
-                        item.branch_discounted_price !== null
-                            ? item.branch_discounted_price
-                            : item.default_discounted_price,
-
-                    products: []
-                };
-            }
-
-            if (item.product_id) {
-                bundlesMap[bundleId].products.push({
-                    product_id: item.product_id,
-                    product_name: item.product_name,
-                    product_image: item.product_image,
-                    price: item.product_price,
-                    discounted_price: item.product_discounted_price,
-                    quantity: item.quantity
-                });
-            }
-        });
-
-        res.json({ bundles: Object.values(bundlesMap) });
-
-    } catch (error) {
-        console.error("ERROR /buyer/bundles:", error);
-        res.status(500).json({
-            success: false,
-            error: "Server error.",
-        });
+    if (!buyerRole) {
+      return res.status(400).json({ success: false, error: "User role missing." });
     }
-});
 
+    // Retailers & business owners MUST have a branch
+    if ((buyerRole === "retailer" || buyerRole === "business_owner") && !branchId) {
+      return res.status(400).json({ success: false, error: "Branch required for this role." });
+    }
+
+    const branchFilter = branchId ? "bb.branch_id = ?" : "1=1";
+    const params = branchId ? [branchId, buyerRole] : [buyerRole];
+
+    const sql = `
+      SELECT 
+        bb.id AS branch_bundle_id,
+        bb.branch_id,
+        br.branch_name,
+        br.barangay_id,
+        b.barangay_name,
+        b.municipality,
+
+        bl.bundle_id,
+        bl.bundle_name,
+        bl.description,
+        bl.bundle_image,
+        bl.role AS allowed_role,
+        bl.price AS default_price,
+        bl.discounted_price AS default_discounted_price,
+        bl.is_active,
+
+        bbp.id AS branch_bundle_price_id,
+        bbp.price AS branch_price,
+        bbp.discounted_price AS branch_discounted_price,
+
+        bi.product_id,
+        p.product_name,
+        p.image_url AS product_image,
+        p.price AS product_price,
+        p.discounted_price AS product_discounted_price,
+        bi.quantity
+
+      FROM branch_bundles bb
+      JOIN bundles bl ON bl.bundle_id = bb.bundle_id
+      LEFT JOIN branch_bundle_prices bbp 
+        ON bbp.branch_id = bb.branch_id 
+        AND bbp.bundle_id = bb.bundle_id
+      LEFT JOIN bundle_items bi 
+        ON bi.bundle_id = bl.bundle_id
+      LEFT JOIN products p 
+        ON p.product_id = bi.product_id
+      LEFT JOIN branches br
+        ON br.branch_id = bb.branch_id
+      LEFT JOIN barangays b
+        ON b.barangay_id = br.barangay_id
+
+      WHERE ${branchFilter}
+        AND bl.is_active = 1
+        AND (bl.role = 'all' OR bl.role = ?)
+
+      ORDER BY bl.bundle_name, bi.id
+    `;
+
+    const [rows] = await db.query(sql, params);
+
+    const bundlesMap = {};
+
+    rows.forEach(item => {
+      const bundleId = item.branch_bundle_id;
+
+      if (!bundlesMap[bundleId]) {
+        bundlesMap[bundleId] = {
+          branch_bundle_id: item.branch_bundle_id,
+          branch_id: item.branch_id,
+          branch_name: item.branch_name,
+          barangay_id: item.barangay_id,
+          barangay_name: item.barangay_name,
+          municipality: item.municipality,
+
+          bundle_id: item.bundle_id,
+          bundle_name: item.bundle_name,
+          description: item.description,
+          bundle_image: item.bundle_image,
+          role: item.allowed_role,
+          is_active: item.is_active,
+
+          branch_bundle_price_id: item.branch_bundle_price_id ?? null,
+          price: item.branch_price !== null ? item.branch_price : item.default_price,
+          discounted_price: item.branch_discounted_price !== null ? item.branch_discounted_price : item.default_discounted_price,
+
+          products: []
+        };
+      }
+
+      if (item.product_id) {
+        bundlesMap[bundleId].products.push({
+          product_id: item.product_id,
+          product_name: item.product_name,
+          product_image: item.product_image,
+          price: item.product_price,
+          discounted_price: item.product_discounted_price,
+          quantity: item.quantity
+        });
+      }
+    });
+
+    res.json({ bundles: Object.values(bundlesMap) });
+
+  } catch (error) {
+    console.error("ERROR /buyer/bundles:", error);
+    res.status(500).json({
+      success: false,
+      error: "Server error.",
+    });
+  }
+});
 
 // -----------------------------------------------------
 // EDIT BUNDLE

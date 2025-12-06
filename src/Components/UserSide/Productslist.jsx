@@ -89,12 +89,17 @@ export default function Productslist() {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        // 🔵 FIXED: IMAGE NOW INCLUDED
+        // 🔵 ADD BRANCH INFO TO BUNDLE
         const formatted = res.data.bundles.map((b) => ({
           ...b,
           image_url: b.bundle_image
             ? `${BASE_URL}/bundles/images/${b.bundle_image}`
             : null,
+          seller: {
+            name: b.branch_name || "-",
+            barangay: b.barangay_name || "-", // if you want barangay name
+            municipality: b.municipality || "-", // optional: fetch from API if needed
+          },
         }));
 
         setBundles(formatted);
@@ -120,9 +125,7 @@ export default function Productslist() {
         if (diff <= 0) newTimers[p.product_id] = "Discount expired";
         else {
           const hours = Math.floor(diff / (1000 * 60 * 60));
-          const minutes = Math.floor(
-            (diff % (1000 * 60 * 60)) / (1000 * 60)
-          );
+          const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
           const seconds = Math.floor((diff % (1000 * 60)) / 1000);
           newTimers[p.product_id] = `${hours}h ${minutes}m ${seconds}s`;
         }
@@ -144,9 +147,8 @@ export default function Productslist() {
     selectedMunicipality ? p.seller.municipality === selectedMunicipality : true
   );
 
-  // 🔵 FILTER BUNDLES BY MUNICIPALITY
   const filteredBundles = bundles.filter((b) =>
-    selectedMunicipality ? b.branch_municipality === selectedMunicipality : true
+    selectedMunicipality ? b.seller.municipality === selectedMunicipality : true
   );
 
   const handleBuyClick = (product) => {
@@ -190,7 +192,7 @@ export default function Productslist() {
               Coming Soon
             </h3>
             <p className="text-gray-600 text-sm mb-2 line-clamp-2 flex-grow">
-              Placeholder product description.
+              Placeholder description.
             </p>
             <div className="flex items-center justify-between mt-auto">
               <span className="text-gray-500 text-sm">Seller info</span>
@@ -206,7 +208,6 @@ export default function Productslist() {
         </>
       ) : (
         <>
-          {/* IMAGE FIXED HERE */}
           <div className="w-full h-48 bg-gray-200 flex items-center justify-center flex-shrink-0">
             {item.image_url ? (
               <img
@@ -303,18 +304,12 @@ export default function Productslist() {
           </select>
         </div>
 
-        {/* 🔵 BUNDLES */}
+        {/* BUNDLES */}
         <div className="mb-20 relative">
           <h3 className="text-2xl font-bold text-white mb-6">Bundles</h3>
-
           <Swiper
             key={displayBundles.length}
             modules={[Navigation]}
-            navigation={
-              displayBundles.length > 3
-                ? { nextEl: ".bundle-next", prevEl: ".bundle-prev" }
-                : false
-            }
             loop={displayBundles.length > 3}
             spaceBetween={20}
             slidesPerView={1}
@@ -328,17 +323,6 @@ export default function Productslist() {
               <SwiperSlide key={index}>{renderCard(item)}</SwiperSlide>
             ))}
           </Swiper>
-
-          {displayBundles.length > 3 && (
-            <>
-              <div className="hidden md:block bundle-prev absolute -left-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full">
-                ❮
-              </div>
-              <div className="hidden md:block bundle-next absolute -right-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full">
-                ❯
-              </div>
-            </>
-          )}
         </div>
 
         {/* Discounted Products */}
@@ -346,15 +330,9 @@ export default function Productslist() {
           <h3 className="text-2xl font-bold text-white mb-6">
             Discounted Products
           </h3>
-
           <Swiper
             key={displayDiscounted.length}
             modules={[Navigation]}
-            navigation={
-              displayDiscounted.length > 3
-                ? { nextEl: ".discount-next", prevEl: ".discount-prev" }
-                : false
-            }
             loop={displayDiscounted.length > 3}
             spaceBetween={20}
             slidesPerView={1}
@@ -368,17 +346,6 @@ export default function Productslist() {
               <SwiperSlide key={index}>{renderCard(item)}</SwiperSlide>
             ))}
           </Swiper>
-
-          {displayDiscounted.length > 3 && (
-            <>
-              <div className="hidden md:block discount-prev absolute -left-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full">
-                ❮
-              </div>
-              <div className="hidden md:block discount-next absolute -right-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full">
-                ❯
-              </div>
-            </>
-          )}
         </div>
 
         {/* Regular Products */}
@@ -386,15 +353,9 @@ export default function Productslist() {
           <h3 className="text-2xl font-bold text-white mb-6">
             Regular Products
           </h3>
-
           <Swiper
             key={displayRegular.length}
             modules={[Navigation]}
-            navigation={
-              displayRegular.length > 3
-                ? { nextEl: ".products-next", prevEl: ".products-prev" }
-                : false
-            }
             loop={displayRegular.length > 3}
             spaceBetween={20}
             slidesPerView={1}
@@ -408,17 +369,6 @@ export default function Productslist() {
               <SwiperSlide key={index}>{renderCard(item)}</SwiperSlide>
             ))}
           </Swiper>
-
-          {displayRegular.length > 3 && (
-            <>
-              <div className="hidden md:block products-prev absolute -left-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full">
-                ❮
-              </div>
-              <div className="hidden md:block products-next absolute -right-14 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-white shadow-md p-3 rounded-full">
-                ❯
-              </div>
-            </>
-          )}
         </div>
 
         {filteredRegular.length === 0 &&
