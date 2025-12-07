@@ -1,13 +1,14 @@
-
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import OtpVerificationForm from "./OtpVerificationForm";
 const BASE_URL = import.meta.env.VITE_BASE_URL;
+
 export default function Userform({ setIsOtpActive, setOtpEmail }) {
   const [formData, setFormData] = useState({
     name: "",
+    home_address: "", // ✅ Added home_address
     municipality: "",
     barangay_id: "",
     contact_number: "+63",
@@ -108,6 +109,11 @@ export default function Userform({ setIsOtpActive, setOtpEmail }) {
       setLoading(false);
       return;
     }
+    if (!formData.home_address.trim()) {
+      toast.error("⚠️ Enter your Home Address.");
+      setLoading(false);
+      return;
+    }
 
     await sendOtpRequest();
     setLoading(false);
@@ -116,6 +122,7 @@ export default function Userform({ setIsOtpActive, setOtpEmail }) {
   const handleOtpVerified = () => {
     setFormData({
       name: "",
+      home_address: "", // Reset home_address
       municipality: "",
       barangay_id: "",
       contact_number: "+63",
@@ -150,6 +157,16 @@ export default function Userform({ setIsOtpActive, setOtpEmail }) {
             value={formData.name}
             onChange={handleChange}
             placeholder="Full Name"
+            required
+            className="col-span-1 md:col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
+          />
+
+          <input
+            type="text"
+            name="home_address"
+            value={formData.home_address}
+            onChange={handleChange}
+            placeholder="Home Address" // ✅ Added placeholder
             required
             className="col-span-1 md:col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
           />

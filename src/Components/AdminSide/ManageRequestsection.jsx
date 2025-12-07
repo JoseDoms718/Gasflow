@@ -173,6 +173,10 @@ export default function ManageRequestsSection() {
                 <span className="ml-1 text-gray-200">{selectedRequest.municipality}</span>
               </div>
               <div className="flex items-center gap-2">
+                <span className="font-semibold">Home Address:</span>
+                <span className="ml-1 text-gray-200">{selectedRequest.home_address || "N/A"}</span>
+              </div>
+              <div className="flex items-center gap-2">
                 <span className="font-semibold">Email:</span>
                 <span className="ml-1 text-gray-200">{selectedRequest.email}</span>
               </div>

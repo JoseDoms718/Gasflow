@@ -1,14 +1,16 @@
-
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
+
 const BASE_URL = import.meta.env.VITE_BASE_URL;
+
 export default function BusinessOwnerForm() {
   const [formData, setFormData] = useState({
     name: "",
+    home_address: "",
     municipality: "",
-    barangay: "", // holds barangay ID
+    barangay_id: "",
     contact_number: "+63",
     email: "",
     password: "",
@@ -28,12 +30,20 @@ export default function BusinessOwnerForm() {
   useEffect(() => {
     if (!formData.municipality) {
       setBarangays([]);
-      setFormData((prev) => ({ ...prev, barangay: "" }));
+      setFormData((prev) => ({ ...prev, barangay_id: "" }));
       return;
     }
+
     axios
       .get(`${BASE_URL}/barangays`, { params: { municipality: formData.municipality } })
-      .then((res) => setBarangays(res.data))
+      .then((res) => {
+        // Map backend response to match frontend expectations
+        const mapped = res.data.map((b) => ({
+          barangay_id: b.id,
+          barangay_name: b.name,
+        }));
+        setBarangays(mapped);
+      })
       .catch(() => toast.error("⚠️ Failed to load barangays."));
   }, [formData.municipality]);
 
@@ -41,7 +51,7 @@ export default function BusinessOwnerForm() {
     const { name, value, files } = e.target;
 
     if (name === "municipality") {
-      setFormData((prev) => ({ ...prev, municipality: value, barangay: "" }));
+      setFormData((prev) => ({ ...prev, municipality: value, barangay_id: "" }));
       return;
     }
 
@@ -78,34 +88,42 @@ export default function BusinessOwnerForm() {
       setLoading(false);
       return;
     }
+
     const phoneRegex = /^\+639\d{9}$/;
     if (!phoneRegex.test(formData.contact_number)) {
       toast.error("⚠️ Enter a valid PH number (+639XXXXXXXXX).");
       setLoading(false);
       return;
     }
+
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
       toast.error("⚠️ Enter a valid email address.");
       setLoading(false);
       return;
     }
-    if (!formData.municipality || !formData.barangay) {
+
+    if (!formData.municipality || !formData.barangay_id) {
       toast.error("⚠️ Select municipality and barangay.");
       setLoading(false);
       return;
     }
-    // Ensure at least one picture is selected
+
+    if (!formData.home_address.trim()) {
+      toast.error("⚠️ Enter your home/business address.");
+      setLoading(false);
+      return;
+    }
+
     if (!formData.picture || formData.picture.length === 0) {
       toast.error("⚠️ Please upload at least one picture of your business.");
       setLoading(false);
       return;
     }
 
-
     try {
       const data = new FormData();
-      Object.keys(formData).forEach((key) => {
+      for (let key in formData) {
         if (key === "picture") {
           for (let file of formData.picture) {
             data.append("picture", file);
@@ -114,7 +132,7 @@ export default function BusinessOwnerForm() {
         } else {
           data.append(key, formData[key]);
         }
-      });
+      }
 
       await axios.post(`${BASE_URL}/business-owner`, data, {
         headers: { "Content-Type": "multipart/form-data" },
@@ -124,8 +142,9 @@ export default function BusinessOwnerForm() {
 
       setFormData({
         name: "",
+        home_address: "",
         municipality: "",
-        barangay: "",
+        barangay_id: "",
         contact_number: "+63",
         email: "",
         password: "",
@@ -133,8 +152,10 @@ export default function BusinessOwnerForm() {
         picture: [],
         role: "business_owner",
       });
+
     } catch (err) {
       console.error("❌ Registration error:", err);
+
       if (
         err.response?.data?.error?.toLowerCase().includes("duplicate") ||
         err.response?.data?.error?.toLowerCase().includes("email")
@@ -155,6 +176,7 @@ export default function BusinessOwnerForm() {
           onSubmit={handleRegister}
           className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-900 text-white p-6 rounded-xl shadow-md"
         >
+          {/* FULL NAME */}
           <input
             type="text"
             name="name"
@@ -162,44 +184,54 @@ export default function BusinessOwnerForm() {
             onChange={handleChange}
             placeholder="Full Name"
             required
-            className="col-span-1 md:col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
+            className="col-span-1 md:col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900"
           />
 
+          {/* HOME ADDRESS */}
+          <input
+            type="text"
+            name="home_address"
+            value={formData.home_address}
+            onChange={handleChange}
+            placeholder="Home / Business Address"
+            required
+            className="col-span-1 md:col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900"
+          />
+
+          {/* MUNICIPALITY */}
           <select
             name="municipality"
             value={formData.municipality}
             onChange={handleChange}
             required
-            className="w-full p-4 rounded-full bg-gray-100 text-gray-900 focus:outline-none"
+            className="w-full p-4 rounded-full bg-gray-100 text-gray-900"
           >
-            <option value="" disabled>
-              Select Municipality
-            </option>
+            <option value="" disabled>Select Municipality</option>
             {municipalities.map((muni, i) => (
-              <option key={i} value={muni}>
-                {muni}
-              </option>
+              <option key={i} value={muni}>{muni}</option>
             ))}
           </select>
 
+          {/* BARANGAY */}
           <select
-            name="barangay"
-            value={formData.barangay}
+            name="barangay_id"
+            value={formData.barangay_id}
             onChange={handleChange}
             required
             disabled={!formData.municipality}
-            className="w-full p-4 rounded-full bg-gray-100 text-gray-900 focus:outline-none"
+            className="w-full p-4 rounded-full bg-gray-100 text-gray-900"
           >
             <option value="" disabled>
               {formData.municipality ? "Select Barangay" : "Select Municipality first"}
             </option>
             {barangays.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
+              <option key={b.barangay_id} value={b.barangay_id}>
+                {b.barangay_name}
               </option>
             ))}
           </select>
 
+          {/* CONTACT NUMBER */}
           <input
             type="tel"
             name="contact_number"
@@ -208,9 +240,10 @@ export default function BusinessOwnerForm() {
             placeholder="+639XXXXXXXXX"
             maxLength="13"
             required
-            className="col-span-1 md:col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
+            className="col-span-1 md:col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900"
           />
 
+          {/* EMAIL */}
           <input
             type="email"
             name="email"
@@ -218,9 +251,10 @@ export default function BusinessOwnerForm() {
             onChange={handleChange}
             placeholder="Email Address"
             required
-            className="col-span-1 md:col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
+            className="col-span-1 md:col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900"
           />
 
+          {/* PASSWORD */}
           <div className="col-span-1 md:col-span-2 relative">
             <input
               type={showPassword ? "text" : "password"}
@@ -230,7 +264,7 @@ export default function BusinessOwnerForm() {
               placeholder="Password"
               required
               minLength={8}
-              className="w-full p-4 pr-12 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
+              className="w-full p-4 pr-12 rounded-full bg-gray-100 text-gray-900"
             />
             <button
               type="button"
@@ -241,6 +275,7 @@ export default function BusinessOwnerForm() {
             </button>
           </div>
 
+          {/* CONFIRM PASSWORD */}
           <div className="col-span-1 md:col-span-2 relative">
             <input
               type={showConfirmPassword ? "text" : "password"}
@@ -250,7 +285,7 @@ export default function BusinessOwnerForm() {
               placeholder="Confirm Password"
               required
               minLength={8}
-              className="w-full p-4 pr-12 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
+              className="w-full p-4 pr-12 rounded-full bg-gray-100 text-gray-900"
             />
             <button
               type="button"
@@ -261,6 +296,7 @@ export default function BusinessOwnerForm() {
             </button>
           </div>
 
+          {/* PICTURE UPLOAD */}
           <div className="col-span-1 md:col-span-2 text-left mt-2">
             <label className="text-gray-400 text-sm mb-2 block">
               Upload Business/Establishment Picture <span className="text-red-500">*</span>
@@ -276,11 +312,13 @@ export default function BusinessOwnerForm() {
             />
           </div>
 
-
+          {/* SUBMIT BUTTON */}
           <button
             type="submit"
             disabled={loading}
-            className={`col-span-1 md:col-span-2 w-full py-4 rounded-full font-semibold text-lg transition ${loading ? "bg-gray-600 cursor-not-allowed" : "bg-[#2d5ee0] hover:bg-[#244bb5] text-white"
+            className={`col-span-1 md:col-span-2 w-full py-4 rounded-full font-semibold text-lg transition ${loading
+                ? "bg-gray-600 cursor-not-allowed"
+                : "bg-[#2d5ee0] hover:bg-[#244bb5] text-white"
               }`}
           >
             {loading ? <Loader2 className="mx-auto animate-spin" size={22} /> : "Sign Up"}

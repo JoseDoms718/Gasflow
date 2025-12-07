@@ -24,11 +24,12 @@ function normalizePHNumber(number) {
   if (number.length > 13) number = number.slice(0, 13);
   return number;
 }
-// ✅ Add new user
+
+
 router.post("/", async (req, res) => {
   const conn = await db.getConnection();
   try {
-    const { name, email, contact_number, password, role, type, barangay_id } = req.body;
+    const { name, email, contact_number, password, role, type, home_address, barangay_id } = req.body;
 
     // Required fields
     if (!name || !email || !password || !role) {
@@ -74,18 +75,14 @@ router.post("/", async (req, res) => {
 
     await conn.beginTransaction();
 
-    // Create user
+    // Create user with home_address
     const [result] = await conn.query(
-      `INSERT INTO users (name, email, contact_number, password, role, type, barangay_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [name, email, normalizedContact, hashedPassword, role, userType, barangay_id || null]
+      `INSERT INTO users (name, email, contact_number, password, role, type, home_address, barangay_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, email, normalizedContact, hashedPassword, role, userType, home_address || null, barangay_id || null]
     );
 
     const userId = result.insertId;
-
-    // 🔥 IMPORTANT:
-    // You said: “make sure that you wouldn't need to make a branches when the added user is branch_manager”
-    // So we REMOVE the branch creation block completely.
 
     await conn.commit();
 
@@ -104,10 +101,10 @@ router.post("/", async (req, res) => {
   }
 });
 
+
 // --------------------
 // Fetch all users
 // --------------------
-// ✅ Fetch all users with barangay and municipality info
 router.get("/", async (req, res) => {
   try {
     const [results] = await db.query(
@@ -120,6 +117,7 @@ router.get("/", async (req, res) => {
         u.role,
         u.type,
         u.created_at,
+        u.home_address,      -- added this
         u.barangay_id,
         b.barangay_name,
         b.municipality
@@ -143,7 +141,7 @@ router.put("/:id", async (req, res) => {
   const userId = req.params.id;
   const fields = req.body;
 
-  const allowed = ["name", "email", "contact_number", "barangay_id", "role", "type", "password"];
+  const allowed = ["name", "email", "contact_number", "barangay_id", "role", "type", "password", "home_address"];
   const updates = {};
 
   for (const key of allowed) {

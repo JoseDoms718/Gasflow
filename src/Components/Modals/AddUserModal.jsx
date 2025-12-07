@@ -109,6 +109,18 @@ export default function AddUserModal({
                         ))}
                     </select>
 
+                    {!isBranchForm && (
+                        <input
+                            type="text"
+                            name="home_address"
+                            placeholder="Home Address"
+                            value={formData.home_address || ""}
+                            onChange={handleChange}
+                            required
+                            className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
+                        />
+                    )}
+
                     <select
                         name="barangay_id"
                         value={formData.barangay_id || ""}

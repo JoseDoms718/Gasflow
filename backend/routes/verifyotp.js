@@ -10,7 +10,6 @@ router.post("/", async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    // Validate input
     if (!email || !otp || otp.length !== 6) {
       return res.status(400).json({ error: "Email and valid 6-digit OTP required." });
     }
@@ -29,32 +28,53 @@ router.post("/", async (req, res) => {
     const now = new Date();
 
     // Validate OTP
-    if (record.otp !== otp) return res.status(400).json({ error: "Invalid OTP." });
-    if (now > new Date(record.expires_at)) return res.status(400).json({ error: "OTP expired." });
+    if (record.otp !== otp)
+      return res.status(400).json({ error: "Invalid OTP." });
 
-    // Delete OTP immediately to prevent reuse
+    if (now > new Date(record.expires_at))
+      return res.status(400).json({ error: "OTP expired." });
+
+    // Delete OTP to prevent reuse
     await db.query("DELETE FROM email_otps WHERE email = ?", [email]);
 
-    // Get user info from OTP record
-    const { name, contact_number, barangay_id, password, role } = record;
+    // Get user info (now includes home_address)
+    const { 
+      name, 
+      contact_number, 
+      barangay_id, 
+      password, 
+      role, 
+      home_address 
+    } = record;
+
     if (!name || !password || !role) {
       return res.status(400).json({ error: "Missing registration info in OTP record." });
     }
 
-    // Determine account type
     const accountType = role === "users" ? "active" : "pending";
+    const hashedPassword = password; // already hashed during OTP creation
 
-    // Use hashed password from OTP record
-    const hashedPassword = password;
-
-    // Insert user into users table
+    // Insert user (now includes home_address)
     await db.query(
-      "INSERT INTO users (name, email, contact_number, barangay_id, password, role, type) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [name, email, contact_number, barangay_id, hashedPassword, role, accountType]
+      `INSERT INTO users 
+       (name, email, contact_number, barangay_id, home_address, password, role, type) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        name,
+        email,
+        contact_number,
+        barangay_id,
+        home_address,   // ⬅️ ADDED
+        hashedPassword,
+        role,
+        accountType,
+      ]
     );
 
-    // ✅ Registration complete
-    res.json({ success: true, message: "🎉 Registration complete! Account created." });
+    res.json({
+      success: true,
+      message: "🎉 Registration complete! Account created.",
+    });
 
   } catch (err) {
     console.error("❌ Error verifying OTP:", err);

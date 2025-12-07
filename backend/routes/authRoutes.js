@@ -107,7 +107,8 @@ router.get("/me", authenticateToken, async (req, res) => {
     const [results] = await db.query(
       `
       SELECT u.user_id, u.name, u.email, u.contact_number, u.role, u.type,
-             u.barangay_id, b.barangay_name AS barangay, b.municipality
+             u.barangay_id, u.home_address,
+             b.barangay_name AS barangay, b.municipality
       FROM users u
       LEFT JOIN barangays b ON u.barangay_id = b.barangay_id
       WHERE u.user_id = ?
@@ -119,7 +120,7 @@ router.get("/me", authenticateToken, async (req, res) => {
       return res.status(404).json({ success: false, error: "User not found" });
     }
 
-    // ✅ Standardize response for frontend
+    // Standardize response for frontend
     const user = results[0];
     res.json({
       success: true,
@@ -133,11 +134,13 @@ router.get("/me", authenticateToken, async (req, res) => {
         barangay: user.barangay,
         municipality: user.municipality,
         contact_number: user.contact_number,
+        home_address: user.home_address ?? "", // ✅ include home_address
       },
     });
   } catch (err) {
     handleDbError(res, err, "Error fetching user info");
   }
 });
+
 
 module.exports = router;

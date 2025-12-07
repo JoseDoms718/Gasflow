@@ -124,7 +124,9 @@ export default function ManageUsersection() {
           type: formData.type,
           municipality: formData.municipality,
           barangay_id: formData.barangay_id,
+          home_address: formData.home_address, // <- Add this
         };
+
 
         res = await axios.post(`${BASE_URL}/users`, newUser);
       }

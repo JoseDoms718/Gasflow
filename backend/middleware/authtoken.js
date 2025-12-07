@@ -31,6 +31,7 @@ async function authenticateToken(req, res, next) {
       name: decoded.name,
       municipality: decoded.municipality,
       barangay_id: decoded.barangay_id,
+      home_address: decoded.home_address || null, // <-- Added home_address
     };
 
     // ✅ If branch_manager, fetch their branches

@@ -1,10 +1,10 @@
-
 import React, { useState, useEffect } from "react";
 import { X, Pencil, Check } from "lucide-react";
 import { toast } from "react-hot-toast";
 import axios from "axios";
 import EditBranchModal from "./EditBranchInfoModal";
 const BASE_URL = import.meta.env.VITE_BASE_URL;
+
 export default function EditProfileModal({ showModal, setShowModal, onProfileUpdated }) {
     const [user, setUser] = useState(null);
     const [editFields, setEditFields] = useState({});
@@ -39,6 +39,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                     setEditFields({
                         ...data.user,
                         barangay_id: data.user?.barangay_id ? String(data.user.barangay_id) : "",
+                        home_address: data.user?.home_address ?? "",
                     });
 
                     if (data.user.role === "branch_manager") {
@@ -143,6 +144,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                 return;
             }
 
+            // Update user info
             if (Object.keys(editFields).length > 0) {
                 const payload = { ...editFields };
                 if (payload.barangay_id === "") payload.barangay_id = null;
@@ -153,6 +155,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                 });
             }
 
+            // Update branch info if branch manager
             if (user.role === "branch_manager" && Object.keys(branchEditFields).length > 0) {
                 const formData = new FormData();
                 Object.entries(branchEditFields).forEach(([key, val]) => {
@@ -165,6 +168,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                 });
             }
 
+            // Change password if provided
             if (editPassword) {
                 if (editPassword === confirmPassword) {
                     await axios.put(
@@ -178,6 +182,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                 }
             }
 
+            // Refresh user data
             const refreshed = await axios.get(`${BASE_URL}/auth/me`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
@@ -186,9 +191,14 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                 onProfileUpdated(refreshed.data.user);
             }
 
-            setEditFields({});
+            // Reset state
+            setEditFields({
+                ...refreshed.data.user,
+                barangay_id: refreshed.data.user?.barangay_id ? String(refreshed.data.user.barangay_id) : "",
+                home_address: refreshed.data.user?.home_address ?? "",
+            });
             setEditMode({});
-            setBranchEditFields({});
+            setBranchEditFields(user.branch ?? {});
             setBranchBarangays([]);
             setEditPassword("");
             setConfirmPassword("");
@@ -237,7 +247,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                         <EditableField
                             label="Name"
                             field="name"
-                            value={editFields.name ?? user.name}
+                            value={editFields.name ?? ""}
                             editMode={editMode}
                             setEditMode={setEditMode}
                             setEditFields={setEditFields}
@@ -246,7 +256,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                             <EditableSelect
                                 label="Role"
                                 field="role"
-                                value={editFields.role ?? user.role ?? "User"}
+                                value={editFields.role ?? "User"}
                                 options={roles.map((r) => ({ value: r, label: r }))}
                                 editMode={editMode}
                                 setEditMode={setEditMode}
@@ -256,7 +266,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                         <EditableSelect
                             label="Municipality"
                             field="municipality"
-                            value={editFields.municipality ?? user.municipality}
+                            value={editFields.municipality ?? ""}
                             options={municipalities}
                             editMode={editMode}
                             setEditMode={setEditMode}
@@ -265,8 +275,16 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                         <EditableSelect
                             label="Barangay"
                             field="barangay_id"
-                            value={editFields.barangay_id ?? (user.barangay_id ? String(user.barangay_id) : "")}
+                            value={editFields.barangay_id ?? ""}
                             options={userBarangays}
+                            editMode={editMode}
+                            setEditMode={setEditMode}
+                            setEditFields={setEditFields}
+                        />
+                        <EditableField
+                            label="Home Address"
+                            field="home_address"
+                            value={editFields.home_address ?? ""}
                             editMode={editMode}
                             setEditMode={setEditMode}
                             setEditFields={setEditFields}
@@ -274,7 +292,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                         <EditableField
                             label="Email"
                             field="email"
-                            value={editFields.email ?? user.email}
+                            value={editFields.email ?? ""}
                             editMode={editMode}
                             setEditMode={setEditMode}
                             setEditFields={setEditFields}
@@ -282,7 +300,7 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                         <EditableField
                             label="Contact"
                             field="contact_number"
-                            value={editFields.contact_number ?? user.contact_number ?? "+63"}
+                            value={editFields.contact_number ?? "+63"}
                             editMode={editMode}
                             setEditMode={setEditMode}
                             setEditFields={setEditFields}
@@ -331,7 +349,11 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                     <button
                         className="px-4 py-2 bg-gray-500 rounded hover:bg-gray-600 text-white font-medium"
                         onClick={() => {
-                            setEditFields(user ?? {});
+                            setEditFields({
+                                ...user,
+                                barangay_id: user?.barangay_id ? String(user.barangay_id) : "",
+                                home_address: user?.home_address ?? "",
+                            });
                             setEditMode({});
                             setBranchEditFields(user.branch ?? {});
                             setBranchBarangays([]);
