@@ -8,7 +8,7 @@ const BASE_URL = import.meta.env.VITE_BASE_URL;
 
 // ───────── HELPERS ─────────
 const getFullBundleImageUrl = (url) =>
-    url ? `${BASE_URL}/bundles/images/${url.replace(/^\/+/, "")}` : "/placeholder.png";
+    url ? `${BASE_URL}/products/bundles/${url.replace(/^\/+/, "")}` : "/placeholder.png";
 
 const getFullProductImageUrl = (url) =>
     url ? `${BASE_URL}/products/images/${url.replace(/^\/+/, "")}` : "/placeholder.png";
@@ -103,12 +103,12 @@ export default function BuyBundleSection() {
 
     const handleQuantityChange = (e) => {
         let val = e.target.value.replace(/\D/g, "");
-        setQuantity(val === "" || parseInt(val) <= 0 ? "" : parseInt(val));
+        setQuantity(val === "" || parseInt(val) <= 0 ? 1 : parseInt(val));
     };
 
     const getBranchPrice = () => {
-        // Fallback order: branch discounted price → branch price → bundle discounted → bundle regular
-        const branchPriceObj = branchPrices.find((b) => b.branch_bundle_id == urlBranchBundleId) || branchPrices[0];
+        const branchPriceObj =
+            branchPrices.find((b) => b.branch_bundle_id == urlBranchBundleId) || branchPrices[0];
         return parseFloat(
             branchPriceObj?.branch_discounted_price ??
             branchPriceObj?.branch_price ??
@@ -124,14 +124,9 @@ export default function BuyBundleSection() {
         const cartKey = getUserCartKey();
         const cart = JSON.parse(localStorage.getItem(cartKey)) || [];
 
-        const branchPriceObj = branchPrices.find((b) => b.branch_bundle_id == urlBranchBundleId) || branchPrices[0];
-        const price = parseFloat(
-            branchPriceObj?.branch_discounted_price ??
-            branchPriceObj?.branch_price ??
-            bundle?.discounted_price ??
-            bundle?.price ??
-            0
-        );
+        const branchPriceObj =
+            branchPrices.find((b) => b.branch_bundle_id == urlBranchBundleId) || branchPrices[0];
+        const price = getBranchPrice();
 
         const existingIndex = cart.findIndex(
             (item) =>
@@ -172,7 +167,8 @@ export default function BuyBundleSection() {
             return toast.error("Please fill out all fields correctly.");
         }
 
-        const branchPriceObj = branchPrices.find((b) => b.branch_bundle_id == urlBranchBundleId) || branchPrices[0];
+        const branchPriceObj =
+            branchPrices.find((b) => b.branch_bundle_id == urlBranchBundleId) || branchPrices[0];
         if (!branchPriceObj || !branchPriceObj.branch_id) {
             return toast.error("Invalid branch bundle. Cannot checkout.");
         }
@@ -255,13 +251,12 @@ export default function BuyBundleSection() {
                                 type="number"
                                 value={quantity}
                                 onChange={handleQuantityChange}
-                                onBlur={() => { if (!quantity || quantity <= 0) setQuantity(1); }}
                                 min={1}
                                 className="w-20 px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg text-center
-                   appearance-none
-                   [&::-webkit-outer-spin-button]:appearance-none
-                   [&::-webkit-inner-spin-button]:appearance-none
-                   [&::-moz-appearance]:textfield"
+                                    appearance-none
+                                    [&::-webkit-outer-spin-button]:appearance-none
+                                    [&::-webkit-inner-spin-button]:appearance-none
+                                    [&::-moz-appearance]:textfield"
                             />
                         </div>
 

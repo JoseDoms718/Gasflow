@@ -90,7 +90,7 @@ export default function Productslist() {
         const formatted = res.data.bundles.map((b) => ({
           ...b,
           image_url: b.bundle_image
-            ? `${BASE_URL}/bundles/images/${b.bundle_image}`
+            ? `${BASE_URL}/products/bundles/${b.bundle_image}`
             : null,
           seller: {
             name: b.branch_name || "-",

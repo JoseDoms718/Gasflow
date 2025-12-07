@@ -522,13 +522,19 @@ router.get(
           o.ordered_at,
           o.delivered_at,
           o.inventory_deducted,
+
           b.barangay_name AS barangay,
           b.municipality AS municipality,
+
           oi.product_id,
           p.product_name,
           p.product_description,
           p.image_url AS product_image,
+
           oi.branch_bundle_id,
+          bb.bundle_id,
+          bb.branch_id AS bb_branch_id,
+          bb.added_at AS bb_added_at,
           bl.bundle_name,
           bl.description AS bundle_description,
           bl.bundle_image,
@@ -536,11 +542,13 @@ router.get(
           oi.price,
           oi.branch_id,
           br.branch_name
+
         FROM orders o
         LEFT JOIN order_items oi ON o.order_id = oi.order_id
         LEFT JOIN products p ON oi.product_id = p.product_id
+        LEFT JOIN branch_bundles bb ON oi.branch_bundle_id = bb.id
+        LEFT JOIN bundles bl ON bb.bundle_id = bl.bundle_id
         LEFT JOIN branches br ON oi.branch_id = br.branch_id
-        LEFT JOIN bundles bl ON oi.branch_bundle_id = bl.bundle_id
         LEFT JOIN barangays b ON o.barangay_id = b.barangay_id
         WHERE o.buyer_id = ?
         ORDER BY o.ordered_at DESC
@@ -552,7 +560,7 @@ router.get(
         return res.status(200).json({ success: true, orders: [] });
       }
 
-      // FORMATTER FIX HERE
+      // FORMATTER
       const formatBundleImage = (file) => {
         if (!file) return null;
         return `${process.env.BACKEND_URL || "http://localhost:5000"}/products/bundles/${file}`;
@@ -604,12 +612,13 @@ router.get(
           ordersMap[row.order_id].items.push({
             type: "bundle",
             branch_bundle_id: row.branch_bundle_id,
+            bundle_id: row.bundle_id,
             bundle_name: row.bundle_name,
             bundle_description: row.bundle_description,
             image_url: formatBundleImage(row.bundle_image),
             quantity: row.quantity,
-            price: row.price,
-            branch_id: row.branch_id,
+            price: row.price, // use price from order_items
+            branch_id: row.bb_branch_id,
             branch_name: row.branch_name,
           });
         }
@@ -622,6 +631,7 @@ router.get(
     }
   }
 );
+
 
 /* -------------------------------------------------------------------
    RETAILER / SELLER VIEW: /my-sold
