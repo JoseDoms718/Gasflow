@@ -16,10 +16,7 @@ const ALLOWED_SELLER_STATUSES = [
   "cancelled",
 ];
 
-const formatImageUrl = (fileName) =>
-  fileName ? `${process.env.BASE_URL}/products/images/${fileName}` : null;
-
-// Role check middleware (preserves your existing style)
+// Role check middleware
 function requireRole(...allowedRoles) {
   return (req, res, next) => {
     if (!allowedRoles.includes(req.user.role)) {
@@ -30,6 +27,22 @@ function requireRole(...allowedRoles) {
     next();
   };
 }
+
+
+const formatImageUrl = (fileName, type = "product") => {
+  if (!fileName) return null;
+
+  if (fileName.startsWith("http")) return fileName; // already full URL
+
+  if (type === "product") {
+    return `${process.env.BASE_URL}/products/images/${fileName}`;
+  } else if (type === "bundle") {
+    return `${process.env.BASE_URL}/products/bundles/${fileName}`;
+  }
+
+  return fileName;
+};
+
 
 /* -------------------------------------------------------------------
    GROUP ORDERS helper (keeps previous response shape but uses
@@ -629,40 +642,74 @@ router.get(
           o.contact_number,
           o.status,
           o.total_price,
-          o.delivery_fee,          -- always include delivery_fee
+          o.delivery_fee,
           o.ordered_at,
           o.delivered_at,
           o.inventory_deducted,
+
           b.barangay_name AS barangay,
-          b.municipality AS municipality,
+          b.municipality,
           u.name AS buyer_name,
           u.email AS buyer_email,
+
           oi.product_id,
+          oi.branch_bundle_id,
+          oi.quantity,
+          oi.price AS item_price,
+          oi.type,
+          oi.branch_id,
+
+          br.branch_name,
+
+          -- PRODUCT FIELDS
           p.product_name,
           p.product_description,
-          p.image_url AS image_url,
-          oi.quantity,
-          oi.price,
-          oi.branch_id,
-          br.branch_name
+          p.image_url AS product_image,
+
+          -- BRANCH BUNDLE FIELDS
+          bund.bundle_name,
+          bund.description AS bundle_description,
+          bund.bundle_image
+          
         FROM orders o
         JOIN order_items oi ON o.order_id = oi.order_id
-        JOIN products p ON oi.product_id = p.product_id
-        LEFT JOIN users u ON o.buyer_id = u.user_id
-        LEFT JOIN branches br ON oi.branch_id = br.branch_id
-        LEFT JOIN barangays b ON o.barangay_id = b.barangay_id
+
+        LEFT JOIN products p 
+            ON oi.product_id = p.product_id
+
+        LEFT JOIN branch_bundles bb 
+            ON oi.branch_bundle_id = bb.id
+
+        LEFT JOIN bundles bund
+            ON bb.bundle_id = bund.bundle_id
+
+        LEFT JOIN users u 
+            ON o.buyer_id = u.user_id
+
+        LEFT JOIN branches br 
+            ON oi.branch_id = br.branch_id
+
+        LEFT JOIN barangays b 
+            ON o.barangay_id = b.barangay_id
+
         WHERE 1
       `;
 
       const params = [];
 
-      // Filter by branch_manager's branches
-      if (req.user.role === "branch_manager" && req.user.branches && req.user.branches.length > 0) {
-        query += ` AND oi.branch_id IN (${req.user.branches.map(() => "?").join(",")})`;
+      // Filter by branch manager’s branches
+      if (
+        req.user.role === "branch_manager" &&
+        req.user.branches &&
+        req.user.branches.length > 0
+      ) {
+        query += ` AND oi.branch_id IN (${req.user.branches
+          .map(() => "?")
+          .join(",")})`;
         params.push(...req.user.branches);
       }
 
-      // Filter by retailer's branch
+      // Filter by retailer’s single branch
       if (req.user.role === "retailer") {
         query += " AND oi.branch_id = ?";
         params.push(req.user.branch_id);
@@ -672,10 +719,13 @@ router.get(
 
       const [rows] = await db.query(query, params);
 
-      if (!rows.length) return res.status(200).json({ success: true, orders: [] });
+      if (!rows.length)
+        return res.status(200).json({ success: true, orders: [] });
 
       const grouped = rows.reduce((acc, row) => {
         let order = acc.find((o) => o.order_id === row.order_id);
+
+        // Create the order record if not existing
         if (!order) {
           order = {
             order_id: row.order_id,
@@ -686,7 +736,7 @@ router.get(
             contact_number: row.contact_number,
             status: row.status,
             total_price: parseFloat(row.total_price) || 0,
-            delivery_fee: parseFloat(row.delivery_fee) || 0, // coerce to number here
+            delivery_fee: parseFloat(row.delivery_fee) || 0,
             ordered_at: row.ordered_at,
             delivered_at: row.delivered_at,
             inventory_deducted: row.inventory_deducted,
@@ -697,16 +747,35 @@ router.get(
           acc.push(order);
         }
 
-        order.items.push({
-          product_id: row.product_id,
-          product_name: row.product_name,
-          product_description: row.product_description,
-          image_url: formatImageUrl(row.image_url),
-          quantity: row.quantity,
-          price: parseFloat(row.price) || 0, // coerce item price too
-          branch_id: row.branch_id,
-          branch_name: row.branch_name || "Unknown",
-        });
+        // PRODUCT ITEM
+        if (row.product_id) {
+          order.items.push({
+            type: "product",
+            product_id: row.product_id,
+            product_name: row.product_name,
+            product_description: row.product_description,
+            image_url: formatImageUrl(row.product_image, "product"),
+            quantity: row.quantity,
+            price: parseFloat(row.item_price) || 0,
+            branch_id: row.branch_id,
+            branch_name: row.branch_name || "Unknown",
+          });
+        }
+
+        // BUNDLE ITEM
+        if (row.branch_bundle_id) {
+          order.items.push({
+            type: "bundle",
+            branch_bundle_id: row.branch_bundle_id,
+            bundle_name: row.bundle_name,
+            bundle_description: row.bundle_description,
+            bundle_image: formatImageUrl(row.bundle_image, "bundle"), // ✅ FIXED
+            quantity: row.quantity,
+            price: parseFloat(row.item_price) || 0,
+            branch_id: row.branch_id,
+            branch_name: row.branch_name || "Unknown",
+          });
+        }
 
         return acc;
       }, []);
@@ -714,7 +783,9 @@ router.get(
       return res.status(200).json({ success: true, orders: grouped });
     } catch (err) {
       console.error("❌ Error fetching my-sold:", err);
-      return res.status(500).json({ success: false, error: "Failed to fetch seller orders." });
+      return res
+        .status(500)
+        .json({ success: false, error: "Failed to fetch seller orders." });
     }
   }
 );

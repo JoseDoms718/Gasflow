@@ -46,11 +46,19 @@ export default function IncomingOrderSection() {
             );
           }
 
-          const items = order.items.map((item) => ({
-            ...item,
-            price: Number(item.price) || 0,
-            quantity: Number(item.quantity) || 0,
-          }));
+          const items = order.items.map((item) => {
+            const isBundle = item.type === "bundle";
+            return {
+              ...item,
+              display_name: isBundle ? item.bundle_name : item.product_name,
+              display_description: isBundle
+                ? item.bundle_description
+                : item.product_description,
+              display_image: isBundle ? item.bundle_image : item.image_url,
+              display_price: Number(item.price) || 0,
+              quantity: Number(item.quantity) || 0,
+            };
+          });
 
           return {
             ...order,
@@ -189,8 +197,8 @@ export default function IncomingOrderSection() {
                 setExpanded([]);
               }}
               className={`px-4 py-2 font-semibold border-b-2 transition ${activeTab === k
-                ? "border-gray-900 text-gray-900"
-                : "border-transparent text-gray-500 hover:text-gray-800"
+                  ? "border-gray-900 text-gray-900"
+                  : "border-transparent text-gray-500 hover:text-gray-800"
                 }`}
             >
               {statusLabels[k]}
@@ -229,20 +237,16 @@ export default function IncomingOrderSection() {
                 {/* COLLAPSE HEADER */}
                 <div
                   onClick={() => toggleExpand(order.order_id)}
-                  className={`flex justify-between items-center px-5 py-3 cursor-pointer ${open
-                    ? "bg-gray-200"
-                    : "bg-gray-100 hover:bg-gray-200"
+                  className={`flex justify-between items-center px-5 py-3 cursor-pointer ${open ? "bg-gray-200" : "bg-gray-100 hover:bg-gray-200"
                     }`}
                 >
                   <div>
                     <p className="font-bold text-gray-900">
-                      {order.items?.[0]?.product_name || "Order"}
+                      {order.items?.[0]?.display_name || "Order"}
                     </p>
                     <p className="text-sm text-gray-700">
                       Buyer:{" "}
-                      <span className="font-bold">
-                        {order.buyer_name}
-                      </span>
+                      <span className="font-bold">{order.buyer_name}</span>
                     </p>
                   </div>
 
@@ -266,27 +270,31 @@ export default function IncomingOrderSection() {
                             className="flex items-start gap-4 p-4 min-h-[150px] bg-gray-50 rounded-lg shadow-sm"
                           >
                             <img
-                              src={item.image_url}
-                              alt={item.product_name}
+                              src={item.display_image}
+                              alt={item.display_name}
                               className="w-32 h-32 object-cover rounded-lg flex-shrink-0"
                             />
 
                             <div className="flex flex-col justify-between">
                               <h3 className="text-lg font-semibold text-gray-900">
-                                {item.product_name}
+                                {item.display_name}
                               </h3>
+
+                              {item.display_description && (
+                                <p className="text-sm text-gray-700 mt-1 line-clamp-2">
+                                  {item.display_description}
+                                </p>
+                              )}
 
                               <p className="text-sm text-gray-700 mt-1">
                                 Qty:{" "}
-                                <span className="font-bold">
-                                  {item.quantity}
-                                </span>{" "}
-                                × ₱{item.price.toLocaleString()}
+                                <span className="font-bold">{item.quantity}</span>{" "}
+                                × ₱{item.display_price.toLocaleString()}
                               </p>
 
                               <p className="text-blue-600 font-semibold mt-1">
                                 Subtotal: ₱
-                                {(item.quantity * item.price).toLocaleString()}
+                                {(item.quantity * item.display_price).toLocaleString()}
                               </p>
                             </div>
                           </div>
@@ -295,12 +303,14 @@ export default function IncomingOrderSection() {
 
                       {/* RIGHT SIDE - INFO */}
                       <div className="bg-white rounded-xl shadow-md border p-6 text-sm text-gray-800 flex flex-col h-full">
-
-                        {/* INFO GRID (2 columns only) */}
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <p className="font-semibold text-gray-900">Delivery Address</p>
-                            <p className="text-gray-700">{order.barangay}, {order.municipality}</p>
+                            <p className="font-semibold text-gray-900">
+                              Delivery Address
+                            </p>
+                            <p className="text-gray-700">
+                              {order.barangay}, {order.municipality}
+                            </p>
                           </div>
 
                           <div>
@@ -309,7 +319,9 @@ export default function IncomingOrderSection() {
                           </div>
 
                           <div>
-                            <p className="font-semibold text-gray-900">Contact Number</p>
+                            <p className="font-semibold text-gray-900">
+                              Contact Number
+                            </p>
                             <p className="text-gray-700">{order.contact_number}</p>
                           </div>
 
@@ -333,11 +345,13 @@ export default function IncomingOrderSection() {
 
                           <div>
                             <p className="font-semibold text-gray-900">Delivery Fee</p>
-                            <p className="text-gray-700">₱{order.delivery_fee.toLocaleString()}</p>
+                            <p className="text-gray-700">
+                              ₱{order.delivery_fee.toLocaleString()}
+                            </p>
                           </div>
                         </div>
 
-                        {/* TOTAL ALWAYS AT BOTTOM */}
+                        {/* TOTAL */}
                         <div className="mt-auto pt-4 border-t">
                           <p className="font-semibold text-gray-900">Total Amount</p>
                           <p className="text-xl font-bold text-blue-700">
@@ -351,9 +365,7 @@ export default function IncomingOrderSection() {
                     <div className="flex justify-end gap-2 mt-5">
                       {nextStatus && (
                         <button
-                          onClick={() =>
-                            updateOrderStatus(order.order_id, nextStatus)
-                          }
+                          onClick={() => updateOrderStatus(order.order_id, nextStatus)}
                           className="px-5 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 shadow-sm transition"
                         >
                           Mark as {statusLabels[nextStatus]}
@@ -362,9 +374,7 @@ export default function IncomingOrderSection() {
 
                       {order.status !== "delivered" && (
                         <button
-                          onClick={() =>
-                            updateOrderStatus(order.order_id, "cancelled")
-                          }
+                          onClick={() => updateOrderStatus(order.order_id, "cancelled")}
                           className="px-5 py-2 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 shadow-sm transition"
                         >
                           Cancel
