@@ -281,14 +281,11 @@ router.get("/buyer/bundles", authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, error: "User role missing." });
     }
 
-    // Retailers & business owners MUST have a branch
-    if ((buyerRole === "retailer" || buyerRole === "business_owner") && !branchId) {
-      return res.status(400).json({ success: false, error: "Branch required for this role." });
-    }
-
+    // Branch filter
     const branchFilter = branchId ? "bb.branch_id = ?" : "1=1";
     const params = branchId ? [branchId, buyerRole] : [buyerRole];
 
+    // SQL query with role filtering
     const sql = `
       SELECT 
         bb.id AS branch_bundle_id,

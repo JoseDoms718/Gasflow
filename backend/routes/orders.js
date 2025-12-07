@@ -884,6 +884,7 @@ router.put(
   authenticateToken,
   requireRole("users", "business_owner", "retailer"),
   async (req, res) => {
+    const connection = await db.getConnection();
     try {
       const { id } = req.params;
       const { status } = req.body;
@@ -914,109 +915,109 @@ router.put(
         return res.json({ success: false, message: `Order is already marked as ${status}.` });
       }
 
-      const connection = await db.getConnection();
+      await connection.beginTransaction();
+
+      // --------------------------
+      // PENDING → PREPARING LOGGING
+      // --------------------------
+      if (currentStatus === "pending" && status === "preparing") {
+        const [items] = await connection.query(
+          "SELECT product_id, quantity, type FROM order_items WHERE order_id = ?",
+          [id]
+        );
+
+        for (const item of items) {
+          const [inv] = await connection.query(
+            "SELECT stock FROM inventory WHERE product_id = ? AND state = ? LIMIT 1",
+            [item.product_id, item.type]
+          );
+
+          const previous_stock = inv.length ? inv[0].stock : 0;
+          const new_stock = previous_stock; // no deduction
+
+          await connection.query(
+            `INSERT INTO inventory_logs 
+            (product_id, state, user_id, type, quantity, previous_stock, new_stock, description)
+            VALUES (?, ?, ?, 'pending_order', ?, ?, ?, ?)`,
+            [
+              item.product_id,
+              item.type,
+              user_id,
+              item.quantity,
+              previous_stock,
+              new_stock,
+              `Order #${id} moved from pending to preparing`
+            ]
+          );
+        }
+      }
+
+      // --------------------------
+      // CANCEL → RESTORE INVENTORY
+      // --------------------------
+      if (status === "cancelled" && inventoryDeducted) {
+        const [items] = await connection.query(
+          "SELECT product_id, quantity, type FROM order_items WHERE order_id = ?",
+          [id]
+        );
+
+        for (const item of items) {
+          if (item.type === "refill") continue; // skip refill
+
+          await adjustInventory(item.product_id, Number(item.quantity), connection);
+
+          const [inv] = await connection.query(
+            "SELECT stock FROM inventory WHERE product_id = ? AND state = ? LIMIT 1",
+            [item.product_id, item.type]
+          );
+
+          const previous_stock = inv.length ? inv[0].stock - item.quantity : 0;
+          const new_stock = previous_stock + item.quantity;
+
+          await connection.query(
+            `INSERT INTO inventory_logs
+            (product_id, state, user_id, type, quantity, previous_stock, new_stock, description)
+            VALUES (?, ?, ?, 'order_cancelled', ?, ?, ?, ?)`,
+            [
+              item.product_id,
+              item.type,
+              user_id,
+              item.quantity,
+              previous_stock,
+              new_stock,
+              `Order #${id} cancelled – stock restored`
+            ]
+          );
+        }
+
+        await connection.query("UPDATE orders SET inventory_deducted = 0 WHERE order_id = ?", [id]);
+      }
+
+      // --------------------------
+      // DELIVERED → Update delivered_at
+      // --------------------------
+      if (status === "delivered") {
+        await connection.query(
+          "UPDATE orders SET status = ?, delivered_at = NOW() WHERE order_id = ?",
+          [status, id]
+        );
+      } else {
+        await connection.query(
+          "UPDATE orders SET status = ? WHERE order_id = ?",
+          [status, id]
+        );
+      }
+
+      await connection.commit();
+      connection.release();
+
+      // --------------------------
+      // Emit socket safely
+      // --------------------------
+      const io = req.app.get("io");
+      const BASE_URL = process.env.BASE_URL ? process.env.BASE_URL.replace(/\/$/, "") : "";
+
       try {
-        await connection.beginTransaction();
-
-        // --------------------------
-        // PENDING → PREPARING LOGGING
-        // --------------------------
-        if (currentStatus === "pending" && status === "preparing") {
-          const [items] = await connection.query(
-            "SELECT product_id, quantity, type FROM order_items WHERE order_id = ?",
-            [id]
-          );
-
-          for (const item of items) {
-            const [inv] = await connection.query(
-              "SELECT stock FROM inventory WHERE product_id = ? AND state = ? LIMIT 1",
-              [item.product_id, item.type]
-            );
-
-            const previous_stock = inv.length ? inv[0].stock : 0;
-            const new_stock = previous_stock; // pending → preparing does NOT deduct stock
-
-            await connection.query(
-              `INSERT INTO inventory_logs 
-              (product_id, state, user_id, type, quantity, previous_stock, new_stock, description)
-              VALUES (?, ?, ?, 'pending_order', ?, ?, ?, ?)`,
-              [
-                item.product_id,
-                item.type, // 'full' or 'refill'
-                user_id,
-                item.quantity,
-                previous_stock,
-                new_stock,
-                `Order #${id} moved from pending to preparing`
-              ]
-            );
-          }
-        }
-
-        // --------------------------
-        // CANCEL → RESTORE INVENTORY
-        // --------------------------
-        if (status === "cancelled" && inventoryDeducted) {
-          const [items] = await connection.query(
-            "SELECT product_id, quantity, type FROM order_items WHERE order_id = ?",
-            [id]
-          );
-
-          for (const item of items) {
-            // Skip refill if inventory was not deducted
-            if (item.type === "refill") continue;
-
-            await adjustInventory(item.product_id, Number(item.quantity), connection);
-
-            const [inv] = await connection.query(
-              "SELECT stock FROM inventory WHERE product_id = ? AND state = ? LIMIT 1",
-              [item.product_id, item.type]
-            );
-
-            const previous_stock = inv.length ? inv[0].stock - item.quantity : 0;
-            const new_stock = previous_stock + item.quantity;
-
-            await connection.query(
-              `INSERT INTO inventory_logs
-              (product_id, state, user_id, type, quantity, previous_stock, new_stock, description)
-              VALUES (?, ?, ?, 'order_cancelled', ?, ?, ?, ?)`,
-              [
-                item.product_id,
-                item.type, // 'full' or 'refill'
-                user_id,
-                item.quantity,
-                previous_stock,
-                new_stock,
-                `Order #${id} cancelled – stock restored`
-              ]
-            );
-          }
-
-          await connection.query("UPDATE orders SET inventory_deducted = 0 WHERE order_id = ?", [id]);
-        }
-
-        // --------------------------
-        // DELIVERED → Update delivered_at
-        // --------------------------
-        if (status === "delivered") {
-          await connection.query(
-            "UPDATE orders SET status = ?, delivered_at = NOW() WHERE order_id = ?",
-            [status, id]
-          );
-        } else {
-          await connection.query(
-            "UPDATE orders SET status = ? WHERE order_id = ?",
-            [status, id]
-          );
-        }
-
-        await connection.commit();
-        connection.release();
-
-        // --------------------------
-        // Emit socket event
-        // --------------------------
-        const io = req.app.get("io");
         const [updatedOrderRows] = await db.query(
           `SELECT o.*,
             CONCAT('[', GROUP_CONCAT(
@@ -1026,7 +1027,7 @@ router.put(
                 '","quantity":', oi.quantity,
                 ',"price":', oi.price,
                 ',"type":"', oi.type,
-                '","image_url":"', ?, '/', REPLACE(p.image_url, '"', '\\"'),
+                '","image_url":"', COALESCE(?, ''), '/', COALESCE(REPLACE(p.image_url, '"', '\\"'), ''),
                 '"}'
               )
             ), ']') AS items
@@ -1035,35 +1036,36 @@ router.put(
           JOIN products p ON oi.product_id = p.product_id
           WHERE o.order_id = ?
           GROUP BY o.order_id`,
-          [process.env.BASE_URL + "products/images", id]
+          [BASE_URL + "/products/images", id]
         );
 
         let updatedOrder = updatedOrderRows[0];
         updatedOrder.items = updatedOrder.items ? JSON.parse(updatedOrder.items) : [];
 
         if (io) io.emit("order-updated", updatedOrder);
-
-        return res.json({
-          success: true,
-          message:
-            status === "cancelled"
-              ? "Order cancelled and stock restored."
-              : status === "preparing"
-              ? "Order moved to preparing."
-              : "Order marked as delivered.",
-        });
-      } catch (errTx) {
-        await connection.rollback();
-        connection.release();
-        console.error("TX error:", errTx);
-        return res.status(500).json({ success: false, error: "Failed to update order." });
+      } catch (errEmit) {
+        console.error("Socket or updatedOrder fetch error:", errEmit);
       }
+
+      return res.json({
+        success: true,
+        message:
+          status === "cancelled"
+            ? "Order cancelled and stock restored."
+            : status === "preparing"
+            ? "Order moved to preparing."
+            : "Order marked as delivered.",
+      });
+
     } catch (err) {
+      await connection.rollback();
+      connection.release();
       console.error("Server error:", err);
       return res.status(500).json({ success: false, error: "Failed to update order status." });
     }
   }
 );
+
 
 
 /* -------------------------------------------------------------------
@@ -1320,7 +1322,6 @@ router.put(
     }
   }
 );
-
 
 router.get("/inventory/logs", async (req, res) => {
   try {
