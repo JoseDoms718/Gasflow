@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { ArrowLeft, Tag, X } from "lucide-react";
+import { ArrowLeft, Tag } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation } from "swiper/modules";
@@ -8,17 +8,21 @@ import "swiper/css/navigation";
 import axios from "axios";
 import LogoWhite from "../../assets/Design/LogoWhite.png";
 import { toast } from "react-hot-toast";
+import WalkInOrderModal from "../Modals/WalkInOrderModal";
 
 export default function WalkInOrders() {
   const [regularProducts, setRegularProducts] = useState([]);
   const [discountedProducts, setDiscountedProducts] = useState([]);
+  const [branchBundles, setBranchBundles] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [formData, setFormData] = useState({
     name: "",
     contact: "+63",
     barangay: "",
+    barangay_id: "",
     municipality: "",
+    delivery_address: "",
   });
   const [barangays, setBarangays] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -55,6 +59,19 @@ export default function WalkInOrders() {
     setFormData({ ...formData, contact: value });
   };
 
+  const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+
+  const handleToggleRefill = (isRefill) => {
+    if (!selectedProduct) return;
+    const updated = { ...selectedProduct, isRefill };
+    setSelectedProduct(updated);
+
+    const updateArr = (arr) => arr.map((p) => (p.product_id === updated.product_id ? updated : p));
+    setRegularProducts(updateArr);
+    setDiscountedProducts(updateArr);
+  };
+
+  // Fetch Products
   const fetchProducts = useCallback(async () => {
     if (!token) return;
     try {
@@ -80,21 +97,48 @@ export default function WalkInOrders() {
     }
   }, [token]);
 
+  // Fetch Branch Bundles
+  const fetchBundles = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await axios.get(`${BASE_URL}/bundles/branch/my-bundles`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.data.success) {
+        const bundles = res.data.branchBundles.map((b) => ({
+          ...b,
+          bundle_image: b.bundle_image
+            ? b.bundle_image.startsWith("http")
+              ? b.bundle_image
+              : `${BASE_URL}/products/bundles/${b.bundle_image}`
+            : "https://via.placeholder.com/300x200",
+        }));
+        setBranchBundles(bundles);
+      }
+    } catch (err) {
+      console.error("❌ Failed to fetch bundles:", err);
+      toast.error("Failed to load branch bundles");
+    }
+  }, [token]);
+
   useEffect(() => {
     fetchProducts();
-  }, [fetchProducts]);
+    fetchBundles();
+  }, [fetchProducts, fetchBundles]);
 
+  // Fetch Barangays
   useEffect(() => {
     if (!formData.municipality) {
       setBarangays([]);
-      setFormData((prev) => ({ ...prev, barangay: "" }));
+      setFormData((prev) => ({ ...prev, barangay: "", barangay_id: "" }));
       return;
     }
     const fetchBarangays = async () => {
       try {
         const res = await axios.get(`${BASE_URL}/barangays?municipality=${formData.municipality}`);
         setBarangays(res.data || []);
-        setFormData((prev) => ({ ...prev, barangay: "" }));
+        setFormData((prev) => ({ ...prev, barangay: "", barangay_id: "" }));
       } catch (err) {
         console.error("❌ Failed to fetch barangays:", err);
         toast.error("Failed to load barangays");
@@ -103,42 +147,60 @@ export default function WalkInOrders() {
     fetchBarangays();
   }, [formData.municipality]);
 
-  const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
-
-  const handleToggleRefill = (isRefill) => {
-    if (!selectedProduct) return;
-    const updated = { ...selectedProduct, isRefill };
-    setSelectedProduct(updated);
-
-    const updateArr = (arr) => arr.map((p) => (p.product_id === updated.product_id ? updated : p));
-    setRegularProducts(updateArr);
-    setDiscountedProducts(updateArr);
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedProduct) return;
-    if (quantity > selectedProduct.stock) {
-      toast.error(`❌ Only ${selectedProduct.stock} items in stock!`);
+
+    const isBundle = !!selectedProduct.branch_bundle_id;
+
+    // Check stock for regular products
+    if (!isBundle) {
+      const stockAvailable = selectedProduct.stock ?? 1;
+      if (quantity > stockAvailable) {
+        toast.error(`❌ Only ${stockAvailable} items in stock!`);
+        return;
+      }
+    }
+
+    // Check barangay selection
+    if (!formData.barangay_id) {
+      toast.error("❌ Please select a valid barangay.");
       return;
     }
+
     setLoading(true);
 
     try {
-      // Construct items array for backend
-      const items = [
-        {
-          product_id: selectedProduct.product_id,
+      let itemsPayload = [];
+
+      if (isBundle) {
+        // Bundle order
+        itemsPayload.push({
+          branch_bundle_id: selectedProduct.branch_bundle_id, // send branch_bundle_id
+          branch_id: selectedProduct.branch_id,
           quantity,
-          refill: selectedProduct.isRefill, // boolean
-        },
-      ];
+          type: "bundle", // type is bundle
+          product_id: null, // product_id is null for bundles
+          refill: null, // refill not applicable
+        });
+      } else {
+        // Regular product order
+        itemsPayload.push({
+          product_id: selectedProduct.product_id, // send product_id
+          branch_id: selectedProduct.branch_id,
+          quantity,
+          type: "regular", // type is regular
+          branch_bundle_id: null, // bundle_id not applicable
+          refill: selectedProduct.isRefill,
+        });
+      }
 
       const orderData = {
-        items,
-        customer_name: formData.name,
+        items: itemsPayload,
+        full_name: formData.name,
         contact_number: formData.contact,
-        address: `${formData.barangay}, ${formData.municipality}`,
+        barangay_id: formData.barangay_id,
+        delivery_address: formData.delivery_address || "",
       };
 
       const res = await axios.post(`${BASE_URL}/orders/walk-in`, orderData, {
@@ -147,19 +209,15 @@ export default function WalkInOrders() {
 
       if (res.status === 200 || res.status === 201) {
         toast.success("✅ Walk-in order created successfully!");
-
-        // Update stock locally
-        const updateStock = (arr) =>
-          arr.map((p) =>
-            p.product_id === selectedProduct.product_id
-              ? { ...p, stock: p.stock - quantity }
-              : p
-          );
-        setRegularProducts(updateStock);
-        setDiscountedProducts(updateStock);
-
         setSelectedProduct(null);
-        setFormData({ name: "", contact: "+63", barangay: "", municipality: "" });
+        setFormData({
+          name: "",
+          contact: "+63",
+          barangay: "",
+          barangay_id: "",
+          municipality: "",
+          delivery_address: "",
+        });
         setQuantity(1);
       }
     } catch (err) {
@@ -170,6 +228,7 @@ export default function WalkInOrders() {
     }
   };
 
+  // Product Card
   const ProductCard = ({ product, isDiscounted }) => (
     <div className="bg-gray-800 rounded-2xl shadow-md overflow-hidden flex flex-col justify-between hover:scale-[1.02] transition-transform duration-200 border border-gray-700">
       <div onClick={() => setSelectedProduct(product)} className="cursor-pointer">
@@ -177,13 +236,9 @@ export default function WalkInOrders() {
         <div className="p-4">
           <h2 className="text-lg font-semibold text-white truncate">{product.product_name}</h2>
           <p className="text-gray-400 text-sm mt-1">
-            Stock: <span className={`${product.stock > 0 ? "text-green-400" : "text-red-500"} font-semibold`}>
-              {product.stock}
-            </span>
+            Stock: <span className={`${product.stock > 0 ? "text-green-400" : "text-red-500"} font-semibold`}>{product.stock}</span>
           </p>
-          {product.product_description && (
-            <p className="text-gray-300 text-sm mt-2 line-clamp-3">{product.product_description}</p>
-          )}
+          {product.product_description && <p className="text-gray-300 text-sm mt-2 line-clamp-3">{product.product_description}</p>}
           <p className="text-green-400 font-bold text-lg mt-2">
             ₱{formatPrice(product.isRefill ? product.refill_price : product.discounted_price || product.price)}
           </p>
@@ -202,6 +257,31 @@ export default function WalkInOrders() {
     </div>
   );
 
+  // Bundle Card
+  const BundleCard = ({ bundle }) => (
+    <div className="bg-gray-800 rounded-2xl shadow-md overflow-hidden flex flex-col justify-between hover:scale-[1.02] transition-transform duration-200 border border-gray-700">
+      <div className="cursor-pointer" onClick={() => setSelectedProduct(bundle)}>
+        <img src={bundle.bundle_image} alt={bundle.bundle_name} className="h-52 w-full object-cover" />
+        <div className="p-4">
+          <h2 className="text-lg font-semibold text-white truncate">{bundle.bundle_name}</h2>
+          {bundle.description && <p className="text-gray-300 text-sm mt-2 line-clamp-3">{bundle.description}</p>}
+          <p className="text-green-400 font-bold text-lg mt-2">
+            ₱{formatPrice(bundle.branch_discounted_price || bundle.branch_price)}
+          </p>
+          {bundle.branch_discounted_price && (
+            <p className="text-gray-400 line-through text-sm mt-1">₱{formatPrice(bundle.branch_price)}</p>
+          )}
+        </div>
+      </div>
+      <button
+        onClick={() => setSelectedProduct(bundle)}
+        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-b-2xl transition"
+      >
+        Buy Now
+      </button>
+    </div>
+  );
+
   return (
     <div className="bg-gray-900 min-h-screen text-white flex flex-col overflow-x-hidden">
       {/* Header */}
@@ -216,10 +296,32 @@ export default function WalkInOrders() {
         </div>
       </div>
 
-      {/* Products Section */}
-      <div className="flex-1 flex flex-col items-center px-6 py-16 gap-20 relative">
-        {/* Discounted */}
-        <div className="w-full max-w-6xl relative">
+      <div className="flex-1 flex flex-col items-center px-6 py-16 gap-20 relative w-full max-w-6xl mx-auto">
+        {/* Branch Bundles */}
+        <div className="w-full mb-12">
+          <h2 className="text-xl font-semibold mb-4">Available Bundles</h2>
+          {branchBundles.length > 0 ? (
+            <Swiper
+              modules={[Navigation]}
+              navigation={{ prevEl: ".prev-btn3", nextEl: ".next-btn3" }}
+              slidesPerView={3}
+              spaceBetween={30}
+              loop={branchBundles.length > 3}
+              breakpoints={{ 640: { slidesPerView: 1 }, 768: { slidesPerView: 2 }, 1024: { slidesPerView: 3 } }}
+            >
+              {branchBundles.map((b) => (
+                <SwiperSlide key={b.branch_bundle_id}>
+                  <BundleCard bundle={b} />
+                </SwiperSlide>
+              ))}
+            </Swiper>
+          ) : (
+            <p className="text-gray-500">No bundles found.</p>
+          )}
+        </div>
+
+        {/* Discounted Products */}
+        <div className="w-full mb-12">
           <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
             <Tag className="w-5 h-5 text-green-400" /> Discounted Items
           </h2>
@@ -243,8 +345,8 @@ export default function WalkInOrders() {
           )}
         </div>
 
-        {/* Regular */}
-        <div className="w-full max-w-6xl relative">
+        {/* Regular Products */}
+        <div className="w-full mb-12">
           <h2 className="text-xl font-semibold mb-4">Available Products</h2>
           {regularProducts.length > 0 ? (
             <Swiper
@@ -267,87 +369,24 @@ export default function WalkInOrders() {
         </div>
       </div>
 
-      {/* Product Modal */}
+      {/* Modal */}
       {selectedProduct && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4" onClick={() => setSelectedProduct(null)}>
-          <div className="bg-gray-800 rounded-2xl shadow-lg w-full max-w-md overflow-hidden relative" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setSelectedProduct(null)} className="absolute top-3 right-3 text-gray-300 hover:text-white transition">
-              <X className="w-6 h-6" />
-            </button>
-
-            <img src={selectedProduct.image_url} alt={selectedProduct.product_name} className="h-48 w-full object-cover" />
-            <div className="p-5">
-              <h2 className="text-xl font-semibold text-white text-center">{selectedProduct.product_name}</h2>
-              <p className="text-center text-sm text-gray-400 mt-1">
-                Stock Available: <span className={`${selectedProduct.stock > 0 ? "text-green-400" : "text-red-500"} font-semibold`}>{selectedProduct.stock}</span>
-              </p>
-
-              <div className="text-center mt-2">
-                {selectedProduct.discounted_price && (
-                  <p className="text-gray-400 line-through text-sm">₱{formatPrice(selectedProduct.price)}</p>
-                )}
-                <p className="text-green-400 font-bold text-lg">
-                  ₱{formatPrice(selectedProduct.isRefill ? selectedProduct.refill_price : selectedProduct.discounted_price || selectedProduct.price)}
-                </p>
-              </div>
-
-              {/* Refill / Full toggle */}
-              {selectedProduct.refill_price && (
-                <div className="flex justify-center gap-4 mt-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="purchaseType" value="full" checked={!selectedProduct.isRefill} onChange={() => handleToggleRefill(false)} />
-                    Regular
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="purchaseType" value="refill" checked={selectedProduct.isRefill} onChange={() => handleToggleRefill(true)} />
-                    Refill
-                  </label>
-                </div>
-              )}
-
-              {/* Form */}
-              <form onSubmit={handleSubmit} className="mt-5 space-y-4">
-                <input type="text" name="name" placeholder="Customer Name" value={formData.name} onChange={handleInputChange} className="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:outline-none" required />
-                <input type="text" name="contact" placeholder="+63XXXXXXXXXX" value={formData.contact || "+63"} onChange={handlePhoneChange} className="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:outline-none" required />
-
-                <div className="flex gap-3">
-                  <select name="municipality" value={formData.municipality} onChange={handleInputChange} className="w-1/2 p-2 rounded bg-gray-700 border border-gray-600 focus:outline-none" required>
-                    <option value="">Select Municipality</option>
-                    <option value="Boac">Boac</option>
-                    <option value="Gasan">Gasan</option>
-                    <option value="Mogpog">Mogpog</option>
-                    <option value="Santa Cruz">Santa Cruz</option>
-                    <option value="Torrijos">Torrijos</option>
-                    <option value="Buenavista">Buenavista</option>
-                  </select>
-                  <select name="barangay" value={formData.barangay} onChange={handleInputChange} className="w-1/2 p-2 rounded bg-gray-700 border border-gray-600 focus:outline-none" required disabled={!barangays.length}>
-                    <option value="">Select Barangay</option>
-                    {barangays.map((b) => (
-                      <option key={b.id} value={b.name}>{b.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">Quantity</span>
-                  <div className="flex items-center gap-2">
-                    <button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded">-</button>
-                    <span>{quantity}</span>
-                    <button type="button" onClick={() => setQuantity(Math.min(selectedProduct.stock, quantity + 1))} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded" disabled={quantity >= selectedProduct.stock}>+</button>
-                  </div>
-                </div>
-
-                <p className="text-lg font-semibold text-center mt-2">
-                  Total: ₱{formatPrice(quantity * (selectedProduct.isRefill ? selectedProduct.refill_price : selectedProduct.discounted_price || selectedProduct.price))}
-                </p>
-
-                <button type="submit" disabled={loading || selectedProduct.stock <= 0} className={`w-full mt-3 p-2 rounded font-semibold transition ${loading ? "bg-gray-600 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-500"}`}>
-                  {selectedProduct.stock <= 0 ? "Out of Stock" : loading ? "Processing..." : "Buy Now"}
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
+        <WalkInOrderModal
+          BASE_URL={BASE_URL}
+          selectedProduct={selectedProduct}
+          setSelectedProduct={setSelectedProduct}
+          quantity={quantity}
+          setQuantity={setQuantity}
+          formData={formData}
+          setFormData={setFormData}
+          barangays={barangays}
+          handleInputChange={handleInputChange}
+          handlePhoneChange={handlePhoneChange}
+          handleToggleRefill={handleToggleRefill}
+          handleSubmit={handleSubmit}
+          loading={loading}
+          formatPrice={formatPrice}
+        />
       )}
     </div>
   );

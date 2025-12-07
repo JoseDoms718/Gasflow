@@ -1,13 +1,5 @@
-
 import React, { useState, useEffect } from "react";
-import {
-  PlusCircle,
-  Edit,
-  Box,
-  ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
+import { Edit, Box, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import axios from "axios";
@@ -34,7 +26,6 @@ export default function Manageservicesection() {
       const res = await axios.get(`${API_URL}/fetchServices`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      // Prepend backend URL to image
       const normalized = (res.data.services || []).map(s => ({
         ...s,
         image: s.image_url ? `${BASE_URL}${s.image_url}` : null
@@ -79,7 +70,6 @@ export default function Manageservicesection() {
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" },
       });
 
-      // Update local state with new image URL if needed
       const updatedServices = services.map(s =>
         s.id === editingService.id
           ? { ...editingService, image: editingService.image instanceof File ? previewUrl : editingService.image }
@@ -120,16 +110,6 @@ export default function Manageservicesection() {
     );
   };
 
-  // ───────── CAROUSEL SCROLL ─────────
-  const scrollPrev = () => {
-    const container = document.querySelector(".service-carousel-inner");
-    if (container) container.scrollBy({ left: -container.clientWidth, behavior: 'smooth' });
-  };
-  const scrollNext = () => {
-    const container = document.querySelector(".service-carousel-inner");
-    if (container) container.scrollBy({ left: container.clientWidth, behavior: 'smooth' });
-  };
-
   return (
     <div className="p-6 w-full flex flex-col">
       {/* Header */}
@@ -162,56 +142,40 @@ export default function Manageservicesection() {
         {/* VIEW TAB */}
         {activeTab === "view" && (
           <div className="flex-1 flex justify-center h-full relative">
-            <div className="relative w-full service-carousel-container flex items-start h-full">
-              <button
-                onClick={scrollPrev}
-                className="absolute left-0 top-1/2 transform -translate-y-1/2 z-10 p-2 bg-gray-900 text-white rounded-full shadow-md hover:bg-gray-700"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-
-              <div className="service-carousel-inner flex gap-4 overflow-x-auto scrollbar-hide w-full">
-                {services.map(service => (
-                  <div key={service.id} className="flex-shrink-0" style={{ width: `calc((100% - 32px)/3)`, height: cardHeight }}>
-                    <div className="bg-white shadow-lg rounded-2xl border flex flex-col w-full h-full overflow-hidden">
-                      {editingService?.id === service.id ? (
-                        <div className="p-4 flex flex-col gap-3 h-full overflow-y-auto">
-                          <h3 className="text-lg font-semibold text-gray-800 mb-1">Edit Service</h3>
-                          {previewUrl && <img src={previewUrl} alt="Preview" className="rounded-xl border w-full h-32 object-cover mb-2" />}
-                          <input type="file" accept="image/*" onChange={e => handleImageUpload(e, "edit")} className="w-full text-sm mb-2" />
-                          <input type="text" value={editingService.title} onChange={e => setEditingService(prev => ({ ...prev, title: e.target.value }))} placeholder="Service Title" className="border rounded-lg p-2 w-full focus:ring-2 focus:ring-green-600 outline-none" />
-                          <textarea value={editingService.description} onChange={e => setEditingService(prev => ({ ...prev, description: e.target.value }))} placeholder="Service Description" className="border rounded-lg p-2 w-full resize-none focus:ring-2 focus:ring-green-600 outline-none" rows="4" />
+            <div className="service-carousel-inner flex gap-4 overflow-x-auto scrollbar-hide w-full">
+              {services.map(service => (
+                <div key={service.id} className="flex-shrink-0" style={{ width: `calc((100% - 32px)/3)`, height: cardHeight }}>
+                  <div className="bg-white shadow-lg rounded-2xl border flex flex-col w-full h-full overflow-hidden">
+                    {editingService?.id === service.id ? (
+                      <div className="p-4 flex flex-col gap-3 h-full overflow-y-auto">
+                        <h3 className="text-lg font-semibold text-gray-800 mb-1">Edit Service</h3>
+                        {previewUrl && <img src={previewUrl} alt="Preview" className="rounded-xl border w-full h-32 object-cover mb-2" />}
+                        <input type="file" accept="image/*" onChange={e => handleImageUpload(e, "edit")} className="w-full text-sm mb-2" />
+                        <input type="text" value={editingService.title} onChange={e => setEditingService(prev => ({ ...prev, title: e.target.value }))} placeholder="Service Title" className="border rounded-lg p-2 w-full focus:ring-2 focus:ring-green-600 outline-none" />
+                        <textarea value={editingService.description} onChange={e => setEditingService(prev => ({ ...prev, description: e.target.value }))} placeholder="Service Description" className="border rounded-lg p-2 w-full resize-none focus:ring-2 focus:ring-green-600 outline-none" rows="4" />
+                        <div className="flex justify-end gap-3 mt-auto">
+                          <button onClick={() => setEditingService(null)} className="px-3 py-2 rounded-lg border text-gray-600 hover:bg-gray-100">Cancel</button>
+                          <button onClick={handleSaveEdit} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Save</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {renderImage(service.image)}
+                        <div className="p-4 flex flex-col flex-1 h-full">
+                          <h2 className="text-lg font-semibold truncate">{service.title}</h2>
+                          <p className="text-gray-600 mb-3 text-sm line-clamp-4">{service.description}</p>
+                          <span className="text-xs text-gray-500 italic">
+                            Target: {service.type === "users" ? "Customer Only" : service.type === "business_owner" ? "Business Owner Only" : "All Buyers"}
+                          </span>
                           <div className="flex justify-end gap-3 mt-auto">
-                            <button onClick={() => setEditingService(null)} className="px-3 py-2 rounded-lg border text-gray-600 hover:bg-gray-100">Cancel</button>
-                            <button onClick={handleSaveEdit} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Save</button>
+                            <button onClick={() => setEditingService(service)} className="text-blue-500 hover:text-blue-700"><Edit className="w-5 h-5" /></button>
                           </div>
                         </div>
-                      ) : (
-                        <>
-                          {renderImage(service.image)}
-                          <div className="p-4 flex flex-col flex-1 h-full">
-                            <h2 className="text-lg font-semibold truncate">{service.title}</h2>
-                            <p className="text-gray-600 mb-3 text-sm line-clamp-4">{service.description}</p>
-                            <span className="text-xs text-gray-500 italic">
-                              Target: {service.type === "users" ? "Customer Only" : service.type === "business_owner" ? "Business Owner Only" : "All Buyers"}
-                            </span>
-                            <div className="flex justify-end gap-3 mt-auto">
-                              <button onClick={() => setEditingService(service)} className="text-blue-500 hover:text-blue-700"><Edit className="w-5 h-5" /></button>
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
+                      </>
+                    )}
                   </div>
-                ))}
-              </div>
-
-              <button
-                onClick={scrollNext}
-                className="absolute right-0 top-1/2 transform -translate-y-1/2 z-10 p-2 bg-gray-900 text-white rounded-full shadow-md hover:bg-gray-700"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
+                </div>
+              ))}
             </div>
           </div>
         )}

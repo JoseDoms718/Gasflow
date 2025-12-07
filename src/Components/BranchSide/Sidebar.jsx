@@ -120,9 +120,9 @@ export default function Sidebar({ role }) {
 
     retailer: [
       { to: "/retailerinventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
-      { to: "/retailersalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
       { to: "/retailerinquiries", label: "Inquiries", icon: <MessageCircle className="w-5 h-5" /> },
     ],
+
 
     guest: [],
   };

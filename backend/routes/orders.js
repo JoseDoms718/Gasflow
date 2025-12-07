@@ -141,174 +141,211 @@ async function fetchBarangay(barangay_id) {
    WALK-IN ORDER (auto-delivered)
 ------------------------------------------------------------------- */
 router.post("/walk-in", authenticateToken, async (req, res) => {
+  const connection = await db.getConnection();
   try {
-    let {
-      items, // array of { product_id, quantity, refill? }
-      full_name,
-      customer_name,
-      contact_number,
-      barangay_id,
-      address,
-      total_price,
-    } = req.body;
+    const io = req.app.get("io"); // Socket.IO instance
+    let { items, full_name, contact_number, barangay_id, delivery_address } = req.body;
+    const buyer_id = req.user.id;
 
-    const buyerName = full_name || customer_name || "Unknown Customer";
-
-    // Ensure items array
-    if (!Array.isArray(items)) items = [];
-
-    if (!items.length || !contact_number) {
-      return res.status(400).json({ success: false, error: "Missing required fields." });
+    // --- Validate buyer info ---
+    if (!full_name || !contact_number || !barangay_id || !delivery_address) {
+      connection.release();
+      return res.status(400).json({ success: false, error: "Missing required buyer fields." });
     }
 
-    // Parse barangay_id from address if missing
-    if (!barangay_id && address) {
-      const maybeBarangay = address.split(",")[0].trim();
-      if (maybeBarangay) {
-        const [rows] = await db.query(
-          `SELECT barangay_id FROM barangays WHERE LOWER(barangay_name) = LOWER(?) LIMIT 1`,
-          [maybeBarangay]
-        );
-        if (rows.length) barangay_id = rows[0].barangay_id;
-      }
+    if (!PH_PHONE_REGEX.test(contact_number)) {
+      connection.release();
+      return res.status(400).json({ success: false, error: "Invalid Philippine contact number format (+639XXXXXXXXX)." });
     }
 
-    if (!barangay_id) {
-      return res.status(400).json({ success: false, error: "Barangay is required." });
+    if (!Array.isArray(items) || items.length === 0) {
+      connection.release();
+      return res.status(400).json({ success: false, error: "No items provided." });
     }
 
-    // Validate barangay exists
     const [barangayRows] = await db.query(
       "SELECT barangay_name, municipality FROM barangays WHERE barangay_id = ? LIMIT 1",
       [barangay_id]
     );
     if (!barangayRows.length) {
+      connection.release();
       return res.status(404).json({ success: false, error: "Barangay not found." });
     }
-    const barangayRow = barangayRows[0];
 
-    // Validate PH contact number
-    if (!PH_PHONE_REGEX.test(contact_number)) {
-      return res.status(400).json({ success: false, error: "Invalid Philippine contact number format (+639XXXXXXXXX)." });
+    // --- Group items by branch ---
+    const branchMap = {};
+
+    for (const item of items) {
+      if (item.product_id) {
+        // --- Regular product logic ---
+        const [rows] = await db.query(
+          `SELECT p.product_id,
+                  bpp.price AS branch_price,
+                  bpp.discounted_price AS branch_discounted_price,
+                  bpp.refill_price AS branch_refill_price,
+                  i.branch_id,
+                  i.stock
+           FROM products p
+           INNER JOIN inventory i ON p.product_id = i.product_id
+           INNER JOIN branch_product_prices bpp ON p.product_id = bpp.product_id AND i.branch_id = bpp.branch_id
+           WHERE p.product_id = ? AND i.branch_id = ?
+           LIMIT 1`,
+          [item.product_id, item.branch_id]
+        );
+        const product = rows[0];
+        if (!product) {
+          connection.release();
+          return res.status(400).json({ success: false, error: `Product ${item.product_id} not available in the selected branch.` });
+        }
+
+        const finalPrice =
+          item.type === "refill"
+            ? product.branch_refill_price ?? 0
+            : item.type === "discounted" && product.branch_discounted_price != null
+            ? product.branch_discounted_price
+            : product.branch_price;
+
+        branchMap[product.branch_id] = branchMap[product.branch_id] || [];
+        branchMap[product.branch_id].push({
+          product_id: product.product_id,
+          quantity: item.quantity,
+          price: finalPrice,
+          type: item.type,
+          stock: product.stock,
+        });
+
+      } else if (item.branch_bundle_id) {
+        // --- Bundle logic ---
+        if (!item.branch_id) {
+          connection.release();
+          return res.status(400).json({ success: false, error: `branch_id is required for branch_bundle_id ${item.branch_bundle_id}.` });
+        }
+
+        // Fetch bundle info
+        const [bundleRows] = await db.query(
+          `SELECT bb.id AS branch_bundle_id, bb.branch_id, bb.bundle_id,
+                  COALESCE(bbp.discounted_price, bbp.price, 0) AS final_price
+           FROM branch_bundles bb
+           LEFT JOIN branch_bundle_prices bbp
+                  ON bb.bundle_id = bbp.bundle_id AND bb.branch_id = bbp.branch_id
+           WHERE bb.id = ? AND bb.branch_id = ?`,
+          [item.branch_bundle_id, item.branch_id]
+        );
+        const bundle = bundleRows[0];
+        if (!bundle) {
+          connection.release();
+          return res.status(400).json({ success: false, error: `Branch bundle ${item.branch_bundle_id} not found for branch ${item.branch_id}.` });
+        }
+
+        // Fetch all items in this bundle for stock deduction
+        const [bundleItems] = await db.query(
+          `SELECT bi.product_id, bi.quantity AS required_qty, i.stock
+           FROM bundle_items bi
+           INNER JOIN inventory i ON bi.product_id = i.product_id AND i.branch_id = ?
+           WHERE bi.bundle_id = ?`,
+          [item.branch_id, bundle.bundle_id]
+        );
+
+        branchMap[bundle.branch_id] = branchMap[bundle.branch_id] || [];
+        branchMap[bundle.branch_id].push({
+          branch_bundle_id: bundle.branch_bundle_id,
+          quantity: item.quantity,
+          price: bundle.final_price,
+          type: "bundle",
+          bundle_items: bundleItems,
+        });
+
+      } else {
+        connection.release();
+        return res.status(400).json({ success: false, error: "Item must include product_id or branch_bundle_id." });
+      }
     }
 
-    // Determine branch_id for branch_manager or retailer
-    let branchIdForItems = null;
-    if (req.user.role === "branch_manager") branchIdForItems = req.user.branches?.[0] ?? null;
-    else if (req.user.role === "retailer") branchIdForItems = req.user.branch_id;
+    // --- Transaction and order creation ---
+    await connection.beginTransaction();
+    const createdOrders = [];
 
-    const connection = await db.getConnection();
-    try {
-      await connection.beginTransaction();
+    for (const [branch_id, branchItems] of Object.entries(branchMap)) {
+      const totalBranchPrice = branchItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
-      // Fetch all products
-      const productIds = items.map((it) => it.product_id);
-      const [prodRows] = await connection.query(
-        `SELECT p.product_id, p.product_name, p.product_type, p.price, p.discounted_price, p.refill_price, i.stock
-         FROM products p
-         LEFT JOIN inventory i ON p.product_id = i.product_id
-         WHERE p.product_id IN (?)`,
-        [productIds]
-      );
-
-      const productsMap = Object.fromEntries(prodRows.map((p) => [p.product_id, p]));
-
-      // Check stock
-      for (const it of items) {
-        const product = productsMap[it.product_id];
-        if (!product) throw new Error(`Product ${it.product_id} not found.`);
-        if (Number(it.quantity) > Number(product.stock)) {
-          throw new Error(`Insufficient stock for ${product.product_name}. Only ${product.stock} left.`);
-        }
-      }
-
-      // Compute total price if not provided
-      if (!total_price) {
-        total_price = items.reduce((acc, it) => {
-          const p = productsMap[it.product_id];
-          const price = it.refill && p.refill_price ? p.refill_price : p.discounted_price ?? p.price ?? 0;
-          return acc + price * Number(it.quantity);
-        }, 0);
-      }
-
-      // Insert order
       const [orderResult] = await connection.query(
-        `INSERT INTO orders (
-          buyer_id, full_name, contact_number, barangay_id,
-          status, total_price, is_active, ordered_at, delivered_at, inventory_deducted
-        ) VALUES (NULL, ?, ?, ?, 'delivered', ?, 1, NOW(), NOW(), 1)`,
-        [buyerName, contact_number, barangay_id, total_price]
+        `INSERT INTO orders (buyer_id, full_name, contact_number, barangay_id,
+                             delivery_address, status, total_price, delivery_fee, is_active, ordered_at, delivered_at, inventory_deducted)
+         VALUES (?, ?, ?, ?, ?, 'delivered', ?, 0, 1, NOW(), NOW(), 1)`,
+        [buyer_id, full_name, contact_number, barangay_id, delivery_address, totalBranchPrice]
       );
       const order_id = orderResult.insertId;
 
-      // Insert items, deduct inventory, and log
-      for (const it of items) {
-        const prod = productsMap[it.product_id];
+      // Insert order items and deduct stock
+      for (const item of branchItems) {
+        await connection.query(
+          `INSERT INTO order_items (order_id, product_id, branch_bundle_id, quantity, price, type, branch_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            order_id,
+            item.product_id || null,
+            item.branch_bundle_id || null,
+            item.quantity,
+            item.price,
+            item.type,
+            branch_id,
+          ]
+        );
 
-        const price = it.refill && prod.refill_price ? prod.refill_price : prod.discounted_price ?? prod.price ?? 0;
+        // Deduct stock for regular products
+        if (item.product_id) {
+          const prevStock = item.stock ?? 0;
+          const newStock = prevStock - item.quantity;
+          await connection.query(
+            "UPDATE inventory SET stock = ?, updated_at = NOW() WHERE product_id = ? AND branch_id = ?",
+            [newStock, item.product_id, branch_id]
+          );
 
-        // ✅ Determine type and state for inventory_logs
-        let typeForLog, stateForLog;
-        if (it.refill && prod.refill_price) {
-          typeForLog = "refill";
-          stateForLog = "n/a";
-        } else {
-          typeForLog = "sales";
-          stateForLog = "full";
+          await connection.query(
+            `INSERT INTO inventory_logs 
+              (product_id, state, user_id, type, quantity, previous_stock, new_stock, description, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+            [item.product_id, "full", req.user.id, item.type === "refill" ? "refill" : "sales", item.quantity, prevStock, newStock, `Walk-in sale Order #${order_id}`]
+          );
         }
 
-        // Insert order item
-        await connection.query(
-          "INSERT INTO order_items (order_id, product_id, quantity, price, branch_id) VALUES (?, ?, ?, ?, ?)",
-          [order_id, it.product_id, it.quantity, price, branchIdForItems]
-        );
+        // Deduct stock for bundle items
+        if (item.bundle_items && item.bundle_items.length) {
+          for (const bi of item.bundle_items) {
+            const prevStock = bi.stock ?? 0;
+            const newStock = prevStock - bi.required_qty * item.quantity;
 
-        // Deduct inventory
-        const prevStock = Number(prod.stock ?? 0);
-        const newStock = prevStock - Number(it.quantity);
-        await connection.query(
-          "UPDATE inventory SET stock = ?, updated_at = NOW() WHERE product_id = ?",
-          [newStock, it.product_id]
-        );
+            await connection.query(
+              "UPDATE inventory SET stock = ?, updated_at = NOW() WHERE product_id = ? AND branch_id = ?",
+              [newStock, bi.product_id, branch_id]
+            );
 
-        // Log inventory
-        await connection.query(
-          `INSERT INTO inventory_logs 
-            (product_id, state, user_id, type, quantity, previous_stock, new_stock, description, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-          [it.product_id, stateForLog, req.user.id, typeForLog, it.quantity, prevStock, newStock, `Walk-in sale Order #${order_id}`]
-        );
+            await connection.query(
+              `INSERT INTO inventory_logs 
+                (product_id, state, user_id, type, quantity, previous_stock, new_stock, description, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+              [bi.product_id, "n/a", req.user.id, "sales", bi.required_qty * item.quantity, prevStock, newStock, `Walk-in sale Order #${order_id} (bundle #${item.branch_bundle_id})`]
+            );
+          }
+        }
       }
 
-      await connection.commit();
-      connection.release();
-
-      return res.status(201).json({
-        success: true,
-        message: "✅ Walk-in order created and marked as delivered!",
-        order: {
-          order_id,
-          items,
-          total_price,
-          full_name: buyerName,
-          contact_number,
-          barangay: barangayRow.barangay_name,
-          municipality: barangayRow.municipality,
-          status: "delivered",
-          branch_id: branchIdForItems,
-        },
-      });
-    } catch (txErr) {
-      await connection.rollback();
-      connection.release();
-      console.error("Transaction error (walk-in):", txErr);
-      return res.status(500).json({ success: false, error: txErr.message || "Transaction failed." });
+      const newOrder = { order_id, branch_id, total_price: totalBranchPrice, delivery_address, status: "delivered", items: branchItems };
+      createdOrders.push(newOrder);
+      io.emit("newOrder", newOrder);
     }
+
+    await connection.commit();
+    connection.release();
+    return res.status(201).json({ success: true, message: "✅ Walk-in orders created successfully.", orders: createdOrders });
+
   } catch (err) {
-    console.error("Server error (walk-in):", err);
-    return res.status(500).json({ success: false, error: err.message || "Server error." });
+    try { await connection.rollback(); connection.release(); } catch (e) {}
+    console.error("❌ Error (walk-in):", err);
+    return res.status(500).json({ success: false, error: "Failed to process walk-in order." });
   }
 });
+
 
 
 //buy endoint
@@ -1283,6 +1320,36 @@ router.put(
     }
   }
 );
+
+
+router.get("/inventory/logs", async (req, res) => {
+  try {
+    const [rows] = await db.execute(`
+      SELECT 
+        il.log_id,
+        il.product_id,
+        p.product_name,
+        il.state,
+        il.user_id,
+        u.name AS user_name,
+        il.type,
+        il.quantity,
+        il.previous_stock,
+        il.new_stock,
+        il.description,
+        il.created_at
+      FROM inventory_logs il
+      LEFT JOIN users u ON il.user_id = u.user_id
+      LEFT JOIN products p ON il.product_id = p.product_id
+      ORDER BY il.created_at DESC
+    `);
+
+    res.json({ success: true, logs: rows });
+  } catch (err) {
+    console.error("❌ Failed to fetch inventory logs:", err);
+    res.status(500).json({ success: false, error: "Failed to fetch inventory logs" });
+  }
+});
 
 /* -------------------------------------------------------------------
    UTILITY FUNCTIONS

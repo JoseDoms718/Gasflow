@@ -10,8 +10,11 @@ function AdminMaintenancepage() {
       </aside>
 
       {/* Main content on the right */}
-      <main className="flex-1 p-6 overflow-y-auto">
-        <Maintenancesection />
+      <main className="flex-1 p-6 overflow-y-auto flex flex-col gap-8">
+        {/* Maintenance Section */}
+        <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+          <Maintenancesection />
+        </div>
       </main>
     </div>
   );

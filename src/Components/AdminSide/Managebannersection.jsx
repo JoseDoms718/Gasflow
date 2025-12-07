@@ -3,8 +3,6 @@ import {
   PlusCircle,
   Edit,
   Trash2,
-  ChevronLeft,
-  ChevronRight,
   Box,
   ArrowLeft,
 } from "lucide-react";
@@ -23,7 +21,6 @@ export default function Managebannersection() {
   const [editingBanner, setEditingBanner] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
 
-  const bannersPerView = 3;
   const cardHeight = 460;
 
   // Fetch banners
@@ -168,16 +165,6 @@ export default function Managebannersection() {
     );
   };
 
-  // Scroll carousel
-  const scrollPrev = () => {
-    const container = document.querySelector(".banner-carousel-inner");
-    if (container) container.scrollBy({ left: -container.clientWidth, behavior: 'smooth' });
-  };
-  const scrollNext = () => {
-    const container = document.querySelector(".banner-carousel-inner");
-    if (container) container.scrollBy({ left: container.clientWidth, behavior: 'smooth' });
-  };
-
   return (
     <div className="p-6 w-full flex flex-col">
       {/* Header */}
@@ -215,59 +202,43 @@ export default function Managebannersection() {
       <div className="w-full flex flex-col lg:flex-row gap-8 min-h-[500px]">
         {/* VIEW TAB */}
         {activeTab === "view" && (
-          <div className="flex-1 flex justify-center h-full relative">
-            <div className="relative w-full banner-carousel-container flex items-start h-full">
-              <button
-                onClick={scrollPrev}
-                className="absolute left-0 top-1/2 transform -translate-y-1/2 z-10 p-2 bg-gray-900 text-white rounded-full shadow-md hover:bg-gray-700"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-
-              <div className="banner-carousel-inner flex gap-4 overflow-x-auto scrollbar-hide w-full">
-                {banners.map(banner => (
-                  <div
-                    key={banner.id}
-                    className="flex-shrink-0"
-                    style={{ width: `calc((100% - 32px) / 3)`, height: cardHeight }}
-                  >
-                    <div className="bg-white shadow-lg rounded-2xl border flex flex-col w-full h-full overflow-hidden">
-                      {editingBanner?.id === banner.id ? (
-                        <div className="p-4 flex flex-col gap-3 h-full overflow-y-auto">
-                          <h3 className="text-lg font-semibold text-gray-800 mb-1">Edit Banner</h3>
-                          {previewUrl && <img src={previewUrl} alt="Preview" className="rounded-xl border w-full h-32 object-cover mb-2" />}
-                          <input type="file" accept="image/*" onChange={e => handleImageUpload(e, "edit")} className="w-full text-sm mb-2" />
-                          <input type="text" value={editingBanner.title} onChange={e => setEditingBanner(prev => ({ ...prev, title: e.target.value }))} placeholder="Banner Title" className="border rounded-lg p-2 w-full focus:ring-2 focus:ring-green-600 outline-none" />
-                          <textarea value={editingBanner.description} onChange={e => setEditingBanner(prev => ({ ...prev, description: e.target.value }))} placeholder="Banner Description" className="border rounded-lg p-2 w-full resize-none focus:ring-2 focus:ring-green-600 outline-none" rows="4" />
+          <div className="flex-1 flex justify-center h-full">
+            <div className="banner-carousel-inner flex gap-4 overflow-x-auto scrollbar-hide w-full">
+              {banners.map(banner => (
+                <div
+                  key={banner.id}
+                  className="flex-shrink-0"
+                  style={{ width: `calc((100% - 32px) / 3)`, height: cardHeight }}
+                >
+                  <div className="bg-white shadow-lg rounded-2xl border flex flex-col w-full h-full overflow-hidden">
+                    {editingBanner?.id === banner.id ? (
+                      <div className="p-4 flex flex-col gap-3 h-full overflow-y-auto">
+                        <h3 className="text-lg font-semibold text-gray-800 mb-1">Edit Banner</h3>
+                        {previewUrl && <img src={previewUrl} alt="Preview" className="rounded-xl border w-full h-32 object-cover mb-2" />}
+                        <input type="file" accept="image/*" onChange={e => handleImageUpload(e, "edit")} className="w-full text-sm mb-2" />
+                        <input type="text" value={editingBanner.title} onChange={e => setEditingBanner(prev => ({ ...prev, title: e.target.value }))} placeholder="Banner Title" className="border rounded-lg p-2 w-full focus:ring-2 focus:ring-green-600 outline-none" />
+                        <textarea value={editingBanner.description} onChange={e => setEditingBanner(prev => ({ ...prev, description: e.target.value }))} placeholder="Banner Description" className="border rounded-lg p-2 w-full resize-none focus:ring-2 focus:ring-green-600 outline-none" rows="4" />
+                        <div className="flex justify-end gap-3 mt-auto">
+                          <button onClick={() => setEditingBanner(null)} className="px-3 py-2 rounded-lg border text-gray-600 hover:bg-gray-100">Cancel</button>
+                          <button onClick={handleSaveEdit} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Save</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {renderImage(banner.image)}
+                        <div className="p-4 flex flex-col flex-1 h-full">
+                          <h2 className="text-lg font-semibold truncate">{banner.title}</h2>
+                          <p className="text-gray-600 mb-3 text-sm line-clamp-4">{banner.description}</p>
                           <div className="flex justify-end gap-3 mt-auto">
-                            <button onClick={() => setEditingBanner(null)} className="px-3 py-2 rounded-lg border text-gray-600 hover:bg-gray-100">Cancel</button>
-                            <button onClick={handleSaveEdit} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Save</button>
+                            <button onClick={() => setEditingBanner(banner)} className="text-blue-500 hover:text-blue-700"><Edit className="w-5 h-5" /></button>
+                            <button onClick={() => handleDelete(banner.id)} className="text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5" /></button>
                           </div>
                         </div>
-                      ) : (
-                        <>
-                          {renderImage(banner.image)}
-                          <div className="p-4 flex flex-col flex-1 h-full">
-                            <h2 className="text-lg font-semibold truncate">{banner.title}</h2>
-                            <p className="text-gray-600 mb-3 text-sm line-clamp-4">{banner.description}</p>
-                            <div className="flex justify-end gap-3 mt-auto">
-                              <button onClick={() => setEditingBanner(banner)} className="text-blue-500 hover:text-blue-700"><Edit className="w-5 h-5" /></button>
-                              <button onClick={() => handleDelete(banner.id)} className="text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5" /></button>
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
+                      </>
+                    )}
                   </div>
-                ))}
-              </div>
-
-              <button
-                onClick={scrollNext}
-                className="absolute right-0 top-1/2 transform -translate-y-1/2 z-10 p-2 bg-gray-900 text-white rounded-full shadow-md hover:bg-gray-700"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
+                </div>
+              ))}
             </div>
           </div>
         )}
