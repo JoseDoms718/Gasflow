@@ -316,7 +316,7 @@ router.post("/buy", authenticateToken, async (req, res) => {
   const connection = await db.getConnection();
   try {
     const io = req.app.get("io"); // Socket.IO instance
-    let { items, full_name, contact_number, barangay_id, delivery_address } = req.body; // ✅ added delivery_address
+    let { items, full_name, contact_number, barangay_id, delivery_address } = req.body;
     const buyer_id = req.user.id;
 
     // --- Validate buyer info ---
@@ -439,28 +439,32 @@ router.post("/buy", authenticateToken, async (req, res) => {
     for (const [branch_id, branchItems] of Object.entries(branchMap)) {
       const totalBranchPrice = branchItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
-      let [feeRows] = await connection.query(
-        `SELECT fee_amount FROM delivery_fees WHERE branch_id = ? AND barangay_id = ? LIMIT 1`,
-        [branch_id, barangay_id]
-      );
-      if (!feeRows.length) {
-        [feeRows] = await connection.query(
-          `SELECT fee_amount FROM delivery_fees WHERE branch_id = ? AND fee_type = 'outside' LIMIT 1`,
-          [branch_id]
+      // ✅ Apply delivery fee only if buyer role is "users"
+      let delivery_fee = 0;
+      if (req.user.role === "users") {
+        let [feeRows] = await connection.query(
+          `SELECT fee_amount FROM delivery_fees WHERE branch_id = ? AND barangay_id = ? LIMIT 1`,
+          [branch_id, barangay_id]
         );
+        if (!feeRows.length) {
+          [feeRows] = await connection.query(
+            `SELECT fee_amount FROM delivery_fees WHERE branch_id = ? AND fee_type = 'outside' LIMIT 1`,
+            [branch_id]
+          );
+        }
+        delivery_fee = feeRows[0]?.fee_amount ?? 0;
       }
-      const delivery_fee = feeRows[0]?.fee_amount ?? 0;
 
       const [orderResult] = await connection.query(
         `INSERT INTO orders (
            buyer_id, full_name, contact_number, barangay_id,
            delivery_address, status, total_price, delivery_fee, is_active, ordered_at, inventory_deducted
          ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, 1, NOW(), 0)`,
-        [buyer_id, full_name, contact_number, barangay_id, delivery_address, totalBranchPrice, delivery_fee] // ✅ added delivery_address
+        [buyer_id, full_name, contact_number, barangay_id, delivery_address, totalBranchPrice, delivery_fee]
       );
       const order_id = orderResult.insertId;
 
-      // Insert order items (NO stock deduction)
+      // Insert order items
       for (const item of branchItems) {
         await connection.query(
           `INSERT INTO order_items (order_id, product_id, branch_bundle_id, quantity, price, type, branch_id)
@@ -482,7 +486,7 @@ router.post("/buy", authenticateToken, async (req, res) => {
         branch_id,
         total_price: totalBranchPrice,
         delivery_fee,
-        delivery_address, // ✅ added for emit
+        delivery_address,
         status: "pending",
         items: branchItems,
       };
@@ -500,6 +504,7 @@ router.post("/buy", authenticateToken, async (req, res) => {
     return res.status(500).json({ success: false, error: "Failed to process order." });
   }
 });
+
 
 
 // routes/orders.js
