@@ -223,9 +223,11 @@ export default function Orderlist({ role: propRole }) {
           full_name: info.full_name,
           contact_number: info.contact_number,
           barangay_id: info.barangay_id,
+          delivery_address: info.delivery_address, // ✅ include this
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+
 
       if (res.data.success) {
         const currentCart = getUserCart();

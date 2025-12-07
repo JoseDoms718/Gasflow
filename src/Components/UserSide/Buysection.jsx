@@ -32,6 +32,7 @@ export default function Buysection() {
   const [municipality, setMunicipality] = useState("");
   const [barangays, setBarangays] = useState([]);
   const [selectedBarangayId, setSelectedBarangayId] = useState("");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
   const [loading, setLoading] = useState(true);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [userRole, setUserRole] = useState(null);
@@ -83,10 +84,11 @@ export default function Buysection() {
         const user = data.user;
         if (!user) return;
 
-        setUserRole(user.role || null); // set role here
+        setUserRole(user.role || null);
         setName(user.name || "");
         setPhone(user.contact_number || "+63");
         setMunicipality(user.municipality || "");
+        setDeliveryAddress(user.home_address || ""); // Delivery Address
 
         if (user.municipality) {
           const res = await axios.get(`${BASE_URL}/barangays?municipality=${user.municipality}`);
@@ -188,6 +190,7 @@ export default function Buysection() {
       !phone ||
       !municipality ||
       !selectedBarangayId ||
+      !deliveryAddress ||
       !/^\+639\d{9}$/.test(phone)
     ) {
       return toast.error("Please fill out all fields correctly.");
@@ -217,6 +220,7 @@ export default function Buysection() {
           full_name: name,
           contact_number: phone,
           barangay_id: selectedBarangayId,
+          delivery_address: deliveryAddress, // Added here
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -301,19 +305,16 @@ export default function Buysection() {
                 type="number"
                 value={quantity ?? ""}
                 onChange={(e) => {
-                  // Remove non-digit characters
                   let val = e.target.value.replace(/\D/g, "");
                   if (val === "" || parseInt(val) <= 0) {
-                    setQuantity(""); // allow deleting temporarily
+                    setQuantity("");
                   } else {
-                    // Don't allow more than stock
                     let num = parseInt(val);
                     if (product && num > product.stock) num = product.stock;
                     setQuantity(num);
                   }
                 }}
                 onBlur={() => {
-                  // If user leaves empty or zero, reset to 1
                   if (!quantity || quantity <= 0) setQuantity(1);
                 }}
                 min={1}
@@ -325,7 +326,6 @@ export default function Buysection() {
                           [&::-moz-appearance]:textfield"
                 placeholder="1"
               />
-
             </div>
           </div>
 
@@ -344,6 +344,13 @@ export default function Buysection() {
               onChange={handlePhoneChange}
               placeholder="+639XXXXXXXXX"
               maxLength={13}
+              className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700"
+            />
+            <input
+              type="text"
+              value={deliveryAddress}
+              onChange={(e) => setDeliveryAddress(e.target.value)}
+              placeholder="Delivery Address"
               className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700"
             />
             <select
@@ -398,7 +405,8 @@ export default function Buysection() {
               className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold ${isPlacingOrder || outOfStock ? "bg-blue-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
                 }`}
             >
-              <CreditCard size={20} /> {outOfStock ? "Out of Stock" : isPlacingOrder ? "Placing Order..." : "Checkout"}
+              <CreditCard size={20} />{" "}
+              {outOfStock ? "Out of Stock" : isPlacingOrder ? "Placing Order..." : "Checkout"}
             </button>
           </div>
         </div>

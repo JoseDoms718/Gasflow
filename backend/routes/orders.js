@@ -316,11 +316,11 @@ router.post("/buy", authenticateToken, async (req, res) => {
   const connection = await db.getConnection();
   try {
     const io = req.app.get("io"); // Socket.IO instance
-    let { items, full_name, contact_number, barangay_id } = req.body;
+    let { items, full_name, contact_number, barangay_id, delivery_address } = req.body; // ✅ added delivery_address
     const buyer_id = req.user.id;
 
     // --- Validate buyer info ---
-    if (!full_name || !contact_number || !barangay_id) {
+    if (!full_name || !contact_number || !barangay_id || !delivery_address) {
       connection.release();
       return res.status(400).json({ success: false, error: "Missing required buyer fields." });
     }
@@ -454,9 +454,9 @@ router.post("/buy", authenticateToken, async (req, res) => {
       const [orderResult] = await connection.query(
         `INSERT INTO orders (
            buyer_id, full_name, contact_number, barangay_id,
-           status, total_price, delivery_fee, is_active, ordered_at, inventory_deducted
-         ) VALUES (?, ?, ?, ?, 'pending', ?, ?, 1, NOW(), 0)`,
-        [buyer_id, full_name, contact_number, barangay_id, totalBranchPrice, delivery_fee]
+           delivery_address, status, total_price, delivery_fee, is_active, ordered_at, inventory_deducted
+         ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, 1, NOW(), 0)`,
+        [buyer_id, full_name, contact_number, barangay_id, delivery_address, totalBranchPrice, delivery_fee] // ✅ added delivery_address
       );
       const order_id = orderResult.insertId;
 
@@ -482,6 +482,7 @@ router.post("/buy", authenticateToken, async (req, res) => {
         branch_id,
         total_price: totalBranchPrice,
         delivery_fee,
+        delivery_address, // ✅ added for emit
         status: "pending",
         items: branchItems,
       };
@@ -499,6 +500,7 @@ router.post("/buy", authenticateToken, async (req, res) => {
     return res.status(500).json({ success: false, error: "Failed to process order." });
   }
 });
+
 
 // routes/orders.js
 router.get(
@@ -656,6 +658,7 @@ router.get(
           o.ordered_at,
           o.delivered_at,
           o.inventory_deducted,
+          o.delivery_address,   -- ✅ ADDED
 
           b.barangay_name AS barangay,
           b.municipality,
@@ -750,6 +753,7 @@ router.get(
             ordered_at: row.ordered_at,
             delivered_at: row.delivered_at,
             inventory_deducted: row.inventory_deducted,
+            delivery_address: row.delivery_address || null,   // ✅ ADDED
             barangay: row.barangay,
             municipality: row.municipality,
             items: [],
@@ -779,7 +783,7 @@ router.get(
             branch_bundle_id: row.branch_bundle_id,
             bundle_name: row.bundle_name,
             bundle_description: row.bundle_description,
-            bundle_image: formatImageUrl(row.bundle_image, "bundle"), // ✅ FIXED
+            bundle_image: formatImageUrl(row.bundle_image, "bundle"),
             quantity: row.quantity,
             price: parseFloat(row.item_price) || 0,
             branch_id: row.branch_id,
@@ -799,6 +803,7 @@ router.get(
     }
   }
 );
+
 
 // Helper function to group orders
 function groupOrders(rows, mapItem) {
@@ -1273,8 +1278,6 @@ router.put(
     }
   }
 );
-
-
 
 /* -------------------------------------------------------------------
    UTILITY FUNCTIONS

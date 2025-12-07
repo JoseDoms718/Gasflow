@@ -33,6 +33,7 @@ export default function BuyBundleSection() {
     const [municipality, setMunicipality] = useState("");
     const [barangays, setBarangays] = useState([]);
     const [selectedBarangayId, setSelectedBarangayId] = useState("");
+    const [deliveryAddress, setDeliveryAddress] = useState("");
     const [loading, setLoading] = useState(true);
     const [isPlacingOrder, setIsPlacingOrder] = useState(false);
 
@@ -68,6 +69,7 @@ export default function BuyBundleSection() {
                         setName(user.name || "");
                         setPhone(user.contact_number || "+63");
                         setMunicipality(user.municipality || "");
+                        setDeliveryAddress(user.home_address || ""); // Delivery Address
                         if (user.municipality) {
                             const brRes = await axios.get(`${BASE_URL}/barangays?municipality=${user.municipality}`);
                             setBarangays(brRes.data || []);
@@ -104,6 +106,10 @@ export default function BuyBundleSection() {
     const handleQuantityChange = (e) => {
         let val = e.target.value.replace(/\D/g, "");
         setQuantity(val === "" || parseInt(val) <= 0 ? 1 : parseInt(val));
+    };
+
+    const handleDeliveryAddressChange = (e) => {
+        setDeliveryAddress(e.target.value);
     };
 
     const getBranchPrice = () => {
@@ -162,6 +168,7 @@ export default function BuyBundleSection() {
             !phone ||
             !municipality ||
             !selectedBarangayId ||
+            !deliveryAddress ||
             !/^\+639\d{9}$/.test(phone)
         ) {
             return toast.error("Please fill out all fields correctly.");
@@ -187,6 +194,7 @@ export default function BuyBundleSection() {
                 full_name: name,
                 contact_number: phone,
                 barangay_id: Number(selectedBarangayId),
+                delivery_address: deliveryAddress, // Added here
                 items: [
                     {
                         branch_bundle_id: Number(branchPriceObj.branch_bundle_id),
@@ -264,6 +272,7 @@ export default function BuyBundleSection() {
                         <div className="space-y-4 mb-6">
                             <input type="text" value={name} onChange={handleNameChange} placeholder="Full Name" className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700" />
                             <input type="tel" value={phone} onChange={handlePhoneChange} placeholder="+639XXXXXXXXX" maxLength={13} className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700" />
+                            <input type="text" value={deliveryAddress} onChange={handleDeliveryAddressChange} placeholder="Delivery Address" className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700" />
                             <select value={municipality} onChange={(e) => setMunicipality(e.target.value)} className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700">
                                 <option value="">Select municipality</option>
                                 {municipalities.map((m) => <option key={m} value={m}>{m}</option>)}

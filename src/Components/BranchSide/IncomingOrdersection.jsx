@@ -197,8 +197,8 @@ export default function IncomingOrderSection() {
                 setExpanded([]);
               }}
               className={`px-4 py-2 font-semibold border-b-2 transition ${activeTab === k
-                  ? "border-gray-900 text-gray-900"
-                  : "border-transparent text-gray-500 hover:text-gray-800"
+                ? "border-gray-900 text-gray-900"
+                : "border-transparent text-gray-500 hover:text-gray-800"
                 }`}
             >
               {statusLabels[k]}
@@ -309,7 +309,9 @@ export default function IncomingOrderSection() {
                               Delivery Address
                             </p>
                             <p className="text-gray-700">
-                              {order.barangay}, {order.municipality}
+                              {order.delivery_address
+                                ? `${order.delivery_address}, ${order.barangay}, ${order.municipality}`
+                                : `${order.barangay}, ${order.municipality}`}
                             </p>
                           </div>
 

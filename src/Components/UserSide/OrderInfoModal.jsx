@@ -1,9 +1,9 @@
-
 import React, { useState, useEffect, useCallback } from "react";
 import { X } from "lucide-react";
 import { toast } from "react-hot-toast";
 import axios from "axios";
 const BASE_URL = import.meta.env.VITE_BASE_URL;
+
 export default function OrderInfoModal({ onClose, onConfirm }) {
     const [info, setInfo] = useState({
         name: "",
@@ -11,6 +11,7 @@ export default function OrderInfoModal({ onClose, onConfirm }) {
         municipality_name: "",
         barangay_id: "",
         barangay_name: "",
+        delivery_address: "", // ✅ Added
     });
 
     const [municipalities, setMunicipalities] = useState([]);
@@ -41,6 +42,7 @@ export default function OrderInfoModal({ onClose, onConfirm }) {
                     municipality_name: user.municipality || "",
                     barangay_name: user.barangay || "",
                     barangay_id: user.barangay_id || "",
+                    delivery_address: user.home_address || "", // ✅ pre-fill
                 }));
             } else {
                 toast.error("Failed to load user info.");
@@ -140,15 +142,19 @@ export default function OrderInfoModal({ onClose, onConfirm }) {
             toast.error("Please select your municipality and barangay.");
             return;
         }
+        if (!info.delivery_address) {
+            toast.error("Please enter your delivery address.");
+            return;
+        }
 
         onConfirm({
             full_name: info.name,
             contact_number: info.contact_number,
             barangay_id: info.barangay_id,
+            delivery_address: info.delivery_address, // ✅ Added
         });
     };
 
-    // ✅ Loading state
     if (loading) {
         return (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 text-white">
@@ -208,6 +214,21 @@ export default function OrderInfoModal({ onClose, onConfirm }) {
                         <p className="text-xs text-gray-400 mt-1">
                             Must start with +63 and contain 11 digits total.
                         </p>
+                    </div>
+
+                    {/* Delivery Address */}
+                    <div>
+                        <label className="block text-sm font-medium mb-1 text-gray-300">
+                            Delivery Address
+                        </label>
+                        <input
+                            name="delivery_address"
+                            value={info.delivery_address}
+                            onChange={handleChange}
+                            placeholder="Enter your delivery address"
+                            required
+                            className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 outline-none transition"
+                        />
                     </div>
 
                     {/* Municipality Dropdown */}
