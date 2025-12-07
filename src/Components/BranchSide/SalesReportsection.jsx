@@ -29,21 +29,20 @@ export default function ReportsPage() {
 
   const toLocalDate = (dateString) => new Date(dateString).toLocaleDateString("en-CA");
 
-  // Fetch data from endpoints
+  // Fetch data
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) return;
 
     const fetchData = async () => {
       try {
-        // User info
         const { data: me } = await axios.get(`${BASE_URL}/auth/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setUserRole(me.user.role);
         setUserMunicipality(me.user.municipality);
 
-        // Expenses endpoint
+        // Expenses
         const { data: expensesRes } = await axios.get(`${BASE_URL}/expenses`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -60,7 +59,7 @@ export default function ReportsPage() {
           );
         }
 
-        // Transactions endpoint
+        // Transactions
         const { data: transactionsRes } = await axios.get(`${BASE_URL}/orders/my-sold`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -68,7 +67,6 @@ export default function ReportsPage() {
           setTransactions(
             transactionsRes.orders.flatMap((order) => {
               if (!order.delivered_at) return []; // Skip undelivered orders
-
               return order.items.map((item, index) => {
                 const itemQuantity = Number(item.quantity) || 0;
                 const itemPrice = Number(item.price) || 0;
@@ -76,14 +74,18 @@ export default function ReportsPage() {
                 const deliveryFeePerItem = deliveryFee / order.items.length;
 
                 return {
-                  id: `${order.order_id}-${item.product_id}-${index}`,
-                  product_id: item.product_id,
-                  productName: item.product_name,
+                  id: `${order.order_id}-${item.type === "bundle" ? item.branch_bundle_id : item.product_id}-${index}`,
+                  type: item.type,
+                  product_id: item.product_id || null,
+                  productName: item.product_name || "",
+                  bundle_name: item.bundle_name || "",
+                  bundle_image: item.bundle_image || "",
+                  image_url: item.image_url || "",
                   quantity: itemQuantity,
                   price: itemPrice,
                   deliveryFee: deliveryFeePerItem,
                   totalPrice: itemQuantity * itemPrice + deliveryFeePerItem,
-                  date: toLocalDate(order.delivered_at), // guaranteed to exist
+                  date: toLocalDate(order.delivered_at),
                   branch: order.municipality || "Unknown",
                   addedBy: item.seller_name || "N/A",
                   buyer: order.full_name || "N/A",
@@ -93,14 +95,13 @@ export default function ReportsPage() {
           );
         }
 
-        // Damaged products endpoint
+        // Damaged products
         const { data: damagedRes } = await axios.get(`${BASE_URL}/damaged-products/my-damaged-products`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const damagedList = damagedRes.success ? damagedRes.data : [];
         setDamagedProducts(damagedList);
 
-        // Damaged total calculation
         const total = damagedList.reduce((sum, dp) => {
           const quantity = dp.quantity || 0;
           const unitPrice =
@@ -135,7 +136,6 @@ export default function ReportsPage() {
       );
 
       if (res.data.success) {
-        // Refresh expenses after adding
         const refreshed = await axios.get(`${BASE_URL}/expenses`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -161,7 +161,7 @@ export default function ReportsPage() {
     }
   };
 
-  // Filter by date & branch
+  // Filter
   const filterByDateAndBranch = (items) =>
     items.filter((item) => {
       const date = new Date(item.date);
@@ -208,7 +208,8 @@ export default function ReportsPage() {
 
   // Charts
   const productQuantityMap = filteredTransactions.reduce((acc, t) => {
-    acc[t.productName] = (acc[t.productName] || 0) + t.quantity;
+    const name = t.type === "bundle" ? t.bundle_name : t.productName;
+    acc[name] = (acc[name] || 0) + t.quantity;
     return acc;
   }, {});
   const pieOptions = { labels: Object.keys(productQuantityMap), legend: { position: "bottom" }, tooltip: { y: { formatter: (val) => `${val} pcs` } } };
@@ -307,9 +308,24 @@ export default function ReportsPage() {
                 </thead>
                 <tbody className="bg-white">
                   {filteredTransactions.map((t, idx) => (
-                    <tr key={t.id} className={`border-t border-gray-300 ${idx % 2 === 0 ? "bg-gray-50" : "bg-white"} hover:bg-gray-100`}>
+                    <tr
+                      key={t.id}
+                      className={`border-t border-gray-300 ${idx % 2 === 0 ? "bg-gray-50" : "bg-white"} hover:bg-gray-100`}
+                    >
                       {userRole === "admin" && <td className="px-4 py-3">{t.branch}</td>}
-                      <td className="px-4 py-3 font-semibold">{t.productName}</td>
+
+                      {/* Product / Bundle with Image */}
+                      <td className="px-4 py-3 flex items-center gap-2">
+                        <img
+                          src={t.type === "bundle" ? t.bundle_image : t.image_url}
+                          alt={t.type === "bundle" ? t.bundle_name : t.productName}
+                          className="w-12 h-12 object-cover rounded"
+                        />
+                        <span className="font-semibold">
+                          {t.type === "bundle" ? t.bundle_name : t.productName}
+                        </span>
+                      </td>
+
                       <td className="px-4 py-3">{t.quantity}</td>
                       <td className="px-4 py-3 text-purple-600 font-medium">₱{t.deliveryFee.toFixed(2)}</td>
                       <td className="px-4 py-3 text-green-600 font-medium">₱{t.totalPrice.toFixed(2)}</td>
