@@ -1044,7 +1044,7 @@ router.put(
          JOIN order_items oi ON o.order_id = oi.order_id
          WHERE o.order_id = ? AND oi.branch_id = ?
          LIMIT 1`,
-        [id, user.branches?.[0]] // branch_manager may have multiple branches
+        [id, user.branches?.[0]]
       );
 
       if (!ownershipCheck.length) {
@@ -1072,12 +1072,13 @@ router.put(
       const connection = await db.getConnection();
       await connection.beginTransaction();
 
+      // Fetch all order items
       const [items] = await connection.query(
-        "SELECT product_id, quantity, type FROM order_items WHERE order_id = ?",
+        "SELECT order_items_id, product_id, branch_bundle_id, branch_id, quantity, type FROM order_items WHERE order_id = ?",
         [id]
       );
 
-      // STOCK DEDUCTION (pending → preparing or preparing → on_delivery)
+      // Inventory deduction for pending → preparing or preparing → on_delivery
       if (
         (currentStatus === "pending" && status === "preparing") ||
         (currentStatus === "preparing" && status === "on_delivery")
@@ -1085,79 +1086,181 @@ router.put(
         for (const item of items) {
           if (item.type === "refill") continue;
 
-          const [invRows] = await connection.query(
-            "SELECT stock FROM inventory WHERE product_id = ?",
-            [item.product_id]
-          );
-          const prev = invRows[0]?.stock ?? 0;
-          let newStock = prev;
+          // Handle bundle items
+          if (item.branch_bundle_id) {
+            const [bundleProducts] = await connection.query(
+              `SELECT bi.product_id, bi.quantity AS bundle_quantity
+               FROM bundle_items bi
+               JOIN branch_bundles bb ON bi.bundle_id = bb.bundle_id
+               WHERE bb.id = ?`,
+              [item.branch_bundle_id]
+            );
 
-          if (currentStatus === "preparing" && status === "on_delivery" && !inventoryDeducted) {
-            if (prev < item.quantity) {
-              await connection.rollback();
-              connection.release();
-              return res.status(400).json({
-                success: false,
-                error: `Insufficient stock for product_id ${item.product_id}. Only ${prev} left.`,
-              });
+            for (const bp of bundleProducts) {
+              const totalQty = bp.bundle_quantity * item.quantity;
+
+              const [invRows] = await connection.query(
+                "SELECT stock FROM inventory WHERE product_id = ? AND branch_id = ?",
+                [bp.product_id, item.branch_id]
+              );
+              const prev = invRows[0]?.stock ?? 0;
+
+              if (currentStatus === "preparing" && status === "on_delivery" && !inventoryDeducted) {
+                if (prev < totalQty) {
+                  await connection.rollback();
+                  connection.release();
+                  return res.status(400).json({
+                    success: false,
+                    error: `Insufficient stock for product_id ${bp.product_id}. Only ${prev} left.`,
+                  });
+                }
+
+                await adjustInventory(bp.product_id, -totalQty, connection);
+
+                await connection.query(
+                  `INSERT INTO inventory_logs
+                    (product_id, state, user_id, type, quantity, previous_stock, new_stock, description)
+                   VALUES (?, 'full', ?, 'pending_order', ?, ?, ?, ?)`,
+                  [bp.product_id, user.id, totalQty, prev, prev - totalQty, `Order #${id} moved from ${currentStatus} → ${status}`]
+                );
+              }
             }
-            await adjustInventory(item.product_id, -item.quantity, connection);
-            newStock = prev - item.quantity;
+          } else {
+            // Single product
+            const [invRows] = await connection.query(
+              "SELECT stock FROM inventory WHERE product_id = ? AND branch_id = ?",
+              [item.product_id, item.branch_id]
+            );
+            const prev = invRows[0]?.stock ?? 0;
 
-            await connection.query("UPDATE orders SET inventory_deducted = 1 WHERE order_id = ?", [id]);
+            if (currentStatus === "preparing" && status === "on_delivery" && !inventoryDeducted) {
+              if (prev < item.quantity) {
+                await connection.rollback();
+                connection.release();
+                return res.status(400).json({
+                  success: false,
+                  error: `Insufficient stock for product_id ${item.product_id}. Only ${prev} left.`,
+                });
+              }
+
+              await adjustInventory(item.product_id, -item.quantity, connection);
+
+              await connection.query(
+                `INSERT INTO inventory_logs
+                  (product_id, state, user_id, type, quantity, previous_stock, new_stock, description)
+                 VALUES (?, 'full', ?, 'pending_order', ?, ?, ?, ?)`,
+                [item.product_id, user.id, item.quantity, prev, prev - item.quantity, `Order #${id} moved from ${currentStatus} → ${status}`]
+              );
+            }
           }
+        }
 
-          await connection.query(
-            `INSERT INTO inventory_logs
-              (product_id, state, user_id, type, quantity, previous_stock, new_stock, description)
-             VALUES (?, 'full', ?, 'pending_order', ?, ?, ?, ?)`,
-            [item.product_id, user.id, item.quantity, prev, newStock, `Order #${id} moved from ${currentStatus} → ${status}`]
-          );
+        if (currentStatus === "preparing" && status === "on_delivery") {
+          await connection.query("UPDATE orders SET inventory_deducted = 1 WHERE order_id = ?", [id]);
         }
       }
 
-      // DELIVERED
+      // Delivered
       if (status === "delivered") {
         for (const item of items) {
           if (item.type === "refill") continue;
-          const [invRows] = await connection.query(
-            "SELECT stock FROM inventory WHERE product_id = ?",
-            [item.product_id]
-          );
-          const prev = invRows[0]?.stock ?? 0;
 
-          await connection.query(
-            `INSERT INTO inventory_logs
-              (product_id, state, user_id, type, quantity, previous_stock, new_stock, description)
-             VALUES (?, 'full', ?, 'delivery', ?, ?, ?, ?)`,
-            [item.product_id, user.id, item.quantity, prev, prev, `Order delivered #${id}`]
-          );
+          if (item.branch_bundle_id) {
+            const [bundleProducts] = await connection.query(
+              `SELECT bi.product_id, bi.quantity AS bundle_quantity
+               FROM bundle_items bi
+               JOIN branch_bundles bb ON bi.bundle_id = bb.bundle_id
+               WHERE bb.id = ?`,
+              [item.branch_bundle_id]
+            );
+
+            for (const bp of bundleProducts) {
+              const totalQty = bp.bundle_quantity * item.quantity;
+              const [invRows] = await connection.query(
+                "SELECT stock FROM inventory WHERE product_id = ? AND branch_id = ?",
+                [bp.product_id, item.branch_id]
+              );
+              const prev = invRows[0]?.stock ?? 0;
+
+              await connection.query(
+                `INSERT INTO inventory_logs
+                  (product_id, state, user_id, type, quantity, previous_stock, new_stock, description)
+                 VALUES (?, 'full', ?, 'delivery', ?, ?, ?, ?)`,
+                [bp.product_id, user.id, totalQty, prev, prev, `Order delivered #${id}`]
+              );
+            }
+          } else {
+            const [invRows] = await connection.query(
+              "SELECT stock FROM inventory WHERE product_id = ? AND branch_id = ?",
+              [item.product_id, item.branch_id]
+            );
+            const prev = invRows[0]?.stock ?? 0;
+
+            await connection.query(
+              `INSERT INTO inventory_logs
+                (product_id, state, user_id, type, quantity, previous_stock, new_stock, description)
+               VALUES (?, 'full', ?, 'delivery', ?, ?, ?, ?)`,
+              [item.product_id, user.id, item.quantity, prev, prev, `Order delivered #${id}`]
+            );
+          }
         }
+
         await connection.query("UPDATE orders SET status = ?, delivered_at = NOW() WHERE order_id = ?", [status, id]);
-      } else {
+      } else if (status !== "cancelled") {
         await connection.query("UPDATE orders SET status = ? WHERE order_id = ?", [status, id]);
       }
 
-      // CANCELLED
+      // Cancelled
       if (status === "cancelled" && inventoryDeducted) {
         for (const item of items) {
           if (item.type === "refill") continue;
-          const [invRows] = await connection.query(
-            "SELECT stock FROM inventory WHERE product_id = ?",
-            [item.product_id]
-          );
-          const prev = invRows[0]?.stock ?? 0;
 
-          await adjustInventory(item.product_id, item.quantity, connection);
+          if (item.branch_bundle_id) {
+            const [bundleProducts] = await connection.query(
+              `SELECT bi.product_id, bi.quantity AS bundle_quantity
+               FROM bundle_items bi
+               JOIN branch_bundles bb ON bi.bundle_id = bb.bundle_id
+               WHERE bb.id = ?`,
+              [item.branch_bundle_id]
+            );
 
-          await connection.query(
-            `INSERT INTO inventory_logs
-              (product_id, state, user_id, type, quantity, previous_stock, new_stock, description)
-             VALUES (?, 'full', ?, 'order_cancelled', ?, ?, ?, ?)`,
-            [item.product_id, user.id, item.quantity, prev, prev + item.quantity, `Stock restored for cancelled Order #${id}`]
-          );
+            for (const bp of bundleProducts) {
+              const totalQty = bp.bundle_quantity * item.quantity;
+              const [invRows] = await connection.query(
+                "SELECT stock FROM inventory WHERE product_id = ? AND branch_id = ?",
+                [bp.product_id, item.branch_id]
+              );
+              const prev = invRows[0]?.stock ?? 0;
+
+              await adjustInventory(bp.product_id, totalQty, connection);
+
+              await connection.query(
+                `INSERT INTO inventory_logs
+                  (product_id, state, user_id, type, quantity, previous_stock, new_stock, description)
+                 VALUES (?, 'full', ?, 'order_cancelled', ?, ?, ?, ?)`,
+                [bp.product_id, user.id, totalQty, prev, prev + totalQty, `Stock restored for cancelled Order #${id}`]
+              );
+            }
+          } else {
+            const [invRows] = await connection.query(
+              "SELECT stock FROM inventory WHERE product_id = ? AND branch_id = ?",
+              [item.product_id, item.branch_id]
+            );
+            const prev = invRows[0]?.stock ?? 0;
+
+            await adjustInventory(item.product_id, item.quantity, connection);
+
+            await connection.query(
+              `INSERT INTO inventory_logs
+                (product_id, state, user_id, type, quantity, previous_stock, new_stock, description)
+               VALUES (?, 'full', ?, 'order_cancelled', ?, ?, ?, ?)`,
+              [item.product_id, user.id, item.quantity, prev, prev + item.quantity, `Stock restored for cancelled Order #${id}`]
+            );
+          }
         }
+
         await connection.query("UPDATE orders SET inventory_deducted = 0 WHERE order_id = ?", [id]);
+        await connection.query("UPDATE orders SET status = ? WHERE order_id = ?", [status, id]);
       }
 
       await connection.commit();
