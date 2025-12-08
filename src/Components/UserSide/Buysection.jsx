@@ -35,6 +35,7 @@ export default function Buysection() {
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [loading, setLoading] = useState(true);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [isPlacingLoan, setIsPlacingLoan] = useState(false); // ───────── LOAN STATE
   const [userRole, setUserRole] = useState(null);
 
   const municipalities = ["Boac", "Mogpog", "Gasan", "Buenavista", "Torrijos", "Santa Cruz"];
@@ -88,7 +89,7 @@ export default function Buysection() {
         setName(user.name || "");
         setPhone(user.contact_number || "+63");
         setMunicipality(user.municipality || "");
-        setDeliveryAddress(user.home_address || ""); // Delivery Address
+        setDeliveryAddress(user.home_address || "");
 
         if (user.municipality) {
           const res = await axios.get(`${BASE_URL}/barangays?municipality=${user.municipality}`);
@@ -214,13 +215,13 @@ export default function Buysection() {
               product_id: product.product_id,
               quantity,
               type: productType,
-              branch_id: product.branch_id
+              branch_id: product.branch_id,
             },
           ],
           full_name: name,
           contact_number: phone,
           barangay_id: selectedBarangayId,
-          delivery_address: deliveryAddress, // Added here
+          delivery_address: deliveryAddress,
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -232,6 +233,68 @@ export default function Buysection() {
       toast.error(err.response?.data?.error || "Failed to place order.");
     } finally {
       setIsPlacingOrder(false);
+    }
+  };
+
+  // ───────── LOAN HANDLER ─────────
+  const handleLoan = async () => {
+    if (
+      !product ||
+      quantity <= 0 ||
+      !name ||
+      !phone ||
+      !municipality ||
+      !selectedBarangayId ||
+      !deliveryAddress ||
+      !/^\+639\d{9}$/.test(phone)
+    ) {
+      return toast.error("Please fill out all fields correctly.");
+    }
+    if (quantity > product.stock) return toast.error(`Only ${product.stock} available.`);
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      toast.error("Please log in.");
+      navigate("/login");
+      return;
+    }
+
+    try {
+      setIsPlacingLoan(true);
+
+      const price =
+        productType === "discounted"
+          ? product.discounted_price
+          : product.price;
+
+      const { data } = await axios.post(
+        `${BASE_URL}/orders/loan`,
+        {
+          items: [
+            {
+              product_id: product.product_id,
+              quantity,
+              type: productType,  // send the product type
+              price,              // send the correct price
+              branch_id: product.branch_id,
+            },
+          ],
+          full_name: name,
+          contact_number: phone,
+          barangay_id: selectedBarangayId,
+          delivery_address: deliveryAddress,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+
+      toast.success(data.message || "Loan request submitted!");
+      navigate("/orders");
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.error || "Failed to submit loan.");
+    } finally {
+      setIsPlacingLoan(false);
     }
   };
 
@@ -392,10 +455,11 @@ export default function Buysection() {
 
             {userRole === "business_owner" && (
               <button
-                onClick={() => toast.success("Loan request submitted!")}
-                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold bg-purple-600 hover:bg-purple-700"
+                onClick={handleLoan}
+                disabled={outOfStock || isPlacingLoan}
+                className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold bg-purple-600 hover:bg-purple-700 ${isPlacingLoan ? "cursor-not-allowed bg-purple-500" : ""}`}
               >
-                <CreditCard size={20} /> Loan
+                <CreditCard size={20} /> {isPlacingLoan ? "Processing Loan..." : "Loan"}
               </button>
             )}
 
