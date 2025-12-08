@@ -33,7 +33,7 @@ export default function LoanSection() {
     }, []);
 
     const formatPeso = (amount) =>
-        new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(amount);
+        new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(Math.abs(amount));
 
     const filteredLoans =
         statusFilter === "all"
@@ -43,10 +43,6 @@ export default function LoanSection() {
     const minRows = 5;
     const emptyRows =
         filteredLoans.length < minRows ? minRows - filteredLoans.length : 0;
-
-    const handleSchedulePayment = (loan) => {
-        alert(`Schedule payment for ${loan.product_name} (Loan ID: ${loan.loan_id})`);
-    };
 
     const getStatusColor = (status) => {
         switch (status?.toLowerCase()) {
@@ -105,9 +101,6 @@ export default function LoanSection() {
                                 <th className="px-4 py-3 text-center text-sm font-medium text-white">
                                     Status
                                 </th>
-                                <th className="px-4 py-3 text-center text-sm font-medium text-white">
-                                    Actions
-                                </th>
                             </tr>
                         </thead>
 
@@ -133,7 +126,7 @@ export default function LoanSection() {
 
                                     {/* Amount */}
                                     <td className="px-4 py-3 text-center text-white">
-                                        {loan.price !== undefined ? formatPeso(loan.price) : "---"}
+                                        {loan.loan_price !== undefined ? formatPeso(loan.loan_price) : "---"}
                                     </td>
 
                                     {/* Issued Date */}
@@ -159,16 +152,6 @@ export default function LoanSection() {
                                             {loan.status || "Pending"}
                                         </span>
                                     </td>
-
-                                    {/* Actions */}
-                                    <td className="px-4 py-3 text-center">
-                                        <button
-                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm font-medium transition-colors"
-                                            onClick={() => handleSchedulePayment(loan)}
-                                        >
-                                            Schedule Payment
-                                        </button>
-                                    </td>
                                 </tr>
                             ))}
 
@@ -178,14 +161,14 @@ export default function LoanSection() {
                                     .fill(null)
                                     .map((_, idx) => (
                                         <tr key={`empty-${idx}`} className="bg-gray-800">
-                                            <td colSpan={7}></td>
+                                            <td colSpan={6}></td>
                                         </tr>
                                     ))}
 
                             {/* No Loans */}
                             {filteredLoans.length === 0 && (
                                 <tr>
-                                    <td colSpan={7}>
+                                    <td colSpan={6}>
                                         <div className="flex items-center justify-center h-[60vh] text-gray-400 text-lg">
                                             No Loans Found
                                         </div>

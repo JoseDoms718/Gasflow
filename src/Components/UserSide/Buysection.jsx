@@ -35,7 +35,7 @@ export default function Buysection() {
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [loading, setLoading] = useState(true);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
-  const [isPlacingLoan, setIsPlacingLoan] = useState(false); // ───────── LOAN STATE
+  const [isPlacingLoan, setIsPlacingLoan] = useState(false);
   const [userRole, setUserRole] = useState(null);
 
   const municipalities = ["Boac", "Mogpog", "Gasan", "Buenavista", "Torrijos", "Santa Cruz"];
@@ -251,6 +251,7 @@ export default function Buysection() {
       return toast.error("Please fill out all fields correctly.");
     }
     if (quantity > product.stock) return toast.error(`Only ${product.stock} available.`);
+    if (quantity > 2) return toast.error("You can only loan a maximum of 2 items at a time.");
 
     const token = localStorage.getItem("token");
     if (!token) {
@@ -274,8 +275,8 @@ export default function Buysection() {
             {
               product_id: product.product_id,
               quantity,
-              type: productType,  // send the product type
-              price,              // send the correct price
+              type: productType,
+              price,
               branch_id: product.branch_id,
             },
           ],
@@ -286,7 +287,6 @@ export default function Buysection() {
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-
 
       toast.success(data.message || "Loan request submitted!");
       navigate("/orders");
@@ -332,7 +332,6 @@ export default function Buysection() {
 
         {/* Info */}
         <div className="bg-gray-800 p-10 rounded-2xl shadow-lg flex flex-col justify-between h-[600px] max-h-[85vh] overflow-y-auto">
-          {/* Header row with title and X button */}
           <div className="flex justify-between items-start mb-4">
             <h2 className="text-3xl font-bold">{product.product_name}</h2>
             <button onClick={() => navigate(-1)} className="ml-4 bg-gray-700 hover:bg-gray-600 rounded-lg p-2">
@@ -369,9 +368,8 @@ export default function Buysection() {
                 value={quantity ?? ""}
                 onChange={(e) => {
                   let val = e.target.value.replace(/\D/g, "");
-                  if (val === "" || parseInt(val) <= 0) {
-                    setQuantity("");
-                  } else {
+                  if (val === "" || parseInt(val) <= 0) setQuantity("");
+                  else {
                     let num = parseInt(val);
                     if (product && num > product.stock) num = product.stock;
                     setQuantity(num);
@@ -394,33 +392,10 @@ export default function Buysection() {
 
           {/* User Info */}
           <div className="space-y-4 mb-6">
-            <input
-              type="text"
-              value={name}
-              onChange={handleNameChange}
-              placeholder="Full Name"
-              className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700"
-            />
-            <input
-              type="tel"
-              value={phone}
-              onChange={handlePhoneChange}
-              placeholder="+639XXXXXXXXX"
-              maxLength={13}
-              className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700"
-            />
-            <input
-              type="text"
-              value={deliveryAddress}
-              onChange={(e) => setDeliveryAddress(e.target.value)}
-              placeholder="Delivery Address"
-              className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700"
-            />
-            <select
-              value={municipality}
-              onChange={(e) => setMunicipality(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700"
-            >
+            <input type="text" value={name} onChange={handleNameChange} placeholder="Full Name" className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700" />
+            <input type="tel" value={phone} onChange={handlePhoneChange} placeholder="+639XXXXXXXXX" maxLength={13} className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700" />
+            <input type="text" value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} placeholder="Delivery Address" className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700" />
+            <select value={municipality} onChange={(e) => setMunicipality(e.target.value)} className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700">
               <option value="">Select municipality</option>
               {municipalities.map((m) => (
                 <option key={m} value={m}>
@@ -428,11 +403,7 @@ export default function Buysection() {
                 </option>
               ))}
             </select>
-            <select
-              value={selectedBarangayId}
-              onChange={(e) => setSelectedBarangayId(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700"
-            >
+            <select value={selectedBarangayId} onChange={(e) => setSelectedBarangayId(e.target.value)} className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700">
               <option value="">Select barangay</option>
               {barangays.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -444,33 +415,27 @@ export default function Buysection() {
 
           {/* Actions */}
           <div className="flex flex-col md:flex-row gap-4 mt-4">
-            <button
-              onClick={handleAddToCart}
-              disabled={outOfStock}
-              className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold ${outOfStock ? "bg-yellow-500 cursor-not-allowed" : "bg-yellow-600 hover:bg-yellow-700"
-                }`}
-            >
+            <button onClick={handleAddToCart} disabled={outOfStock} className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold ${outOfStock ? "bg-yellow-500 cursor-not-allowed" : "bg-yellow-600 hover:bg-yellow-700"}`}>
               <ShoppingCart size={20} /> Cart
             </button>
 
             {userRole === "business_owner" && (
               <button
                 onClick={handleLoan}
-                disabled={outOfStock || isPlacingLoan}
-                className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold bg-purple-600 hover:bg-purple-700 ${isPlacingLoan ? "cursor-not-allowed bg-purple-500" : ""}`}
+                disabled={outOfStock || isPlacingLoan || quantity > 2}
+                className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold bg-purple-600 hover:bg-purple-700 ${isPlacingLoan || quantity > 2 ? "cursor-not-allowed bg-purple-500" : ""}`}
               >
                 <CreditCard size={20} /> {isPlacingLoan ? "Processing Loan..." : "Loan"}
               </button>
             )}
 
+
             <button
               onClick={handleCheckout}
               disabled={isPlacingOrder || outOfStock}
-              className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold ${isPlacingOrder || outOfStock ? "bg-blue-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
-                }`}
+              className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold ${isPlacingOrder || outOfStock ? "bg-blue-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"}`}
             >
-              <CreditCard size={20} />{" "}
-              {outOfStock ? "Out of Stock" : isPlacingOrder ? "Placing Order..." : "Checkout"}
+              <CreditCard size={20} /> {outOfStock ? "Out of Stock" : isPlacingOrder ? "Placing Order..." : "Checkout"}
             </button>
           </div>
         </div>

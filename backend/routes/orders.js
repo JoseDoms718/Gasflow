@@ -660,12 +660,8 @@ router.post("/buy", authenticateToken, async (req, res) => {
 
 //Loans
 router.post("/loan", authenticateToken, async (req, res) => {
-  // --- Role check ---
   if (!["business_owner", "branch_manager"].includes(req.user.role)) {
-    return res.status(403).json({
-      success: false,
-      error: "Access denied.",
-    });
+    return res.status(403).json({ success: false, error: "Access denied." });
   }
 
   const connection = await db.getConnection();
@@ -677,61 +673,66 @@ router.post("/loan", authenticateToken, async (req, res) => {
     // --- Validate buyer info ---
     if (!full_name || !contact_number || !barangay_id || !delivery_address) {
       connection.release();
-      return res.status(400).json({
-        success: false,
-        error: "Missing required buyer fields.",
-      });
+      return res.status(400).json({ success: false, error: "Missing required buyer fields." });
     }
 
     if (!PH_PHONE_REGEX.test(contact_number)) {
       connection.release();
-      return res.status(400).json({
-        success: false,
-        error: "Invalid Philippine contact number format (+639XXXXXXXXX).",
-      });
+      return res.status(400).json({ success: false, error: "Invalid Philippine contact number format (+639XXXXXXXXX)." });
     }
 
     if (!Array.isArray(items) || items.length === 0) {
       connection.release();
+      return res.status(400).json({ success: false, error: "No items provided." });
+    }
+
+    // --- Check total quantity of requested loan items ---
+    const requestedQty = items.reduce((sum, i) => sum + (i.quantity || 0), 0);
+    if (requestedQty > 2) {
+      connection.release();
+      return res.status(400).json({ success: false, error: "You can only loan a maximum of 2 items at a time." });
+    }
+
+    // --- Check existing pending loans ---
+    const [pendingLoans] = await connection.query(
+      `SELECT SUM(oi.quantity) AS total_qty
+       FROM loans l
+       JOIN order_items oi ON l.order_item_id = oi.order_items_id
+       WHERE l.user_id = ? AND l.status = 'pending'`,
+      [buyer_id]
+    );
+
+    const currentLoanQty = pendingLoans[0].total_qty || 0;
+    if (currentLoanQty + requestedQty > 2) {
+      connection.release();
       return res.status(400).json({
         success: false,
-        error: "No items provided.",
+        error: `You already have ${currentLoanQty} item(s) on loan. You can only loan a total of 2 items at a time.`,
       });
     }
 
     const barangayRow = await fetchBarangay(barangay_id);
     if (!barangayRow) {
       connection.release();
-      return res.status(404).json({
-        success: false,
-        error: "Barangay not found.",
-      });
+      return res.status(404).json({ success: false, error: "Barangay not found." });
     }
 
     // --- Group items by branch ---
     const branchMap = {};
-
     for (const item of items) {
       if (!item.product_id || !item.branch_id || !item.quantity) {
         connection.release();
-        return res.status(400).json({
-          success: false,
-          error: "Each item must include product_id, branch_id, and quantity.",
-        });
+        return res.status(400).json({ success: false, error: "Each item must include product_id, branch_id, and quantity." });
       }
 
       const [rows] = await connection.query(
         `SELECT p.price FROM products p WHERE p.product_id = ? LIMIT 1`,
         [item.product_id]
       );
-
       const product = rows[0];
       if (!product) {
         connection.release();
-        return res.status(400).json({
-          success: false,
-          error: `Product ${item.product_id} not found.`,
-        });
+        return res.status(400).json({ success: false, error: `Product ${item.product_id} not found.` });
       }
 
       const basePrice = item.price ?? product.price;
@@ -739,8 +740,8 @@ router.post("/loan", authenticateToken, async (req, res) => {
       branchMap[item.branch_id] = branchMap[item.branch_id] || [];
       branchMap[item.branch_id].push({
         product_id: item.product_id,
-        quantity: item.quantity,          // ✅ keep positive
-        price: -Math.abs(basePrice),      // ✅ NEGATIVE for loan
+        quantity: item.quantity,
+        price: -Math.abs(basePrice),
         type: "loan",
       });
     }
@@ -750,81 +751,53 @@ router.post("/loan", authenticateToken, async (req, res) => {
     const createdOrders = [];
 
     for (const [branch_id, branchItems] of Object.entries(branchMap)) {
-      const totalBranchPrice = branchItems.reduce(
-        (sum, i) => sum + i.price * i.quantity,
-        0
-      );
+      const totalBranchPrice = branchItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
-      // --- Create order ---
       const [orderResult] = await connection.query(
         `INSERT INTO orders (
           buyer_id, full_name, contact_number, barangay_id, delivery_address,
           status, total_price, delivery_fee, is_active, ordered_at, inventory_deducted
         ) VALUES (?, ?, ?, ?, ?, 'pending', ?, 0, 1, NOW(), 0)`,
-        [
-          buyer_id,
-          full_name,
-          contact_number,
-          barangay_id,
-          delivery_address,
-          totalBranchPrice,
-        ]
+        [buyer_id, full_name, contact_number, barangay_id, delivery_address, totalBranchPrice]
       );
 
       const order_id = orderResult.insertId;
 
       for (const item of branchItems) {
-        // --- Insert order item ---
-        await connection.query(
+        const [itemResult] = await connection.query(
           `INSERT INTO order_items
            (order_id, product_id, quantity, price, type, branch_id)
            VALUES (?, ?, ?, ?, ?, ?)`,
-          [
-            order_id,
-            item.product_id,
-            item.quantity,
-            item.price,
-            item.type,
-            branch_id,
-          ]
+          [order_id, item.product_id, item.quantity, item.price, item.type, branch_id]
+        );
+
+        const order_item_id = itemResult.insertId;
+
+        // Insert into loans table
+        const dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + 7); // 7-day loan
+        await connection.query(
+          `INSERT INTO loans (order_item_id, user_id, branch_id, due_date, price, status) VALUES (?, ?, ?, ?, ?, 'pending')`,
+          [order_item_id, buyer_id, branch_id, dueDate, -Math.abs(item.price * item.quantity)]
         );
       }
 
-      createdOrders.push({
-        order_id,
-        branch_id,
-        total_price: totalBranchPrice,
-        items: branchItems,
-      });
+      createdOrders.push({ order_id, branch_id, total_price: totalBranchPrice, items: branchItems });
 
-      io.emit("newLoan", {
-        order_id,
-        branch_id,
-        items: branchItems,
-      });
+      io.emit("newLoan", { order_id, branch_id, items: branchItems });
     }
 
     await connection.commit();
     connection.release();
 
-    return res.status(201).json({
-      success: true,
-      message: "Loan orders created successfully.",
-      orders: createdOrders,
-    });
+    return res.status(201).json({ success: true, message: "Loan orders created successfully.", orders: createdOrders });
   } catch (err) {
-    try {
-      await connection.rollback();
-      connection.release();
-    } catch (e) {}
-
+    try { await connection.rollback(); connection.release(); } catch (e) {}
     console.error("❌ Error (loan):", err);
-    return res.status(500).json({
-      success: false,
-      error: "Failed to process loan orders.",
-    });
+    return res.status(500).json({ success: false, error: "Failed to process loan orders." });
   }
 });
+
 
 router.post("/loan/:loan_id/pay", authenticateToken, async (req, res) => {
   const connection = await db.getConnection();
@@ -952,7 +925,7 @@ router.post("/loan/:loan_id/pay", authenticateToken, async (req, res) => {
 router.get("/my-loans", authenticateToken, async (req, res) => {
   const connection = await db.getConnection();
   try {
-    const user_id = req.user.id; // use id, not user_id
+    const user_id = req.user.id;
 
     const [loans] = await connection.query(
       `SELECT 
@@ -963,11 +936,12 @@ router.get("/my-loans", authenticateToken, async (req, res) => {
           l.status,
           l.created_at,
           l.payed_at,
+          l.price AS loan_price,   -- get price from loans table
 
           oi.order_items_id,
           oi.product_id,
           oi.quantity,
-          oi.price,
+          oi.price AS item_price,
           oi.type,
 
           p.product_name,
@@ -983,7 +957,6 @@ router.get("/my-loans", authenticateToken, async (req, res) => {
       [user_id]
     );
 
-    // Update status to 'overdue' if due_date has passed and status is still pending
     const now = new Date();
     const updatedLoans = loans.map(loan => {
       if (loan.status.toLowerCase() === "pending" && new Date(loan.due_date) < now) {
@@ -1005,6 +978,7 @@ router.get("/my-loans", authenticateToken, async (req, res) => {
     });
   }
 });
+
 
 router.get("/branch-loans", authenticateToken, async (req, res) => {
   const connection = await db.getConnection();

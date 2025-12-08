@@ -262,7 +262,6 @@ export default function IncomingOrderSection() {
                 {open && (
                   <div className="p-5 border-t border-gray-200 bg-gray-50">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* LEFT SIDE - ITEMS */}
                       <div className="w-full h-[350px] overflow-y-auto rounded-xl bg-white shadow-md p-4 space-y-4">
                         {order.items?.map((item, idx) => (
                           <div
@@ -276,6 +275,11 @@ export default function IncomingOrderSection() {
                             />
 
                             <div className="flex flex-col justify-between">
+                              {/* Add TYPE label */}
+                              <h5 className="text-xs font-semibold text-gray-500 uppercase mb-1">
+                                {item.type}
+                              </h5>
+
                               <h3 className="text-lg font-semibold text-gray-900">
                                 {item.display_name}
                               </h3>
@@ -287,19 +291,17 @@ export default function IncomingOrderSection() {
                               )}
 
                               <p className="text-sm text-gray-700 mt-1">
-                                Qty:{" "}
-                                <span className="font-bold">{item.quantity}</span>{" "}
-                                × ₱{item.display_price.toLocaleString()}
+                                Qty: <span className="font-bold">{item.quantity}</span> × ₱{item.display_price.toLocaleString()}
                               </p>
 
                               <p className="text-blue-600 font-semibold mt-1">
-                                Subtotal: ₱
-                                {(item.quantity * item.display_price).toLocaleString()}
+                                Subtotal: ₱{(item.quantity * item.display_price).toLocaleString()}
                               </p>
                             </div>
                           </div>
                         ))}
                       </div>
+
 
                       {/* RIGHT SIDE - INFO */}
                       <div className="bg-white rounded-xl shadow-md border p-6 text-sm text-gray-800 flex flex-col h-full">
