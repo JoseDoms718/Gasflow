@@ -123,6 +123,7 @@ export default function InquiriesSection() {
         if (!newMessage.trim() || !selectedConversation || !token || !user) return;
 
         try {
+            // Send via backend (server will broadcast via Socket.IO)
             const res = await axios.post(
                 `${BASE_URL}/chat/messages`,
                 {
@@ -132,13 +133,7 @@ export default function InquiriesSection() {
                 { headers: { Authorization: `Bearer ${token}` } }
             );
 
-            socketRef.current.emit("sendMessage", {
-                conversationId: selectedConversation.conversation_id,
-                senderId: user.user_id,
-                text: newMessage.trim(),
-            });
-
-
+            // Append message locally
             setChatMessages((prev) => [...prev, res.data]);
             setNewMessage("");
             toast.success("Message sent!");
@@ -147,6 +142,7 @@ export default function InquiriesSection() {
             toast.error("Failed to send message.");
         }
     };
+
 
     // Helper to display friendly role
     const getRoleLabel = (role) => ROLE_LABELS[role] || role;

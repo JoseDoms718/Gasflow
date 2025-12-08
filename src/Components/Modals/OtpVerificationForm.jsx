@@ -1,10 +1,11 @@
-
 import React, { useState, useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+
 const BASE_URL = import.meta.env.VITE_BASE_URL;
+
 export default function OtpVerificationForm({ email, onVerifyOtp }) {
     const [otp, setOtp] = useState("");
     const [loading, setLoading] = useState(false);
@@ -34,7 +35,7 @@ export default function OtpVerificationForm({ email, onVerifyOtp }) {
         }, 1000);
     };
 
-    // Verify OTP
+    // Verify OTP & auto-login
     const handleVerify = async (e) => {
         e.preventDefault();
         if (otp.length !== 6) {
@@ -44,10 +45,29 @@ export default function OtpVerificationForm({ email, onVerifyOtp }) {
 
         try {
             setLoading(true);
-            await axios.post(`${BASE_URL}/verify-otp`, { email, otp });
-            toast.success("✅ OTP verified successfully!");
+            const res = await axios.post(`${BASE_URL}/verify-otp`, { email, otp });
+
+            // ✅ Expect the backend to return { token, user, success, message }
+            const { token, user } = res.data;
+            if (!token) {
+                toast.error("No token received. Auto-login failed.");
+                return;
+            }
+
+            // Save token to localStorage for authenticated requests
+            localStorage.setItem("token", token);
+
+            toast.success("✅ OTP verified! Logged in successfully.");
+
+            // Clear OTP input
             setOtp("");
-            if (onVerifyOtp) await onVerifyOtp(otp);
+
+            // Call parent callback if provided
+            if (onVerifyOtp) await onVerifyOtp(user);
+
+            // Redirect to home/dashboard
+            navigate("/dashboard"); // change to your desired route
+
         } catch (err) {
             console.error("❌ OTP verification error:", err);
             toast.error(err?.response?.data?.error || "Invalid or expired OTP.");

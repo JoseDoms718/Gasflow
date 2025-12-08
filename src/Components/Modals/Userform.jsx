@@ -273,15 +273,24 @@ export default function Userform({ setIsOtpActive, setOtpEmail }) {
       {otpSent && (
         <OtpVerificationForm
           email={formData.email}
-          onVerifyOtp={async (otp) => {
-            const res = await axios.post(`${BASE_URL}/verify-otp`, { email: formData.email, otp });
-            toast.success(res.data.message || "🎉 Account verified successfully!");
+          onVerifyOtp={async (user, token) => {
+            // Save token for future authenticated requests
+            if (token) localStorage.setItem("token", token);
+
+            // Show success toast
+            toast.success("🎉 Account verified & logged in successfully!");
+
+            // Reset form
             handleOtpVerified();
+
+            // Redirect user
+            window.location.href = "/dashboard"; // or use navigate("/dashboard") if using react-router
           }}
           onCancel={handleCancelOtp}
           onResendOtp={sendOtpRequest}
         />
       )}
+
     </div>
   );
 }
