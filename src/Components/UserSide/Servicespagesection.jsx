@@ -12,16 +12,28 @@ const BASE_URL = import.meta.env.VITE_BASE_URL;
 const API_URL = `${BASE_URL}/services`;
 
 export default function Servicespagesection() {
-  const [modalType, setModalType] = useState(null);
-  const [userType] = useState("normal"); // "business" unlocks restricted services
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [userType, setUserType] = useState("normal"); // "retailer" for retailers
   const navigate = useNavigate();
+
+  // Detect logged-in user role
+  useEffect(() => {
+    const savedUser = localStorage.getItem("user");
+    if (savedUser) {
+      const user = JSON.parse(savedUser);
+      if (user.role === "retailer") {
+        setUserType("retailer");
+      }
+    }
+  }, []);
+
+  const getToken = () => localStorage.getItem("token");
 
   const fetchServices = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = getToken();
       const res = await axios.get(`${API_URL}/fetchServices`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -48,8 +60,6 @@ export default function Servicespagesection() {
     fetchServices();
   }, []);
 
-  const getToken = () => localStorage.getItem("token");
-
   const handleInquireService = async (service) => {
     const token = getToken();
     if (!token) {
@@ -58,10 +68,9 @@ export default function Servicespagesection() {
     }
 
     try {
-      // 1️⃣ Create conversation with service owner
       const convRes = await axios.post(
         `${BASE_URL}/chat/conversations`,
-        { receiverId: service.user_id }, // user_two_id
+        { receiverId: service.user_id },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -71,7 +80,6 @@ export default function Servicespagesection() {
         return;
       }
 
-      // 2️⃣ Send fixed message
       await axios.post(
         `${BASE_URL}/chat/messages`,
         {
@@ -83,25 +91,75 @@ export default function Servicespagesection() {
 
       toast.success("Inquiry sent successfully!");
 
-      // 3️⃣ Redirect to /inquiry
-      navigate("/inquiry", { state: { conversationId: conversation.conversation_id } });
+      if (userType === "retailer") {
+        navigate("/retailerinquiries", { state: { serviceId: service.id, conversationId: conversation.conversation_id } });
+      } else {
+        navigate("/inquiry", { state: { conversationId: conversation.conversation_id } });
+      }
     } catch (err) {
       console.error("Failed to start inquiry:", err.response || err);
       toast.error("Failed to send inquiry. Please try again.");
     }
   };
 
+  const sectionBg = userType === "retailer" ? "bg-white" : "bg-gray-900";
+  const sectionText = userType === "retailer" ? "text-gray-900" : "text-white";
+  const sectionSubText = userType === "retailer" ? "text-gray-700" : "text-gray-300";
+
   return (
-    <section className="bg-gray-900 pt-15 pb-15 mt-8">
+    <section className={`${sectionBg} pt-15 pb-15 mt-8`}>
       <div className="container mx-auto px-4 md:px-6">
-        <h2 className="text-3xl font-bold text-white mb-2">Our Services</h2>
-        <p className="text-gray-300 max-w-2xl mb-8">
+        {/* ALWAYS show heading & description */}
+        <h2 className={`text-3xl font-bold mb-2 ${sectionText}`}>Our Services</h2>
+        <p className={`max-w-2xl mb-8 ${sectionSubText}`}>
           Discover the different services we offer to make your LPG needs more convenient and accessible.
         </p>
 
         {loading ? (
-          <p className="text-white">Loading services...</p>
+          <p className={sectionText}>Loading services...</p>
+        ) : userType === "retailer" ? (
+          // Grid layout for retailer
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {services.map((service, index) => (
+              <div
+                key={index}
+                className="bg-white rounded-xl shadow-lg flex flex-col h-full overflow-hidden border border-gray-200 hover:shadow-2xl transition duration-300"
+              >
+                <div className="w-full h-48 bg-gray-200 flex items-center justify-center">
+                  {service.image ? (
+                    <img src={service.image} alt={service.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <Package className="w-12 h-12 text-gray-400" />
+                  )}
+                </div>
+
+                <div className="p-6 flex flex-col flex-grow">
+                  <h3 className="text-xl font-semibold mb-2">{service.title}</h3>
+                  <p className="text-gray-600 flex-grow">{service.description}</p>
+
+                  <button
+                    onClick={() =>
+                      service.restricted && userType !== "business"
+                        ? toast.error("Only available for Business Owners.")
+                        : handleInquireService(service)
+                    }
+                    disabled={service.restricted && userType !== "business"}
+                    className={`mt-4 w-full font-medium py-2 px-4 rounded-lg transition
+                      ${service.restricted && userType !== "business"
+                        ? "bg-gray-400 text-gray-700 cursor-not-allowed"
+                        : "bg-blue-600 hover:bg-blue-700 text-white"
+                      }`}
+                  >
+                    {service.restricted && userType !== "business"
+                      ? "Business Owners Only"
+                      : `Inquire about ${service.title}`}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
+          // Swiper layout for normal users
           <div className="relative">
             <Swiper
               modules={[Navigation]}
@@ -120,14 +178,10 @@ export default function Servicespagesection() {
             >
               {services.map((service, index) => (
                 <SwiperSlide key={index}>
-                  <div className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col h-full">
+                  <div className="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col h-full transition hover:shadow-2xl">
                     <div className="w-full h-48 bg-gray-200 flex items-center justify-center">
                       {service.image ? (
-                        <img
-                          src={service.image}
-                          alt={service.title}
-                          className="w-full h-48 object-cover"
-                        />
+                        <img src={service.image} alt={service.title} className="w-full h-48 object-cover" />
                       ) : (
                         <Package className="w-12 h-12 text-gray-400" />
                       )}
@@ -169,47 +223,6 @@ export default function Servicespagesection() {
           </div>
         )}
       </div>
-
-      {modalType && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50 px-4">
-          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md relative">
-            <button
-              onClick={() => setModalType(null)}
-              className="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
-            >
-              ✖
-            </button>
-
-            {modalType === "retailer" ? (
-              <div>
-                <h3 className="text-xl font-semibold mb-4">Retailer Inquiry Form</h3>
-                <form className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Name</label>
-                    <input type="text" className="w-full mt-1 p-2 border rounded-lg" placeholder="Enter your full name" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Email</label>
-                    <input type="email" className="w-full mt-1 p-2 border rounded-lg" placeholder="Enter your email" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Message</label>
-                    <textarea className="w-full mt-1 p-2 border rounded-lg" placeholder="Tell us about your interest" rows={3}></textarea>
-                  </div>
-                  <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg">
-                    Submit Inquiry
-                  </button>
-                </form>
-              </div>
-            ) : modalType === "swap" ? (
-              <div>
-                <h3 className="text-xl font-semibold mb-4">Coming Soon</h3>
-                <p className="text-gray-600">The LPG Swap service will be available soon. Stay tuned!</p>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      )}
     </section>
   );
 }

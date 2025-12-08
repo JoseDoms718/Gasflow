@@ -34,6 +34,7 @@ import BranchLoanpage from "./Pages/BranchManager/Branchloanpage";
 // Retailer
 import RetailerInventorypage from "./Pages/Retailer/RetailerInventorypage";
 import RetailerInquirypage from "./Pages/Retailer/RetailerInquirypage";
+import Retailerservicespage from "./Pages/Retailer/Retailerservicespage";
 
 // Admin
 import AdminInventorypage from "./Pages/Admin/AdminInventorypage";
@@ -101,6 +102,7 @@ function AppWrapper() {
         {/* RETAILER */}
         <Route path="/retailerinventory" element={<RetailerInventorypage />} />
         <Route path="/retailerinquiries" element={<RetailerInquirypage />} />
+        <Route path="/retailerservices" element={<Retailerservicespage />} />
 
         {/* ADMIN */}
         <Route path="/admininventory" element={<AdminInventorypage />} />
