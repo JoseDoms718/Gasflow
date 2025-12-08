@@ -59,24 +59,32 @@ io.on("connection", (socket) => {
   // Listen for new messages
   socket.on("sendMessage", async (data) => {
     const { conversationId, senderId, text } = data;
+
     try {
-      // Save message to DB
+      // Save message to DB using correct column names
       const [result] = await db.query(
-        "INSERT INTO messages (conversationId, senderId, text) VALUES (?, ?, ?)",
+        "INSERT INTO messages (conversation_id, sender_id, message_text) VALUES (?, ?, ?)",
         [conversationId, senderId, text]
       );
 
       // Fetch saved message with sender info
-      const [messages] = await db.query(
-        `SELECT m.*, u.user_id, u.name AS senderName
+      const [message] = await db.query(
+        `SELECT 
+          m.message_id,
+          m.conversation_id,
+          m.sender_id,
+          u.name AS sender_name,
+          m.message_text,
+          m.read_status,
+          m.created_at
          FROM messages m
-         JOIN users u ON m.senderId = u.user_id
-         WHERE m.id = ?`,
+         JOIN users u ON m.sender_id = u.user_id
+         WHERE m.message_id = ?`,
         [result.insertId]
       );
 
       // Broadcast to everyone in the room
-      io.to(`room_${conversationId}`).emit("receiveMessage", messages[0]);
+      io.to(`room_${conversationId}`).emit("receiveMessage", message[0]);
     } catch (err) {
       console.error("Error sending message:", err);
     }

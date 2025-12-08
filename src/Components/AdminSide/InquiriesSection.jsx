@@ -7,7 +7,16 @@ import { io } from "socket.io-client";
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 
-export default function InquiriesSection({ currentUser }) {
+// Map backend roles to friendly labels
+const ROLE_LABELS = {
+    branch_manager: "Branch Manager",
+    business_owner: "Business Owner",
+    users: "Customer",
+    retailer: "Retailer",
+    admin: "Admin",
+};
+
+export default function InquiriesSection() {
     const colors = {
         container: "bg-white",
         card: "bg-gray-100",
@@ -27,107 +36,121 @@ export default function InquiriesSection({ currentUser }) {
     const [selectedConversation, setSelectedConversation] = useState(null);
     const [chatMessages, setChatMessages] = useState([]);
     const [newMessage, setNewMessage] = useState("");
+    const [user, setUser] = useState(null);
+    const [token, setToken] = useState(null);
 
     const socketRef = useRef();
 
-    // ------------------------
-    // Initialize Socket.IO
-    // ------------------------
+    // Load user info & token from localStorage on mount
     useEffect(() => {
-        if (!currentUser?.token) return;
+        const savedUser = JSON.parse(localStorage.getItem("user"));
+        const savedToken = localStorage.getItem("token");
 
-        socketRef.current = io(BASE_URL, { auth: { token: currentUser.token } });
+        if (!savedUser || !savedToken) {
+            toast.error("User not logged in.");
+            return;
+        }
+
+        setUser(savedUser);
+        setToken(savedToken);
+    }, []);
+
+    // Initialize Socket.IO once
+    useEffect(() => {
+        if (!token) return;
+
+        socketRef.current = io(BASE_URL, {
+            auth: { token },
+        });
 
         socketRef.current.on("receiveMessage", (message) => {
-            if (selectedConversation?.conversation_id === message.conversationId) {
-                setChatMessages((prev) => [...prev, message]);
-            }
+            setChatMessages((prev) => {
+                if (selectedConversation && message.conversation_id === selectedConversation.conversation_id) {
+                    return [...prev, message];
+                }
+                return prev;
+            });
         });
 
         return () => socketRef.current.disconnect();
-    }, [selectedConversation, currentUser]);
+    }, [token, selectedConversation]);
 
-    // ------------------------
     // Fetch conversations
-    // ------------------------
     useEffect(() => {
-        const fetchConversations = async () => {
-            if (!currentUser?.token) return;
+        if (!token) return;
 
+        const fetchConversations = async () => {
             try {
-                const res = await axios.get(`${BASE_URL}/chat`, {
-                    headers: { Authorization: `Bearer ${currentUser.token}` },
+                console.log("Token:", token);
+
+                const res = await axios.get(`${BASE_URL}/chat/conversations/user`, {
+                    headers: { Authorization: `Bearer ${token}` },
                 });
 
-                const convs = res.data.conversations || [];
-                console.log("Fetched conversations:", convs);
-                setConversations(convs);
+                console.log("Conversations data:", res.data);
+                setConversations(res.data || []);
             } catch (err) {
-                console.error("Failed to fetch conversations:", err);
+                console.error("Failed to fetch conversations:", err.response?.data || err.message);
                 toast.error("Failed to load inquiries.");
             }
         };
 
         fetchConversations();
-    }, [currentUser]);
+    }, [token]);
 
-    // ------------------------
     // Select conversation
-    // ------------------------
     const handleSelectConversation = async (conversation) => {
         setSelectedConversation(conversation);
-
-        if (!currentUser?.token) return;
+        if (!token) return;
 
         try {
             const res = await axios.get(
-                `${BASE_URL}/chat/${conversation.conversation_id}/messages`,
-                { headers: { Authorization: `Bearer ${currentUser.token}` } }
+                `${BASE_URL}/chat/messages/${conversation.conversation_id}`,
+                { headers: { Authorization: `Bearer ${token}` } }
             );
-            setChatMessages(res.data.messages || []);
 
-            // Join Socket.IO room
+            setChatMessages(res.data || []);
+
             socketRef.current.emit("joinRoom", conversation.conversation_id);
         } catch (err) {
-            console.error("Failed to fetch messages:", err);
+            console.error("Failed to fetch messages:", err.response?.data || err.message);
             toast.error("Failed to load messages.");
         }
     };
 
-    // ------------------------
     // Send message
-    // ------------------------
     const handleSendMessage = async () => {
-        if (!newMessage.trim() || !selectedConversation) return;
+        if (!newMessage.trim() || !selectedConversation || !token || !user) return;
 
         try {
             const res = await axios.post(
                 `${BASE_URL}/chat/messages`,
                 {
                     conversationId: selectedConversation.conversation_id,
-                    text: newMessage.trim(),
+                    messageText: newMessage.trim(),
                 },
-                { headers: { Authorization: `Bearer ${currentUser.token}` } }
+                { headers: { Authorization: `Bearer ${token}` } }
             );
 
             socketRef.current.emit("sendMessage", {
                 conversationId: selectedConversation.conversation_id,
-                senderId: currentUser.user_id,
+                senderId: user.user_id,
                 text: newMessage.trim(),
             });
 
-            setChatMessages((prev) => [...prev, res.data.message]);
+
+            setChatMessages((prev) => [...prev, res.data]);
             setNewMessage("");
             toast.success("Message sent!");
         } catch (err) {
-            console.error("Failed to send message:", err);
+            console.error("Failed to send message:", err.response?.data || err.message);
             toast.error("Failed to send message.");
         }
     };
 
-    // ------------------------
-    // Render
-    // ------------------------
+    // Helper to display friendly role
+    const getRoleLabel = (role) => ROLE_LABELS[role] || role;
+
     return (
         <section className={`h-[90vh] p-4 flex flex-col ${colors.container} transition-all`}>
             <div className="flex flex-1 gap-4 overflow-hidden">
@@ -144,7 +167,9 @@ export default function InquiriesSection({ currentUser }) {
                                 <div
                                     key={conv.conversation_id}
                                     onClick={() => handleSelectConversation(conv)}
-                                    className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all border border-transparent ${selectedConversation?.conversation_id === conv.conversation_id ? colors.selected : colors.hover
+                                    className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all border border-transparent ${selectedConversation?.conversation_id === conv.conversation_id
+                                        ? colors.selected
+                                        : colors.hover
                                         }`}
                                 >
                                     <div className="flex items-center gap-3">
@@ -152,18 +177,18 @@ export default function InquiriesSection({ currentUser }) {
                                             <User className={`w-5 h-5 ${colors.listIconColor}`} />
                                         </div>
                                         <div className="overflow-hidden">
-                                            <p className={`font-semibold ${colors.text}`}>{conv.otherUserName}</p>
+                                            <p className={`font-semibold ${colors.text}`}>
+                                                {conv.other_user_name} ({getRoleLabel(conv.other_user_role)})
+                                            </p>
                                             <p className={`text-xs truncate max-w-[140px] ${colors.subtext}`}>
-                                                {conv.lastMessage || "No messages yet"}
+                                                {conv.last_message || "No messages yet"}
                                             </p>
                                         </div>
                                     </div>
                                 </div>
                             ))
                         ) : (
-                            <p className="text-sm text-gray-400 mt-2">
-                                {currentUser ? "No inquiries yet." : "Loading inquiries..."}
-                            </p>
+                            <p className="text-sm text-gray-400 mt-2">No inquiries yet.</p>
                         )}
                     </div>
                 </div>
@@ -179,13 +204,10 @@ export default function InquiriesSection({ currentUser }) {
                                         <User className={`w-5 h-5 ${colors.listIconColor}`} />
                                     </div>
                                     <div>
-                                        <p className={`font-bold text-lg ${colors.text}`}>{selectedConversation.otherUserName}</p>
+                                        <p className={`font-bold text-lg ${colors.text}`}>{selectedConversation.other_user_name}</p>
                                     </div>
                                 </div>
-                                <button
-                                    onClick={() => setSelectedConversation(null)}
-                                    className={`p-2 rounded-full ${colors.hover}`}
-                                >
+                                <button onClick={() => setSelectedConversation(null)} className={`p-2 rounded-full ${colors.hover}`}>
                                     <X className={`w-5 h-5 ${colors.subtext}`} />
                                 </button>
                             </div>
@@ -196,21 +218,20 @@ export default function InquiriesSection({ currentUser }) {
                                     chatMessages.map((msg, idx) => (
                                         <div
                                             key={idx}
-                                            className={`flex mb-3 ${msg.senderId === currentUser.user_id ? "justify-end" : "justify-start"
-                                                }`}
+                                            className={`flex mb-3 ${msg.sender_id === user.user_id ? "justify-end" : "justify-start"}`}
                                         >
                                             <div
-                                                className={`p-3 max-w-md rounded-2xl shadow-sm text-sm ${msg.senderId === currentUser.user_id
-                                                        ? `${colors.adminBubble} rounded-br-none`
-                                                        : `${colors.userBubble} rounded-bl-none`
+                                                className={`p-3 max-w-md rounded-2xl shadow-sm text-sm ${msg.sender_id === user.user_id
+                                                    ? `${colors.adminBubble} rounded-br-none`
+                                                    : `${colors.userBubble} rounded-bl-none`
                                                     }`}
                                             >
-                                                <p>{msg.text}</p>
+                                                <p className="text-xs font-semibold mb-1">
+                                                    {msg.sender_name} ({getRoleLabel(msg.sender_role)})
+                                                </p>
+                                                <p>{msg.message_text}</p>
                                                 <p className="text-[10px] opacity-70 text-right mt-1">
-                                                    {new Date(msg.createdAt).toLocaleTimeString([], {
-                                                        hour: "2-digit",
-                                                        minute: "2-digit",
-                                                    })}
+                                                    {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                                                 </p>
                                             </div>
                                         </div>

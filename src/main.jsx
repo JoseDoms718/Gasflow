@@ -1,11 +1,12 @@
 // main.jsx
 import React, { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import ScrollUp from "./Components/ScrollUp";
 import DisableAutocomplete from "./Components/DisableAutocomplete";
 import AutoRedirect from "./Components/AutoRedirect";
 import ToastComponent from "./Components/ToastComponent";
+import ChatModal from "./Components/Modals/ChatModalRedirect";
 import "./index.css";
 
 // Customer
@@ -19,8 +20,7 @@ import Loginpage from "./Pages/Loginpage";
 import Buypage from "./Pages/User/Buypage";
 import BuyBundlepage from "./Pages/User/BuyBundlepage";
 import Inquirypage from "./Pages/User/Inquirypage";
-// Business Owner
-import Loanpage from "./Pages/User/Loanpage"
+import Loanpage from "./Pages/User/Loanpage";
 
 // Branch Manager
 import BranchOrderpage from "./Pages/BranchManager/BranchOrderPage";
@@ -46,14 +46,35 @@ import AdminManageUserRequestpage from "./Pages/Admin/AdminManageUserRequestpage
 import AdminInquirypage from "./Pages/Admin/AdminInquirypage";
 import Deliveryfeepage from "./Pages/Admin/Deliveryfeepage";
 
-createRoot(document.getElementById("root")).render(
-  <StrictMode>
-    <BrowserRouter>
-      <ScrollUp />
-      <DisableAutocomplete />
-      <AutoRedirect /> {/* ✅ Auto redirect runs here */}
-      <ToastComponent />
+// ✅ Customer routes list
+const customerRoutes = [
+  "/",
+  "/homepage",
+  "/products",
+  "/buy/:id",
+  "/buybundle/:id",
+  "/orders",
+  "/contact",
+  "/services",
+  "/inquiry",
+  "/loan"
+];
 
+// ✅ Wrapper to conditionally render ChatModal
+function AppWrapper() {
+  const location = useLocation();
+
+  const showChatModal = customerRoutes.some((path) => {
+    if (path.includes(":")) {
+      const base = path.split("/:")[0];
+      return location.pathname.startsWith(base);
+    }
+    return location.pathname === path;
+  });
+
+  return (
+    <>
+      {showChatModal && <ChatModal />} {/* Show chat button only on customer pages */}
       <Routes>
         {/* USER */}
         <Route path="/" element={<Landingpage />} />
@@ -80,6 +101,7 @@ createRoot(document.getElementById("root")).render(
         {/* RETAILER */}
         <Route path="/retailerinventory" element={<RetailerInventorypage />} />
         <Route path="/retailerinquiries" element={<RetailerInquirypage />} />
+
         {/* ADMIN */}
         <Route path="/admininventory" element={<AdminInventorypage />} />
         <Route path="/adminsalesreport" element={<AdminSalesReportPage />} />
@@ -91,6 +113,19 @@ createRoot(document.getElementById("root")).render(
         <Route path="/admininquiries" element={<AdminInquirypage />} />
         <Route path="/admindeliveryfees" element={<Deliveryfeepage />} />
       </Routes>
+    </>
+  );
+}
+
+// ✅ Render App
+createRoot(document.getElementById("root")).render(
+  <StrictMode>
+    <BrowserRouter>
+      <ScrollUp />
+      <DisableAutocomplete />
+      <AutoRedirect />
+      <ToastComponent />
+      <AppWrapper />
     </BrowserRouter>
   </StrictMode>
 );

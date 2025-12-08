@@ -2,20 +2,68 @@ require("dotenv").config();
 const express = require("express");
 const router = express.Router();
 const db = require("../config/db");
+const authenticateToken = require("../middleware/authtoken");
 
 /*
 |--------------------------------------------------------------------------
-| 1️⃣ GET messages by conversation
+| ✅ APPLY AUTH TO ALL CHAT ROUTES
+|--------------------------------------------------------------------------
+*/
+router.use(authenticateToken);
+
+/*
+|--------------------------------------------------------------------------
+| ✅ ROLE-BASED CHAT PERMISSIONS
+|--------------------------------------------------------------------------
+*/
+const canChat = (senderRole, receiverRole) => {
+  const rules = {
+    retailer: ["branch_manager", "admin"],
+    business_owner: ["branch_manager", "admin"],
+    branch_manager: ["retailer", "business_owner", "users", "admin"],
+    admin: ["retailer", "business_owner", "branch_manager", "users"],
+    users: ["branch_manager"],
+  };
+
+  return rules[senderRole]?.includes(receiverRole);
+};
+
+/*
+|--------------------------------------------------------------------------
+| 1️⃣ GET MESSAGES BY CONVERSATION
 |--------------------------------------------------------------------------
 */
 router.get("/messages/:conversationId", async (req, res) => {
   const { conversationId } = req.params;
-
-  if (!conversationId) {
-    return res.status(400).json({ error: "conversationId is required" });
-  }
+  const userId = req.user.id;
 
   try {
+    // ✅ Ensure user belongs to conversation
+    const [[conversation]] = await db.query(
+      `
+      SELECT conversation_id FROM conversations
+      WHERE conversation_id = ?
+      AND ? IN (user_one_id, user_two_id)
+      `,
+      [conversationId, userId]
+    );
+
+    if (!conversation) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
+    // ✅ Mark messages as read (only messages NOT sent by user)
+    await db.query(
+      `
+      UPDATE messages 
+      SET read_status = 1
+      WHERE conversation_id = ?
+      AND sender_id != ?
+      `,
+      [conversationId, userId]
+    );
+
+    // ✅ Fetch messages with sender role
     const [messages] = await db.query(
       `
       SELECT 
@@ -23,6 +71,7 @@ router.get("/messages/:conversationId", async (req, res) => {
         m.conversation_id,
         m.sender_id,
         u.name AS sender_name,
+        u.role AS sender_role,           -- Added role
         m.message_text,
         m.read_status,
         m.created_at
@@ -43,25 +92,42 @@ router.get("/messages/:conversationId", async (req, res) => {
 
 /*
 |--------------------------------------------------------------------------
-| 2️⃣ CREATE or GET conversation between two users
-|--------------------------------------------------------------------------
-| Rule: always (smaller ID → user_one_id)
+| 2️⃣ CREATE / GET CONVERSATION
 |--------------------------------------------------------------------------
 */
 router.post("/conversations", async (req, res) => {
-  const { senderId, receiverId } = req.body;
+  const senderId = req.user.id;
+  const receiverId = req.body.receiverId;
 
-  if (!senderId || !receiverId) {
-    return res
-      .status(400)
-      .json({ error: "senderId and receiverId are required" });
+  if (!receiverId) {
+    return res.status(400).json({
+      error: "receiverId is required",
+    });
   }
 
-  const userOne = Math.min(senderId, receiverId);
-  const userTwo = Math.max(senderId, receiverId);
-
   try {
-    // Check existing conversation
+    const [[sender]] = await db.query(
+      "SELECT role FROM users WHERE user_id = ?",
+      [senderId]
+    );
+    const [[receiver]] = await db.query(
+      "SELECT role FROM users WHERE user_id = ?",
+      [receiverId]
+    );
+
+    if (!receiver) {
+      return res.status(404).json({ error: "Receiver not found" });
+    }
+
+    if (!canChat(sender.role, receiver.role)) {
+      return res.status(403).json({
+        error: "You are not allowed to chat with this user",
+      });
+    }
+
+    const userOne = Math.min(senderId, receiverId);
+    const userTwo = Math.max(senderId, receiverId);
+
     const [existing] = await db.query(
       `
       SELECT * FROM conversations
@@ -74,7 +140,6 @@ router.post("/conversations", async (req, res) => {
       return res.json(existing[0]);
     }
 
-    // Create new conversation
     const [result] = await db.query(
       `
       INSERT INTO conversations (user_one_id, user_two_id)
@@ -89,32 +154,36 @@ router.post("/conversations", async (req, res) => {
       user_two_id: userTwo,
     });
   } catch (err) {
-    console.error("❌ Error creating conversation:", err);
+    console.error("❌ Conversation error:", err);
     res.status(500).json({ error: "Failed to create conversation" });
   }
 });
 
 /*
 |--------------------------------------------------------------------------
-| 3️⃣ GET conversations of a user (with last message)
+| 3️⃣ GET LOGGED-IN USER CONVERSATIONS
 |--------------------------------------------------------------------------
 */
-router.get("/conversations/user/:userId", async (req, res) => {
-  const { userId } = req.params;
+router.get("/conversations/user", async (req, res) => {
+  const userId = req.user.id;
 
   try {
     const [conversations] = await db.query(
       `
       SELECT
         c.conversation_id,
-        c.user_one_id,
-        c.user_two_id,
         u.user_id AS other_user_id,
         u.name AS other_user_name,
+        u.role AS other_user_role,          -- Added role
         last.message_text AS last_message,
-        last.created_at AS last_message_time
+        last.created_at AS last_message_time,
+        COUNT(
+          CASE 
+            WHEN m.read_status = 0 AND m.sender_id != ? THEN 1
+          END
+        ) AS unread_count
       FROM conversations c
-      JOIN users u
+      JOIN users u 
         ON u.user_id = IF(c.user_one_id = ?, c.user_two_id, c.user_one_id)
       LEFT JOIN messages last
         ON last.message_id = (
@@ -124,10 +193,13 @@ router.get("/conversations/user/:userId", async (req, res) => {
           ORDER BY m2.created_at DESC
           LIMIT 1
         )
+      LEFT JOIN messages m 
+        ON m.conversation_id = c.conversation_id
       WHERE ? IN (c.user_one_id, c.user_two_id)
+      GROUP BY c.conversation_id, last.message_id
       ORDER BY last.created_at DESC
       `,
-      [userId, userId]
+      [userId, userId, userId]
     );
 
     res.json(conversations);
@@ -137,21 +209,37 @@ router.get("/conversations/user/:userId", async (req, res) => {
   }
 });
 
+
 /*
 |--------------------------------------------------------------------------
-| 4️⃣ SEND message
+| 4️⃣ SEND MESSAGE
 |--------------------------------------------------------------------------
 */
 router.post("/messages", async (req, res) => {
-  const { conversationId, senderId, messageText } = req.body;
+  const senderId = req.user.id;
+  const { conversationId, messageText } = req.body;
 
-  if (!conversationId || !senderId || !messageText) {
+  if (!conversationId || !messageText) {
     return res.status(400).json({
-      error: "conversationId, senderId and messageText are required",
+      error: "conversationId and messageText are required",
     });
   }
 
   try {
+    // ✅ Verify user is part of conversation
+    const [[conversation]] = await db.query(
+      `
+      SELECT conversation_id FROM conversations
+      WHERE conversation_id = ?
+      AND ? IN (user_one_id, user_two_id)
+      `,
+      [conversationId, senderId]
+    );
+
+    if (!conversation) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
     const [result] = await db.query(
       `
       INSERT INTO messages (conversation_id, sender_id, message_text)
@@ -160,23 +248,22 @@ router.post("/messages", async (req, res) => {
       [conversationId, senderId, messageText]
     );
 
-    const message = {
-      message_id: result.insertId,
-      conversation_id: conversationId,
-      sender_id: senderId,
-      message_text: messageText,
-      read_status: 0,
-      created_at: new Date(),
-    };
-
-    // ✅ Socket.IO emit
-    const io = req.app.get("io");
-    if (io) {
-      io.to(`conversation_${conversationId}`).emit(
-        "receive_message",
-        message
-      );
-    }
+    const [[message]] = await db.query(
+      `
+      SELECT 
+        m.message_id,
+        m.conversation_id,
+        m.sender_id,
+        u.name AS sender_name,
+        m.message_text,
+        m.read_status,
+        m.created_at
+      FROM messages m
+      JOIN users u ON u.user_id = m.sender_id
+      WHERE m.message_id = ?
+      `,
+      [result.insertId]
+    );
 
     res.json(message);
   } catch (err) {
