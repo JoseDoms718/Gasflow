@@ -69,7 +69,6 @@ export default function ReportsPage() {
               if (!order.delivered_at) return []; // Skip undelivered orders
               return order.items.map((item, index) => {
                 const itemQuantity = Number(item.quantity) || 0;
-                const itemPrice = Number(item.price) || 0;
                 const deliveryFee = Number(order.delivery_fee || 0);
                 const deliveryFeePerItem = deliveryFee / order.items.length;
 
@@ -82,9 +81,11 @@ export default function ReportsPage() {
                   bundle_image: item.bundle_image || "",
                   image_url: item.image_url || "",
                   quantity: itemQuantity,
-                  price: itemPrice,
+                  price: Number(item.price) || 0,
+                  branch_price_at_sale: Number(item.branch_price_at_sale) || 0,
+                  sold_discounted_price: Number(item.sold_discounted_price) || 0,
                   deliveryFee: deliveryFeePerItem,
-                  totalPrice: itemQuantity * itemPrice + deliveryFeePerItem,
+                  totalPrice: itemQuantity * (Number(item.price) || 0) + deliveryFeePerItem,
                   date: toLocalDate(order.delivered_at),
                   branch: order.municipality || "Unknown",
                   addedBy: item.seller_name || "N/A",
@@ -202,9 +203,24 @@ export default function ReportsPage() {
     );
   }, [damagedProducts, month, year, timeFilter, branch]);
 
-  const totalRevenue = filteredTransactions.reduce((sum, t) => sum + t.totalPrice, 0);
+  // Revenue, Expenses, Loss
+  const totalRevenue = filteredTransactions.reduce((sum, t) => {
+    const loss = (t.branch_price_at_sale - (t.sold_discounted_price || t.price)) * t.quantity;
+    const totalPrice = t.price * t.quantity + t.deliveryFee - loss;
+    return sum + totalPrice;
+  }, 0);
+
   const totalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
-  const totalNet = totalRevenue - (totalExpenses + damagedTotal);
+
+  // Total loss from cost - sold
+  const totalLoss = filteredTransactions.reduce((sum, t) => {
+    const quantity = t.quantity || 0;
+    const costPrice = t.branch_price_at_sale || 0;
+    const sellingPrice = t.sold_discounted_price || t.price || 0;
+    return sum + quantity * (costPrice - sellingPrice);
+  }, 0);
+
+  const totalNetWithLoss = totalRevenue - (totalExpenses + damagedTotal + totalLoss);
 
   // Charts
   const productQuantityMap = filteredTransactions.reduce((acc, t) => {
@@ -244,7 +260,7 @@ export default function ReportsPage() {
         <div className="text-lg font-semibold text-gray-800 flex gap-4">
           Revenue: <span className="text-green-600">₱{totalRevenue.toFixed(2)}</span> |{" "}
           Expenses: <span className="text-red-600">₱{(totalExpenses + damagedTotal).toFixed(2)}</span> |{" "}
-          Net: <span className="text-blue-600">₱{totalNet.toFixed(2)}</span>
+          Net: <span className="text-blue-600">₱{totalNetWithLoss.toFixed(2)}</span>
         </div>
       </div>
 
@@ -301,37 +317,43 @@ export default function ReportsPage() {
                     {userRole === "admin" && <th className="px-4 py-3 border-b border-gray-700">Municipality</th>}
                     <th className="px-4 py-3 border-b border-gray-700">Product</th>
                     <th className="px-4 py-3 border-b border-gray-700">Quantity</th>
+                    <th className="px-4 py-3 border-b border-gray-700">Price</th>
                     <th className="px-4 py-3 border-b border-gray-700">Delivery Fee</th>
+                    <th className="px-4 py-3 border-b border-gray-700">Loss</th>
                     <th className="px-4 py-3 border-b border-gray-700">Total Price</th>
                     <th className="px-4 py-3 border-b border-gray-700">Delivery Date</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white">
-                  {filteredTransactions.map((t, idx) => (
-                    <tr
-                      key={t.id}
-                      className={`border-t border-gray-300 ${idx % 2 === 0 ? "bg-gray-50" : "bg-white"} hover:bg-gray-100`}
-                    >
-                      {userRole === "admin" && <td className="px-4 py-3">{t.branch}</td>}
+                  {filteredTransactions.map((t, idx) => {
+                    const loss = (t.branch_price_at_sale - (t.sold_discounted_price || t.price)) * t.quantity;
+                    const totalPrice = t.price * t.quantity + t.deliveryFee - loss;
 
-                      {/* Product / Bundle with Image */}
-                      <td className="px-4 py-3 flex items-center gap-2">
-                        <img
-                          src={t.type === "bundle" ? t.bundle_image : t.image_url}
-                          alt={t.type === "bundle" ? t.bundle_name : t.productName}
-                          className="w-12 h-12 object-cover rounded"
-                        />
-                        <span className="font-semibold">
-                          {t.type === "bundle" ? t.bundle_name : t.productName}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-3">{t.quantity}</td>
-                      <td className="px-4 py-3 text-purple-600 font-medium">₱{t.deliveryFee.toFixed(2)}</td>
-                      <td className="px-4 py-3 text-green-600 font-medium">₱{t.totalPrice.toFixed(2)}</td>
-                      <td className="px-4 py-3">{t.date}</td>
-                    </tr>
-                  ))}
+                    return (
+                      <tr
+                        key={t.id}
+                        className={`border-t border-gray-300 ${idx % 2 === 0 ? "bg-gray-50" : "bg-white"} hover:bg-gray-100`}
+                      >
+                        {userRole === "admin" && <td className="px-4 py-3">{t.branch}</td>}
+                        <td className="px-4 py-3 flex items-center gap-2">
+                          <img
+                            src={t.type === "bundle" ? t.bundle_image : t.image_url}
+                            alt={t.type === "bundle" ? t.bundle_name : t.productName}
+                            className="w-12 h-12 object-cover rounded"
+                          />
+                          <span className="font-semibold">
+                            {t.type === "bundle" ? t.bundle_name : t.productName}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">{t.quantity}</td>
+                        <td className="px-4 py-3 text-green-600 font-medium">₱{t.price.toFixed(2)}</td>
+                        <td className="px-4 py-3 text-purple-600 font-medium">₱{t.deliveryFee.toFixed(2)}</td>
+                        <td className="px-4 py-3 text-red-600 font-medium">₱{loss.toFixed(2)}</td>
+                        <td className="px-4 py-3 text-blue-600 font-medium">₱{totalPrice.toFixed(2)}</td>
+                        <td className="px-4 py-3">{t.date}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}

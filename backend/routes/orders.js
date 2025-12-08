@@ -1219,19 +1219,22 @@ router.get(
           o.ordered_at,
           o.delivered_at,
           o.inventory_deducted,
-          o.delivery_address,   -- ✅ ADDED
+          o.delivery_address,
 
           b.barangay_name AS barangay,
           b.municipality,
           u.name AS buyer_name,
           u.email AS buyer_email,
 
+          oi.order_items_id,
           oi.product_id,
           oi.branch_bundle_id,
+          oi.branch_id,
           oi.quantity,
           oi.price AS item_price,
+          oi.branch_price_at_sale,
+          oi.sold_discounted_price,
           oi.type,
-          oi.branch_id,
 
           br.branch_name,
 
@@ -1299,7 +1302,6 @@ router.get(
       const grouped = rows.reduce((acc, row) => {
         let order = acc.find((o) => o.order_id === row.order_id);
 
-        // Create the order record if not existing
         if (!order) {
           order = {
             order_id: row.order_id,
@@ -1314,7 +1316,7 @@ router.get(
             ordered_at: row.ordered_at,
             delivered_at: row.delivered_at,
             inventory_deducted: row.inventory_deducted,
-            delivery_address: row.delivery_address || null,   // ✅ ADDED
+            delivery_address: row.delivery_address || null,
             barangay: row.barangay,
             municipality: row.municipality,
             items: [],
@@ -1325,13 +1327,15 @@ router.get(
         // PRODUCT ITEM
         if (row.product_id) {
           order.items.push({
-            type: "product",
+            type: row.type,  // regular, discounted, refill, loan
             product_id: row.product_id,
             product_name: row.product_name,
             product_description: row.product_description,
             image_url: formatImageUrl(row.product_image, "product"),
             quantity: row.quantity,
             price: parseFloat(row.item_price) || 0,
+            branch_price_at_sale: parseFloat(row.branch_price_at_sale) || 0,
+            sold_discounted_price: parseFloat(row.sold_discounted_price) || 0,
             branch_id: row.branch_id,
             branch_name: row.branch_name || "Unknown",
           });
@@ -1340,13 +1344,15 @@ router.get(
         // BUNDLE ITEM
         if (row.branch_bundle_id) {
           order.items.push({
-            type: "bundle",
+            type: row.type,  // should be 'bundle'
             branch_bundle_id: row.branch_bundle_id,
             bundle_name: row.bundle_name,
             bundle_description: row.bundle_description,
             bundle_image: formatImageUrl(row.bundle_image, "bundle"),
             quantity: row.quantity,
             price: parseFloat(row.item_price) || 0,
+            branch_price_at_sale: parseFloat(row.branch_price_at_sale) || 0,
+            sold_discounted_price: parseFloat(row.sold_discounted_price) || 0,
             branch_id: row.branch_id,
             branch_name: row.branch_name || "Unknown",
           });
