@@ -21,56 +21,87 @@ router.put("/damage/:id", authenticateToken, async (req, res) => {
     // CHECK IF USER HAS ACCESS TO THIS PRODUCT'S BRANCH
     const sqlCheck =
       req.user.role === "admin"
-        ? `
-          SELECT i.*
-          FROM inventory i
-          WHERE i.product_id = ?
-        `
+        ? `SELECT i.* FROM inventory i WHERE i.product_id = ? AND i.state = 'full'`
         : `
           SELECT i.*
           FROM inventory i
           JOIN branches b ON b.branch_id = i.branch_id
-          WHERE i.product_id = ? AND b.user_id = ?
+          WHERE i.product_id = ? AND b.user_id = ? AND i.state = 'full'
         `;
 
     const params =
-      req.user.role === "admin"
-        ? [id]
-        : [id, userId];
+      req.user.role === "admin" ? [id] : [id, userId];
 
     const [rows] = await db.query(sqlCheck, params);
 
     if (!rows.length)
       return res.status(404).json({ error: "Product not found or not accessible." });
 
-    const previousStock = Number(rows[0].stock) || 0;
+    const fullStockRow = rows[0];
+    const previousFullStock = Number(fullStockRow.stock) || 0;
 
-    if (qty > previousStock)
-      return res.status(400).json({ error: "Damage quantity exceeds current stock." });
+    if (qty > previousFullStock)
+      return res.status(400).json({ error: "Damage quantity exceeds current full stock." });
 
-    const newStock = previousStock - qty;
+    const newFullStock = previousFullStock - qty;
 
-    // UPDATE INVENTORY
+    // UPDATE full stock
     await db.query(
       `UPDATE inventory 
        SET stock = ?, updated_at = NOW()
-       WHERE product_id = ?`,
-      [newStock, id]
+       WHERE inventory_id = ?`,
+      [newFullStock, fullStockRow.inventory_id]
     );
 
-    // INSERT DAMAGE LOG
     await db.query(
       `INSERT INTO inventory_logs 
         (product_id, state, user_id, type, quantity, previous_stock, new_stock, description, created_at)
-       VALUES (?, 'n/a', ?, 'damage', ?, ?, ?, ?, NOW())`,
-      [id, userId, qty, previousStock, newStock, damage_description]
+       VALUES (?, 'full', ?, 'damage', ?, ?, ?, ?, NOW())`,
+      [id, userId, qty, previousFullStock, newFullStock, `Reduced full stock for damage: ${damage_description}`]
     );
+
+    // --- Add to empty state ---
+    const [emptyRows] = await db.query(
+      `SELECT inventory_id, stock FROM inventory WHERE product_id = ? AND branch_id = ? AND state = 'empty'`,
+      [fullStockRow.product_id, fullStockRow.branch_id]
+    );
+
+    if (emptyRows.length) {
+      const emptyStockRow = emptyRows[0];
+      const prevEmptyStock = Number(emptyStockRow.stock) || 0;
+      const newEmptyStock = prevEmptyStock + qty;
+
+      await db.query(
+        `UPDATE inventory SET stock = ? WHERE inventory_id = ?`,
+        [newEmptyStock, emptyStockRow.inventory_id]
+      );
+
+      await db.query(
+        `INSERT INTO inventory_logs 
+          (product_id, state, user_id, type, quantity, previous_stock, new_stock, description, created_at)
+         VALUES (?, 'empty', ?, 'damage', ?, ?, ?, ?, NOW())`,
+        [id, userId, qty, prevEmptyStock, newEmptyStock, `Added damaged stock to empty: ${damage_description}`]
+      );
+    } else {
+      const [newEmpty] = await db.query(
+        `INSERT INTO inventory (product_id, branch_id, stock, stock_threshold, state) 
+         VALUES (?, ?, ?, NULL, 'empty')`,
+        [fullStockRow.product_id, fullStockRow.branch_id, qty]
+      );
+
+      await db.query(
+        `INSERT INTO inventory_logs 
+          (product_id, state, user_id, type, quantity, previous_stock, new_stock, description, created_at)
+         VALUES (?, 'empty', ?, 'damage', ?, 0, ?, ?, NOW())`,
+        [id, userId, qty, qty, `Created empty state with damaged stock: ${damage_description}`]
+      );
+    }
 
     res.status(200).json({
       success: true,
       message: "Product marked as damaged successfully.",
-      previousStock,
-      newStock
+      previousFullStock,
+      newFullStock
     });
 
   } catch (err) {
@@ -78,6 +109,7 @@ router.put("/damage/:id", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Failed to report damaged product." });
   }
 });
+
 
 
 // --------------------------------------------------
@@ -108,27 +140,24 @@ router.get("/my-damaged-products", authenticateToken, async (req, res) => {
       FROM inventory_logs il
       JOIN products p ON il.product_id = p.product_id
       LEFT JOIN users u ON il.user_id = u.user_id
-      LEFT JOIN inventory i ON il.product_id = i.product_id
+      LEFT JOIN inventory i ON il.product_id = i.product_id AND i.state = 'full'
       LEFT JOIN branches br ON i.branch_id = br.branch_id
       LEFT JOIN barangays bg ON br.barangay_id = bg.barangay_id
-      WHERE il.type = 'damage'
+      WHERE il.type = 'damage' AND il.state = 'full'
       ${req.user.role === "admin" ? "" : "AND br.user_id = ?"}
       ORDER BY il.created_at DESC
     `;
 
-    const params =
-      req.user.role === "admin"
-        ? []
-        : [userId];
+    const params = req.user.role === "admin" ? [] : [userId];
 
     const [rows] = await db.query(sql, params);
 
     res.json({ success: true, data: rows });
-
   } catch (err) {
     console.error("❌ Fetch damaged products error:", err);
     res.status(500).json({ success: false, error: "Server error" });
   }
 });
+
 
 module.exports = router;

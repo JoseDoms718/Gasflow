@@ -104,7 +104,7 @@ router.get("/my-products", authenticateToken, async (req, res) => {
       JOIN barangays br ON b.barangay_id = br.barangay_id
       LEFT JOIN branch_product_prices bp 
         ON bp.product_id = p.product_id AND bp.branch_id = i.branch_id
-      WHERE i.branch_id IN (?)
+      WHERE i.branch_id IN (?) AND i.state = 'full'
       ORDER BY p.product_id DESC
       `,
       [branchIds]
@@ -120,6 +120,7 @@ router.get("/my-products", authenticateToken, async (req, res) => {
   }
 });
 
+
 // ==============================
 // Add Product (Branch)
 // ==============================
@@ -127,36 +128,31 @@ router.post("/branch/add-product", authenticateToken, async (req, res) => {
   try {
     const user = req.user;
 
-    // Only branch managers allowed
     if (user.role !== "branch_manager") {
       return res.status(403).json({ error: "Access denied: Only branch managers can add branch products." });
     }
 
     const { product_id, stock, stock_threshold } = req.body;
 
-    // Validate request body
     if (!product_id) return res.status(400).json({ error: "Missing product_id in request body." });
     if (stock == null) return res.status(400).json({ error: "Missing stock value in request body." });
     if (stock_threshold == null) return res.status(400).json({ error: "Missing stock_threshold value in request body." });
 
-    // Ensure branch manager has branches
     if (!user.branches || user.branches.length === 0) {
       return res.status(400).json({ error: "You do not have any assigned branches." });
     }
 
     const branch_id = user.branches[0];
 
-    // Check if product exists in inventory
     const [existing] = await db.execute(
       "SELECT * FROM inventory WHERE branch_id = ? AND product_id = ?",
       [branch_id, product_id]
     );
 
-    if (existing.length > 0) {
-      return res.status(400).json({ error: `Product (ID: ${product_id}) already exists in branch inventory.` });
+    if (existing.some(e => e.state === 'full')) {
+      return res.status(400).json({ error: `Product (ID: ${product_id}) already exists in branch inventory as 'full'.` });
     }
 
-    // Ensure product exists in products table
     const [productRows] = await db.execute(
       "SELECT * FROM products WHERE product_id = ?",
       [product_id]
@@ -166,19 +162,22 @@ router.post("/branch/add-product", authenticateToken, async (req, res) => {
       return res.status(400).json({ error: `Product with ID ${product_id} does not exist.` });
     }
 
-    const product = productRows[0];
-
-    // Ensure stock and stock_threshold are numbers
     const stockNum = Number(stock);
     const thresholdNum = Number(stock_threshold);
 
     if (isNaN(stockNum) || stockNum < 0) return res.status(400).json({ error: "Stock must be a non-negative number." });
     if (isNaN(thresholdNum) || thresholdNum < 0) return res.status(400).json({ error: "Stock threshold must be a non-negative number." });
 
-    // Insert product into branch inventory
+    // Insert the "full" entry
     await db.execute(
-      "INSERT INTO inventory (product_id, branch_id, stock, stock_threshold) VALUES (?, ?, ?, ?)",
+      "INSERT INTO inventory (product_id, branch_id, stock, stock_threshold, state) VALUES (?, ?, ?, ?, 'full')",
       [product_id, branch_id, stockNum, thresholdNum]
+    );
+
+    // Insert the "empty" entry with stock = 0 and threshold = NULL
+    await db.execute(
+      "INSERT INTO inventory (product_id, branch_id, stock, stock_threshold, state) VALUES (?, ?, 0, NULL, 'empty')",
+      [product_id, branch_id]
     );
 
     // Insert default prices into branch_product_prices if not already exists
@@ -191,7 +190,7 @@ router.post("/branch/add-product", authenticateToken, async (req, res) => {
       [branch_id, product_id, product_id]
     );
 
-    res.status(200).json({ message: "✅ Product successfully added to branch inventory with prices!" });
+    res.status(200).json({ message: "✅ Product successfully added to branch inventory with both 'full' and 'empty' states!" });
 
   } catch (err) {
     console.error("❌ Error adding branch product:", err);
@@ -203,6 +202,8 @@ router.post("/branch/add-product", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Internal Server Error: Failed to add product to branch inventory." });
   }
 });
+
+
 
 // ==============================
 // Add Product
@@ -283,7 +284,7 @@ router.get("/public/products", async (req, res) => {
   const { type } = req.query;
 
   try {
-    let whereClause = "WHERE p.is_active = 1 AND i.branch_id IS NOT NULL";
+    let whereClause = "WHERE p.is_active = 1 AND i.branch_id IS NOT NULL AND i.state = 'full'";
 
     if (type === "regular" || type === "discounted") {
       whereClause += ` AND p.product_type = ${db.escape(type)}`;
@@ -320,7 +321,6 @@ router.get("/public/products", async (req, res) => {
     // Format image URLs
     const formatted = rows.map((row) => ({
       ...row,
-      // Use branch-specific prices first, fallback to default product prices
       price: row.branch_price ?? row.price,
       discounted_price: row.branch_discounted_price ?? row.discounted_price,
       refill_price: row.branch_refill_price ?? row.refill_price,
@@ -338,6 +338,7 @@ router.get("/public/products", async (req, res) => {
   }
 });
 
+
 // ==============================
 // Admin Products
 // ==============================
@@ -347,10 +348,11 @@ router.get("/admin/all-products", authenticateToken, async (req, res) => {
       return res.status(403).json({ error: "Admins only" });
 
     const { branch } = req.query;
-    let whereClause = "";
+    let whereClause = "WHERE i.state = 'full'"; // Only full state
+
     if (branch && branch !== "All") {
       // Filter by branch_name from branches table
-      whereClause = `WHERE b.branch_name LIKE ${db.escape(`%${branch}%`)}`;
+      whereClause += ` AND b.branch_name LIKE ${db.escape(`%${branch}%`)}`;
     }
 
     const sql = `
@@ -359,7 +361,7 @@ router.get("/admin/all-products", authenticateToken, async (req, res) => {
         i.stock, 
         i.stock_threshold, 
         b.branch_id, 
-        b.branch_name,           -- fetch branch name directly
+        b.branch_name,           
         b.branch_contact,
         b.branch_picture,
         br.municipality, 
@@ -390,6 +392,7 @@ router.get("/admin/all-products", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Failed to fetch admin products." });
   }
 });
+
 
 //admin edit branch prices
 router.put("/branch/update/:id", authenticateToken, async (req, res) => {
@@ -641,39 +644,57 @@ router.put("/restock/:id", authenticateToken, async (req, res) => {
     if (!branch_id)
       return res.status(400).json({ error: "branch_id is required." });
 
-    // Check inventory ownership
+    // Check inventory ownership (only for full state)
     const sqlCheck =
       req.user.role === "admin"
-        ? "SELECT * FROM inventory WHERE product_id = ? AND branch_id = ?"
+        ? "SELECT * FROM inventory WHERE product_id = ? AND branch_id = ? AND state = 'full'"
         : `SELECT i.* FROM inventory i 
            JOIN branches b ON i.branch_id = b.branch_id
-           WHERE i.product_id = ? AND i.branch_id = ? AND b.user_id = ?`;
+           WHERE i.product_id = ? AND i.branch_id = ? AND i.state = 'full' AND b.user_id = ?`;
 
     const [rows] =
       req.user.role === "admin"
         ? await db.query(sqlCheck, [id, branch_id])
         : await db.query(sqlCheck, [id, branch_id, userId]);
 
-    if (!rows || rows.length === 0)
-      return res
-        .status(404)
-        .json({ error: "Product not found or not accessible." });
+    if (!rows || rows.length === 0) {
+      // If no full-state row exists, create it
+      await db.query(
+        "INSERT INTO inventory (product_id, branch_id, stock, stock_threshold, state, created_at, updated_at) VALUES (?, ?, ?, NULL, 'full', NOW(), NOW())",
+        [id, branch_id, qty]
+      );
+
+      // Log creation
+      await db.query(
+        `INSERT INTO inventory_logs 
+          (product_id, state, user_id, type, quantity, previous_stock, new_stock, description, created_at)
+         VALUES (?, 'full', ?, 'restock', ?, 0, ?, 'Restocked and created full state', NOW())`,
+        [id, userId, qty, qty]
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Product restocked successfully (full state created).",
+        previousStock: 0,
+        newStock: qty,
+      });
+    }
 
     const previousStock = Number(rows[0].stock) || 0;
     const newStock = previousStock + qty;
 
-    // Update stock
+    // Update stock in full state
     await db.query(
-      "UPDATE inventory SET stock = ?, updated_at = NOW() WHERE product_id = ? AND branch_id = ?",
-      [newStock, id, branch_id]
+      "UPDATE inventory SET stock = ?, updated_at = NOW() WHERE inventory_id = ?",
+      [newStock, rows[0].inventory_id]
     );
 
-    // Log restock **without branch_id**
+    // Log restock
     await db.query(
       `INSERT INTO inventory_logs 
         (product_id, state, user_id, type, quantity, previous_stock, new_stock, description, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-      [id, 'full', userId, 'restock', qty, previousStock, newStock, 'Restocked']
+       VALUES (?, 'full', ?, 'restock', ?, ?, ?, 'Restocked', NOW())`,
+      [id, userId, qty, previousStock, newStock]
     );
 
     res.status(200).json({
@@ -687,6 +708,7 @@ router.put("/restock/:id", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Failed to restock product." });
   }
 });
+
 
 // ==============================
 // Branch Manager: Their Own Restock History
@@ -771,6 +793,7 @@ router.get("/:id", async (req, res) => {
       LEFT JOIN branch_product_prices bp 
         ON bp.product_id = p.product_id AND bp.branch_id = i.branch_id
       WHERE i.product_id = ?
+        AND i.state = 'full'
     `;
 
     const params = [productId];
@@ -785,12 +808,12 @@ router.get("/:id", async (req, res) => {
     const [results] = await db.query(sql, params);
 
     if (!results.length) {
-      return res.status(404).json({ error: "Product not found in this branch inventory" });
+      return res.status(404).json({ error: "Product not found in full state for this branch inventory" });
     }
 
     const product = results[0];
 
-    // **Make sure branch_product_id and branch_id are always sent**
+    // Ensure branch_product_id and branch_id are always sent
     const formatted = {
       ...product,
       branch_product_id: product.branch_product_id ?? null,
