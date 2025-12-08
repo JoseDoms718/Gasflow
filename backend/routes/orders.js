@@ -220,6 +220,8 @@ router.post("/walk-in", authenticateToken, async (req, res) => {
           price: finalPrice,
           type: item.type,
           stock: product.stock,
+          branch_price_at_sale: product.branch_price,
+          sold_discounted_price: product.branch_discounted_price,
         });
 
       } else if (item.branch_bundle_id) {
@@ -231,7 +233,9 @@ router.post("/walk-in", authenticateToken, async (req, res) => {
 
         const [bundleRows] = await db.query(
           `SELECT bb.id AS branch_bundle_id, bb.branch_id, bb.bundle_id,
-                  COALESCE(bbp.discounted_price, bbp.price, 0) AS final_price
+                  COALESCE(bbp.discounted_price, bbp.price, 0) AS final_price,
+                  bbp.price AS branch_price,
+                  bbp.discounted_price AS sold_discounted_price
            FROM branch_bundles bb
            LEFT JOIN branch_bundle_prices bbp ON bb.bundle_id = bbp.bundle_id AND bb.branch_id = bbp.branch_id
            WHERE bb.id = ? AND bb.branch_id = ?`,
@@ -270,6 +274,8 @@ router.post("/walk-in", authenticateToken, async (req, res) => {
           price: bundle.final_price,
           type: "bundle",
           bundle_items: bundleItems,
+          branch_price_at_sale: bundle.branch_price,
+          sold_discounted_price: bundle.sold_discounted_price,
         });
 
       } else {
@@ -278,7 +284,7 @@ router.post("/walk-in", authenticateToken, async (req, res) => {
       }
     }
 
-    // --- Transaction and order creation (still reduce full & add empty) ---
+    // --- Transaction and order creation ---
     await connection.beginTransaction();
     const createdOrders = [];
 
@@ -295,61 +301,67 @@ router.post("/walk-in", authenticateToken, async (req, res) => {
 
       for (const item of branchItems) {
         await connection.query(
-          `INSERT INTO order_items (order_id, product_id, branch_bundle_id, quantity, price, type, branch_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [order_id, item.product_id || null, item.branch_bundle_id || null, item.quantity, item.price, item.type, branch_id]
+          `INSERT INTO order_items (order_id, product_id, branch_bundle_id, quantity, price, type, branch_id, branch_price_at_sale, sold_discounted_price)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            order_id,
+            item.product_id || null,
+            item.branch_bundle_id || null,
+            item.quantity,
+            item.price,
+            item.type,
+            branch_id,
+            item.branch_price_at_sale || null,
+            item.sold_discounted_price || null,
+          ]
         );
 
-        // --- Deduct from full & add to empty for products ---
-        if (item.product_id) {
-          // Skip stock deduction for refill products
-          if (item.type !== "refill") {
-            const [fullRows] = await connection.query(
-              "SELECT inventory_id, stock FROM inventory WHERE product_id = ? AND branch_id = ? AND state = 'full'",
+        // --- Stock deduction logic for regular products ---
+        if (item.product_id && item.type !== "refill") {
+          const [fullRows] = await connection.query(
+            "SELECT inventory_id, stock FROM inventory WHERE product_id = ? AND branch_id = ? AND state = 'full'",
+            [item.product_id, branch_id]
+          );
+          if (fullRows.length) {
+            const fullInv = fullRows[0];
+            const prevFullStock = fullInv.stock;
+            const newFullStock = prevFullStock - item.quantity;
+            await connection.query("UPDATE inventory SET stock = ? WHERE inventory_id = ?", [newFullStock, fullInv.inventory_id]);
+            await connection.query(
+              `INSERT INTO inventory_logs (product_id, state, user_id, type, quantity, previous_stock, new_stock, description, created_at)
+               VALUES (?, 'full', ?, 'sales', ?, ?, ?, ?, NOW())`,
+              [item.product_id, req.user.id, item.quantity, prevFullStock, newFullStock, `Walk-in sale Order #${order_id}`]
+            );
+
+            const [emptyRows] = await connection.query(
+              "SELECT inventory_id, stock FROM inventory WHERE product_id = ? AND branch_id = ? AND state = 'empty'",
               [item.product_id, branch_id]
             );
-            if (fullRows.length) {
-              const fullInv = fullRows[0];
-              const prevFullStock = fullInv.stock;
-              const newFullStock = prevFullStock - item.quantity;
-              await connection.query("UPDATE inventory SET stock = ? WHERE inventory_id = ?", [newFullStock, fullInv.inventory_id]);
+            if (emptyRows.length) {
+              const emptyInv = emptyRows[0];
+              const prevEmptyStock = emptyInv.stock;
+              const newEmptyStock = prevEmptyStock + item.quantity;
+              await connection.query("UPDATE inventory SET stock = ? WHERE inventory_id = ?", [newEmptyStock, emptyInv.inventory_id]);
               await connection.query(
                 `INSERT INTO inventory_logs (product_id, state, user_id, type, quantity, previous_stock, new_stock, description, created_at)
-                 VALUES (?, 'full', ?, 'sales', ?, ?, ?, ?, NOW())`,
-                [item.product_id, req.user.id, item.quantity, prevFullStock, newFullStock, `Walk-in sale Order #${order_id}`]
+                 VALUES (?, 'empty', ?, 'sales', ?, ?, ?, ?, NOW())`,
+                [item.product_id, req.user.id, item.quantity, prevEmptyStock, newEmptyStock, `Walk-in sale Order #${order_id} added to empty state`]
               );
-
-              // Add to empty state (existing or create new)
-              const [emptyRows] = await connection.query(
-                "SELECT inventory_id, stock FROM inventory WHERE product_id = ? AND branch_id = ? AND state = 'empty'",
-                [item.product_id, branch_id]
+            } else {
+              await connection.query(
+                "INSERT INTO inventory (product_id, branch_id, stock, stock_threshold, state) VALUES (?, ?, ?, NULL, 'empty')",
+                [item.product_id, branch_id, item.quantity]
               );
-              if (emptyRows.length) {
-                const emptyInv = emptyRows[0];
-                const prevEmptyStock = emptyInv.stock;
-                const newEmptyStock = prevEmptyStock + item.quantity;
-                await connection.query("UPDATE inventory SET stock = ? WHERE inventory_id = ?", [newEmptyStock, emptyInv.inventory_id]);
-                await connection.query(
-                  `INSERT INTO inventory_logs (product_id, state, user_id, type, quantity, previous_stock, new_stock, description, created_at)
-                   VALUES (?, 'empty', ?, 'sales', ?, ?, ?, ?, NOW())`,
-                  [item.product_id, req.user.id, item.quantity, prevEmptyStock, newEmptyStock, `Walk-in sale Order #${order_id} added to empty state`]
-                );
-              } else {
-                await connection.query(
-                  "INSERT INTO inventory (product_id, branch_id, stock, stock_threshold, state) VALUES (?, ?, ?, NULL, 'empty')",
-                  [item.product_id, branch_id, item.quantity]
-                );
-                await connection.query(
-                  `INSERT INTO inventory_logs (product_id, state, user_id, type, quantity, previous_stock, new_stock, description, created_at)
-                   VALUES (?, 'empty', ?, 'sales', ?, 0, ?, ?, NOW())`,
-                  [item.product_id, req.user.id, item.quantity, item.quantity, `Walk-in sale Order #${order_id} created empty state`]
-                );
-              }
+              await connection.query(
+                `INSERT INTO inventory_logs (product_id, state, user_id, type, quantity, previous_stock, new_stock, description, created_at)
+                 VALUES (?, 'empty', ?, 'sales', ?, 0, ?, ?, NOW())`,
+                [item.product_id, req.user.id, item.quantity, item.quantity, `Walk-in sale Order #${order_id} created empty state`]
+              );
             }
           }
         }
 
-        // --- Deduct/add for bundle items (bundles never have refill) ---
+        // --- Stock deduction for bundle items (unchanged) ---
         if (item.bundle_items && item.bundle_items.length) {
           for (const bi of item.bundle_items) {
             const qtyToDeduct = bi.required_qty * item.quantity;
@@ -495,6 +507,8 @@ router.post("/buy", authenticateToken, async (req, res) => {
           quantity: item.quantity,
           price: finalPrice,
           type: item.type,
+          branch_price_at_sale: product.branch_price,
+          sold_discounted_price: product.branch_discounted_price ?? product.branch_price,
         });
 
       } else if (item.branch_bundle_id) {
@@ -511,6 +525,7 @@ router.post("/buy", authenticateToken, async (req, res) => {
           `SELECT bb.id AS branch_bundle_id,
                   bb.branch_id,
                   COALESCE(bbp.discounted_price, bbp.price, 0) AS final_price,
+                  bbp.price AS branch_price,
                   bb.bundle_id
            FROM branch_bundles bb
            LEFT JOIN branch_bundle_prices bbp
@@ -555,6 +570,8 @@ router.post("/buy", authenticateToken, async (req, res) => {
           quantity: item.quantity,
           price: bundle.final_price,
           type: "bundle",
+          branch_price_at_sale: bundle.branch_price,
+          sold_discounted_price: bundle.final_price,
           bundle_items: bundleItems,
         });
 
@@ -567,7 +584,7 @@ router.post("/buy", authenticateToken, async (req, res) => {
       }
     }
 
-    // --- Create pending orders (stock not deducted yet) ---
+    // --- Create pending orders ---
     await connection.beginTransaction();
     const createdOrders = [];
 
@@ -600,8 +617,9 @@ router.post("/buy", authenticateToken, async (req, res) => {
 
       for (const item of branchItems) {
         await connection.query(
-          `INSERT INTO order_items (order_id, product_id, branch_bundle_id, quantity, price, type, branch_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO order_items (
+             order_id, product_id, branch_bundle_id, quantity, price, type, branch_id, branch_price_at_sale, sold_discounted_price
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             order_id,
             item.product_id || null,
@@ -610,6 +628,8 @@ router.post("/buy", authenticateToken, async (req, res) => {
             item.price,
             item.type,
             branch_id,
+            item.branch_price_at_sale,
+            item.sold_discounted_price,
           ]
         );
       }
