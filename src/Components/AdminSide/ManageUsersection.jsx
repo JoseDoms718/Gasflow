@@ -24,6 +24,8 @@ export default function ManageUsersection() {
   const [municipalityFilter, setMunicipalityFilter] = useState("All");
   const [showModal, setShowModal] = useState(false);
   const [availableManagers, setAvailableManagers] = useState([]);
+  const [loadingScan, setLoadingScan] = useState(false);
+  const [loadingUpdate, setLoadingUpdate] = useState(false); // boolean for overlay
 
   const initialFormData = {
     name: "",
@@ -54,17 +56,44 @@ export default function ManageUsersection() {
     }
   }, [BASE_URL]);
 
+  // Check inactive retailers on mount
+  useEffect(() => {
+    const checkInactiveRetailers = async () => {
+      setLoadingScan(true);
+      try {
+        const res = await axios.get(`${BASE_URL}/users/inactive-retailers`);
+        const { updatedCount } = res.data;
+
+        if (updatedCount > 0) {
+          toast.success(`⚠️ ${updatedCount} retailer(s) were set to inactive!`, { duration: 5000 });
+        } else {
+          toast.success("✅ Scanned for inactive retailers. No changes found.", { duration: 3000 });
+        }
+
+        fetchUsers();
+      } catch (err) {
+        console.error("Error checking inactive retailers:", err);
+        toast.error("❌ Failed to check inactive retailers.");
+      } finally {
+        setLoadingScan(false);
+      }
+    };
+
+    checkInactiveRetailers();
+  }, [BASE_URL, fetchUsers]);
+
+  // Fetch users on mount
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
 
-  // Fetch available branch managers if role is branch
+  // Fetch available branch managers
   useEffect(() => {
     const fetchManagers = async () => {
       if (formData.role !== "branch") return setAvailableManagers([]);
       try {
         const res = await axios.get(`${BASE_URL}/branches/available-managers`);
-        setAvailableManagers(res.data); // {user_id, name}
+        setAvailableManagers(res.data);
       } catch (err) {
         console.error("Error fetching available branch managers:", err);
         toast.error("❌ Failed to load available branch managers.");
@@ -86,7 +115,7 @@ export default function ManageUsersection() {
       if (clean.length > 13) clean = clean.slice(0, 13);
       setFormData(prev => ({ ...prev, [name]: clean }));
     } else if (name === "branch_picture" && files && files[0]) {
-      setFormData(prev => ({ ...prev, branch_picture: files[0] }));
+      setFormData(prev => ({ ...prev, [name]: files[0] }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
@@ -124,9 +153,8 @@ export default function ManageUsersection() {
           type: formData.type,
           municipality: formData.municipality,
           barangay_id: formData.barangay_id,
-          home_address: formData.home_address, // <- Add this
+          home_address: formData.home_address,
         };
-
 
         res = await axios.post(`${BASE_URL}/users`, newUser);
       }
@@ -144,6 +172,7 @@ export default function ManageUsersection() {
   };
 
   const updateUserType = async (userId, newType) => {
+    setLoadingUpdate(true);
     try {
       await axios.put(`${BASE_URL}/users/${userId}`, { type: newType });
       toast.success(`User set to ${newType} successfully!`);
@@ -151,6 +180,8 @@ export default function ManageUsersection() {
     } catch (err) {
       console.error("Error updating user:", err);
       toast.error("❌ Failed to update user.");
+    } finally {
+      setLoadingUpdate(false);
     }
   };
 
@@ -161,7 +192,20 @@ export default function ManageUsersection() {
   );
 
   return (
-    <div className="p-6 w-full flex flex-col gap-6">
+    <div className="p-6 w-full flex flex-col gap-6 relative">
+
+      {/* 🔹 Full-screen loading overlay */}
+      {(loadingScan || loadingUpdate) && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-md flex flex-col items-center">
+            <div className="loader border-4 border-t-4 border-gray-200 rounded-full w-12 h-12 animate-spin mb-4"></div>
+            <p className="text-gray-700 font-medium">
+              {loadingScan ? "Scanning for inactive retailers..." : "Updating user status..."}
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-900">Manage Users</h2>
       </div>
@@ -191,10 +235,7 @@ export default function ManageUsersection() {
 
         <div className="ml-auto flex gap-2">
           <button
-            onClick={() => {
-              setFormData(initialFormData);
-              setShowModal(true);
-            }}
+            onClick={() => { setFormData(initialFormData); setShowModal(true); }}
             className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
           >
             <PlusCircle size={20} />
@@ -247,25 +288,27 @@ export default function ManageUsersection() {
                         className={`px-3 py-1.5 rounded text-white text-sm font-medium ${user.type === "active"
                           ? "bg-gray-300 cursor-not-allowed"
                           : "bg-green-500 hover:bg-green-600"}`}
-                        disabled={user.type === "active"}
+                        disabled={user.type === "active" || loadingUpdate}
                         onClick={() => updateUserType(user.user_id, "active")}
                       >
                         Activate
                       </button>
+
                       <button
                         className={`px-3 py-1.5 rounded text-white text-sm font-medium ${user.type === "inactive"
                           ? "bg-gray-300 cursor-not-allowed"
                           : "bg-red-500 hover:bg-red-600"}`}
-                        disabled={user.type === "inactive"}
+                        disabled={user.type === "inactive" || loadingUpdate}
                         onClick={() => updateUserType(user.user_id, "inactive")}
                       >
                         Deactivate
                       </button>
+
                       <button
                         className={`px-3 py-1.5 rounded text-white text-sm font-medium ${user.type === "inactive"
                           ? "bg-gray-700 hover:bg-gray-800"
                           : "bg-gray-300 cursor-not-allowed"}`}
-                        disabled={user.type !== "inactive"}
+                        disabled={user.type !== "inactive" || loadingUpdate}
                         onClick={() => updateUserType(user.user_id, "archived")}
                       >
                         Archive
