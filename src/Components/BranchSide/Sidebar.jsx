@@ -7,6 +7,7 @@ import {
   Users,
   Settings,
   MessageCircle,
+  CreditCard, // Added for Loans icon
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import axios from "axios";
@@ -112,6 +113,7 @@ export default function Sidebar({ role }) {
 
     branch_manager: [
       { to: "/branchorder", label: "Orders", icon: <ShoppingCart className="w-5 h-5" />, showBadge: true },
+      { to: "/branchloans", label: "Loans", icon: <CreditCard className="w-5 h-5" /> }, // Added Loans
       { to: "/branchinventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
       { to: "/branchsalesreport", label: "Sales Report", icon: <FileText className="w-5 h-5" /> },
       { to: "/branchretailer", label: "Manage Retailers", icon: <Users className="w-5 h-5" /> },
@@ -122,7 +124,6 @@ export default function Sidebar({ role }) {
       { to: "/retailerinventory", label: "Products & Inventory", icon: <Package className="w-5 h-5" /> },
       { to: "/retailerinquiries", label: "Inquiries", icon: <MessageCircle className="w-5 h-5" /> },
     ],
-
 
     guest: [],
   };
