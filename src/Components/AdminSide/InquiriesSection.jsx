@@ -1,6 +1,6 @@
 // frontend/components/InquiriesSection.jsx
 import React, { useState, useEffect, useRef } from "react";
-import { User, MessageSquare, Send, X } from "lucide-react";
+import { User, MessageSquare, Send, X, Plus } from "lucide-react";
 import { toast } from "react-hot-toast";
 import axios from "axios";
 import { io } from "socket.io-client";
@@ -39,6 +39,10 @@ export default function InquiriesSection() {
     const [user, setUser] = useState(null);
     const [token, setToken] = useState(null);
 
+    const [showUsersModal, setShowUsersModal] = useState(false);
+    const [usersList, setUsersList] = useState([]);
+    const [loadingUsers, setLoadingUsers] = useState(false);
+
     const socketRef = useRef();
 
     // Load user info & token from localStorage on mount
@@ -55,13 +59,11 @@ export default function InquiriesSection() {
         setToken(savedToken);
     }, []);
 
-    // Initialize Socket.IO once
+    // Initialize Socket.IO
     useEffect(() => {
         if (!token) return;
 
-        socketRef.current = io(BASE_URL, {
-            auth: { token },
-        });
+        socketRef.current = io(BASE_URL, { auth: { token } });
 
         socketRef.current.on("receiveMessage", (message) => {
             setChatMessages((prev) => {
@@ -76,25 +78,20 @@ export default function InquiriesSection() {
     }, [token, selectedConversation]);
 
     // Fetch conversations
-    useEffect(() => {
+    const fetchConversations = async () => {
         if (!token) return;
+        try {
+            const res = await axios.get(`${BASE_URL}/chat/conversations/user`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            setConversations(res.data || []);
+        } catch (err) {
+            console.error("Failed to fetch conversations:", err.response?.data || err.message);
+            toast.error("Failed to load inquiries.");
+        }
+    };
 
-        const fetchConversations = async () => {
-            try {
-                console.log("Token:", token);
-
-                const res = await axios.get(`${BASE_URL}/chat/conversations/user`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-
-                console.log("Conversations data:", res.data);
-                setConversations(res.data || []);
-            } catch (err) {
-                console.error("Failed to fetch conversations:", err.response?.data || err.message);
-                toast.error("Failed to load inquiries.");
-            }
-        };
-
+    useEffect(() => {
         fetchConversations();
     }, [token]);
 
@@ -108,9 +105,7 @@ export default function InquiriesSection() {
                 `${BASE_URL}/chat/messages/${conversation.conversation_id}`,
                 { headers: { Authorization: `Bearer ${token}` } }
             );
-
             setChatMessages(res.data || []);
-
             socketRef.current.emit("joinRoom", conversation.conversation_id);
         } catch (err) {
             console.error("Failed to fetch messages:", err.response?.data || err.message);
@@ -123,7 +118,6 @@ export default function InquiriesSection() {
         if (!newMessage.trim() || !selectedConversation || !token || !user) return;
 
         try {
-            // Send via backend (server will broadcast via Socket.IO)
             const res = await axios.post(
                 `${BASE_URL}/chat/messages`,
                 {
@@ -133,7 +127,6 @@ export default function InquiriesSection() {
                 { headers: { Authorization: `Bearer ${token}` } }
             );
 
-            // Append message locally
             setChatMessages((prev) => [...prev, res.data]);
             setNewMessage("");
             toast.success("Message sent!");
@@ -143,6 +136,95 @@ export default function InquiriesSection() {
         }
     };
 
+    // + Button click: fetch users according to role
+    const handleNewConversationClick = async () => {
+        if (!token || !user) return;
+        setLoadingUsers(true);
+
+        try {
+            const res = await axios.get(`${BASE_URL}/users`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+
+            let filteredUsers = res.data || [];
+
+            // Filter based on logged-in role
+            switch (user.role) {
+                case "retailer":
+                case "business_owner":
+                case "users":
+                    filteredUsers = filteredUsers.filter(u => ["admin", "branch_manager"].includes(u.role));
+                    break;
+                case "branch_manager":
+                    filteredUsers = filteredUsers.filter(u => ["admin", "retailer"].includes(u.role));
+                    break;
+                case "admin":
+                    break; // show all
+                default:
+                    filteredUsers = [];
+            }
+
+            setUsersList(filteredUsers);
+            setShowUsersModal(true);
+        } catch (err) {
+            console.error("Failed to fetch users:", err);
+            toast.error("Failed to load users.");
+        } finally {
+            setLoadingUsers(false);
+        }
+    };
+
+    // Handle starting a new conversation and auto-refresh
+    const handleStartConversation = async (selectedUser) => {
+        if (!token || !user) return;
+
+        try {
+            // 1️⃣ Create conversation
+            const resConv = await axios.post(
+                `${BASE_URL}/chat/conversations`,
+                {
+                    senderId: user.user_id,
+                    receiverId: selectedUser.user_id,
+                },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+
+            const newConversation = resConv.data;
+
+            // 2️⃣ Send greeting
+            await axios.post(
+                `${BASE_URL}/chat/messages`,
+                {
+                    conversationId: newConversation.conversation_id,
+                    messageText: "Hello! I hope this message finds you well.",
+                },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+
+            // 3️⃣ Refresh conversation list and select the new conversation
+            await fetchConversations();
+
+            const refreshedConversation = newConversation;
+            setSelectedConversation(refreshedConversation);
+
+            // 4️⃣ Load messages for the new conversation
+            const resMessages = await axios.get(
+                `${BASE_URL}/chat/messages/${refreshedConversation.conversation_id}`,
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            setChatMessages(resMessages.data || []);
+
+            // 5️⃣ Join Socket room
+            socketRef.current.emit("joinRoom", refreshedConversation.conversation_id);
+
+            // Close modal
+            setShowUsersModal(false);
+            toast.success(`Conversation started with ${selectedUser.name}`);
+        } catch (err) {
+            console.error("Failed to start conversation:", err.response?.data || err.message);
+            toast.error("Failed to start conversation.");
+        }
+    };
 
     // Helper to display friendly role
     const getRoleLabel = (role) => ROLE_LABELS[role] || role;
@@ -152,11 +234,20 @@ export default function InquiriesSection() {
             <div className="flex flex-1 gap-4 overflow-hidden">
                 {/* SIDEBAR */}
                 <div className={`w-1/3 rounded-2xl shadow-md border ${colors.border} p-4 flex flex-col ${colors.card}`}>
-                    <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-500/20">
-                        <MessageSquare className="text-blue-600 w-6 h-6" />
-                        <h2 className={`text-lg font-bold ${colors.text}`}>Inquiries</h2>
+                    <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-500/20">
+                        <div className="flex items-center gap-3">
+                            <MessageSquare className="text-blue-600 w-6 h-6" />
+                            <h2 className={`text-lg font-bold ${colors.text}`}>Inquiries</h2>
+                        </div>
+                        <button
+                            onClick={handleNewConversationClick}
+                            className="p-2 rounded-full bg-blue-600 text-white hover:bg-blue-700 transition"
+                        >
+                            <Plus className="w-4 h-4" />
+                        </button>
                     </div>
 
+                    {/* Conversations list */}
                     <div className="flex-1 overflow-y-auto space-y-2">
                         {conversations.length > 0 ? (
                             conversations.map((conv) => (
@@ -193,7 +284,6 @@ export default function InquiriesSection() {
                 <div className={`flex-1 rounded-2xl shadow-md border ${colors.border} p-4 flex flex-col ${colors.card}`}>
                     {selectedConversation ? (
                         <>
-                            {/* HEADER */}
                             <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-500/20">
                                 <div className="flex items-center gap-3">
                                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${colors.listIconBg}`}>
@@ -208,7 +298,6 @@ export default function InquiriesSection() {
                                 </button>
                             </div>
 
-                            {/* MESSAGES */}
                             <div className={`flex-1 overflow-y-auto p-4 rounded-xl border ${colors.border} bg-white`}>
                                 {chatMessages.length > 0 ? (
                                     chatMessages.map((msg, idx) => (
@@ -237,7 +326,6 @@ export default function InquiriesSection() {
                                 )}
                             </div>
 
-                            {/* INPUT */}
                             <div className="flex gap-3 mt-3">
                                 <input
                                     type="text"
@@ -264,6 +352,40 @@ export default function InquiriesSection() {
                     )}
                 </div>
             </div>
+
+            {/* USERS MODAL */}
+            {showUsersModal && (
+                <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
+                    <div className="bg-white rounded-xl shadow-xl w-96 max-h-[80vh] overflow-y-auto p-4 relative">
+                        <button
+                            onClick={() => setShowUsersModal(false)}
+                            className="absolute top-3 right-3 p-2 rounded-full hover:bg-gray-200 transition"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+
+                        <h3 className="text-lg font-bold mb-4">Start New Conversation</h3>
+
+                        {loadingUsers ? (
+                            <p className="text-gray-500">Loading users...</p>
+                        ) : usersList.length > 0 ? (
+                            <ul className="space-y-2">
+                                {usersList.map(u => (
+                                    <li
+                                        key={u.user_id}
+                                        className="p-2 rounded hover:bg-gray-100 cursor-pointer flex justify-between items-center"
+                                        onClick={() => handleStartConversation(u)}
+                                    >
+                                        <span>{u.name} ({getRoleLabel(u.role)})</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-gray-500">No users available.</p>
+                        )}
+                    </div>
+                </div>
+            )}
         </section>
     );
 }
