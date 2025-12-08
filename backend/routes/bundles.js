@@ -723,11 +723,11 @@ router.get("/branch/check-available", authenticateToken, async (req, res) => {
       ORDER BY b.bundle_id DESC
     `);
 
-    // 2. Get inventory for the logged-in branch
+    // 2. Get inventory for the logged-in branch, full state only
     const [inventoryRows] = await db.query(`
       SELECT product_id, stock
       FROM inventory
-      WHERE branch_id = ?
+      WHERE branch_id = ? AND state = 'full'
     `, [branch_id]);
 
     // Convert inventory into lookup object
@@ -769,7 +769,7 @@ router.get("/branch/check-available", authenticateToken, async (req, res) => {
       }
     });
 
-    // 4. Check if branch has ALL required products + enough quantity
+    // 4. Check if branch has ALL required products + enough quantity (full state)
     const availableBundles = Object.values(bundleMap).filter(bundle => {
       return bundle.items.every(item => {
         const branchStock = inventoryMap[item.product_id] || 0;
@@ -784,6 +784,7 @@ router.get("/branch/check-available", authenticateToken, async (req, res) => {
     res.status(500).json({ success: false, error: "Failed to check available bundles" });
   }
 });
+
 
 // -----------------------------------------------------
 // BRANCH ADD BUNDLE
