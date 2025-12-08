@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation } from "swiper/modules";
@@ -7,6 +6,7 @@ import "swiper/css/navigation";
 import { Package } from "lucide-react";
 import { toast } from "react-hot-toast";
 import axios from "axios";
+import { useNavigate } from "react-router-dom";
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 const API_URL = `${BASE_URL}/services`;
@@ -16,6 +16,7 @@ export default function Servicespagesection() {
   const [userType] = useState("normal"); // "business" unlocks restricted services
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   const fetchServices = async () => {
     setLoading(true);
@@ -26,18 +27,11 @@ export default function Servicespagesection() {
       });
 
       const normalized = (res.data.services || []).map((s) => ({
+        ...s,
         title: s.title,
         description: s.description,
         restricted: s.restricted || false,
         image: s.image_url ? `${BASE_URL}${s.image_url}` : null,
-        action:
-          s.restricted && userType !== "business"
-            ? () => toast.error("Only available for Business Owners.")
-            : s.title.toLowerCase().includes("retailer")
-              ? () => setModalType("retailer")
-              : s.title.toLowerCase().includes("swap")
-                ? () => setModalType("swap")
-                : () => toast("Service clicked!"),
       }));
 
       setServices(normalized);
@@ -53,6 +47,49 @@ export default function Servicespagesection() {
   useEffect(() => {
     fetchServices();
   }, []);
+
+  const getToken = () => localStorage.getItem("token");
+
+  const handleInquireService = async (service) => {
+    const token = getToken();
+    if (!token) {
+      toast.error("Please login first!");
+      return;
+    }
+
+    try {
+      // 1️⃣ Create conversation with service owner
+      const convRes = await axios.post(
+        `${BASE_URL}/chat/conversations`,
+        { receiverId: service.user_id }, // user_two_id
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      const conversation = convRes.data;
+      if (!conversation?.conversation_id) {
+        toast.error("Failed to start conversation.");
+        return;
+      }
+
+      // 2️⃣ Send fixed message
+      await axios.post(
+        `${BASE_URL}/chat/messages`,
+        {
+          conversationId: conversation.conversation_id,
+          messageText: `I would like to inquire about your service: ${service.title}`,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      toast.success("Inquiry sent successfully!");
+
+      // 3️⃣ Redirect to /inquiry
+      navigate("/inquiry", { state: { conversationId: conversation.conversation_id } });
+    } catch (err) {
+      console.error("Failed to start inquiry:", err.response || err);
+      toast.error("Failed to send inquiry. Please try again.");
+    }
+  };
 
   return (
     <section className="bg-gray-900 pt-15 pb-15 mt-8">
@@ -101,7 +138,11 @@ export default function Servicespagesection() {
                       <p className="text-gray-600 flex-grow">{service.description}</p>
 
                       <button
-                        onClick={service.action}
+                        onClick={() =>
+                          service.restricted && userType !== "business"
+                            ? toast.error("Only available for Business Owners.")
+                            : handleInquireService(service)
+                        }
                         disabled={service.restricted && userType !== "business"}
                         className={`mt-4 w-full font-medium py-2 px-4 rounded-lg transition
                           ${service.restricted && userType !== "business"
@@ -119,7 +160,6 @@ export default function Servicespagesection() {
               ))}
             </Swiper>
 
-            {/* Custom Navigation Arrows */}
             <div className="custom-swiper-button-prev absolute -left-8 top-1/2 -translate-y-1/2 cursor-pointer z-10 bg-gray-100 shadow-md p-3 rounded-full hover:bg-gray-200 hidden sm:flex">
               <span className="text-gray-900 text-3xl font-bold">❮</span>
             </div>

@@ -22,7 +22,7 @@ const canChat = (senderRole, receiverRole) => {
     business_owner: ["branch_manager", "admin"],
     branch_manager: ["retailer", "business_owner", "users", "admin"],
     admin: ["retailer", "business_owner", "branch_manager", "users"],
-    users: ["branch_manager"],
+    users: ["branch_manager", "admin"],
   };
 
   return rules[senderRole]?.includes(receiverRole);

@@ -1,12 +1,17 @@
-
 import React, { useState } from "react";
 import { PlusCircle, Box } from "lucide-react";
 import { toast } from "react-hot-toast";
 import axios from "axios";
+
 const BASE_URL = import.meta.env.VITE_BASE_URL;
+
 export default function AddServices({ fetchServices }) {
     const [targetAudience, setTargetAudience] = useState("all");
-    const [newService, setNewService] = useState({ title: "", description: "", image: null });
+    const [newService, setNewService] = useState({
+        title: "",
+        description: "",
+        image: null,
+    });
 
     const handleAddService = async () => {
         if (!newService.title || !newService.description) {
@@ -29,17 +34,22 @@ export default function AddServices({ fetchServices }) {
 
         try {
             const token = localStorage.getItem("token");
+            if (!token) {
+                toast.error("You must be logged in to add a service");
+                return;
+            }
+
             const res = await axios.post(`${BASE_URL}/services`, formData, {
                 headers: {
                     "Content-Type": "multipart/form-data",
-                    Authorization: `Bearer ${token}`,
+                    Authorization: `Bearer ${token}`, // ✅ send token
                 },
             });
 
             if (res.status === 201) {
                 toast.success(res.data.message || "Service added successfully!");
                 setNewService({ title: "", description: "", image: null });
-                fetchServices(); // refresh list in parent
+                fetchServices(); // refresh parent list
             }
         } catch (err) {
             console.error(err.response?.data || err.message);
@@ -55,9 +65,11 @@ export default function AddServices({ fetchServices }) {
 
     return (
         <div className="flex-1 flex flex-col lg:flex-row gap-6">
-            {/* Image Card */}
+            {/* Image Upload Card */}
             <div className="w-full lg:w-1/3 flex flex-col items-center justify-center bg-white shadow-lg rounded-2xl border p-6">
-                <label className="block text-gray-700 font-semibold mb-3 text-lg">Service Image</label>
+                <label className="block text-gray-700 font-semibold mb-3 text-lg">
+                    Service Image
+                </label>
                 <input
                     type="file"
                     accept="image/*"
@@ -86,13 +98,17 @@ export default function AddServices({ fetchServices }) {
                     <input
                         type="text"
                         value={newService.title}
-                        onChange={(e) => setNewService({ ...newService, title: e.target.value })}
+                        onChange={(e) =>
+                            setNewService({ ...newService, title: e.target.value })
+                        }
                         placeholder="Service Title"
                         className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-600 focus:outline-none text-gray-800 text-base"
                     />
                     <textarea
                         value={newService.description}
-                        onChange={(e) => setNewService({ ...newService, description: e.target.value })}
+                        onChange={(e) =>
+                            setNewService({ ...newService, description: e.target.value })
+                        }
                         placeholder="Service Description"
                         className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-600 focus:outline-none text-gray-800 text-base flex-1 resize-none"
                         rows="5"

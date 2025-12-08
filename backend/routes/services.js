@@ -37,9 +37,10 @@ const upload = multer({
 // Allowed enum values
 const allowedTypes = ["users", "business_owner", "admin", "all"];
 
-// Add a new service (admin only)
+// Add new service
 router.post("/", authenticateToken, upload.single("image"), async (req, res) => {
   try {
+    // Only admins can add services
     if (req.user.role !== "admin") {
       return res.status(403).json({ message: "Forbidden: Admins only" });
     }
@@ -51,22 +52,28 @@ router.post("/", authenticateToken, upload.single("image"), async (req, res) => 
     if (!title || !description || !type) {
       return res.status(400).json({ message: "Missing required fields" });
     }
+
+    const allowedTypes = ["users", "business_owner", "admin", "all"];
     if (!allowedTypes.includes(type)) {
       return res.status(400).json({ message: `Invalid type. Allowed: ${allowedTypes.join(", ")}` });
     }
 
+    // ✅ Use user ID from token
+    const user_id = req.user.id;
+
     const [result] = await pool.query(
-      "INSERT INTO services (title, description, image_url, type) VALUES (?, ?, ?, ?)",
-      [title, description, image_url, type]
+      "INSERT INTO services (user_id, title, description, image_url, type) VALUES (?, ?, ?, ?, ?)",
+      [user_id, title, description, image_url, type]
     );
 
-    // Only return success if insert worked
     res.status(201).json({ message: "Service added successfully", serviceId: result.insertId });
   } catch (err) {
-    console.error("POST /services ERROR:", err.message);
+    console.error("POST /services ERROR:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
+
+
 router.put("/:id", authenticateToken, upload.single("image"), async (req, res) => {
   try {
     if (req.user.role !== "admin") {
@@ -114,31 +121,38 @@ router.get("/fetchServices", authenticateToken, async (req, res) => {
     const { type } = req.query;
     const userRole = req.user.role; // 'admin', 'business_owner', 'users', etc.
 
-    let query = "SELECT * FROM services";
+    const allowedTypes = ["users", "business_owner", "admin", "all"];
+
+    // Base query: include user_id
+    let query = `
+      SELECT s.*, s.user_id, u.name AS user_name, u.role AS user_role
+      FROM services s
+      LEFT JOIN users u ON s.user_id = u.user_id
+    `;
     const params = [];
 
-    // Only filter by type for non-admins
+    // Non-admins: only see services for 'all' + their role
     if (userRole !== "admin") {
-      query += " WHERE type = 'all' OR type = ?";
+      query += " WHERE s.type = 'all' OR s.type = ?";
       params.push(userRole);
 
       if (type) {
         if (!allowedTypes.includes(type)) {
           return res.status(400).json({ message: `Invalid type. Allowed: ${allowedTypes.join(", ")}` });
         }
-        query += " AND type = ?";
+        query += " AND s.type = ?";
         params.push(type);
       }
     } else if (type) {
-      // Admin can filter by type if provided
+      // Admins can filter by type
       if (!allowedTypes.includes(type)) {
         return res.status(400).json({ message: `Invalid type. Allowed: ${allowedTypes.join(", ")}` });
       }
-      query += " WHERE type = ?";
+      query += " WHERE s.type = ?";
       params.push(type);
     }
 
-    query += " ORDER BY created_at DESC";
+    query += " ORDER BY s.created_at DESC";
 
     const [services] = await pool.query(query, params);
 
@@ -148,6 +162,7 @@ router.get("/fetchServices", authenticateToken, async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+
 
 
 module.exports = router;
