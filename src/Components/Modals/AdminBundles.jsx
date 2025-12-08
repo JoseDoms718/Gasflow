@@ -84,8 +84,8 @@ export default function AdminBundles({ refreshTrigger, borderless = true }) {
             // Only allow integers for discounted price and price
             if (field === "discounted_price" || field === "bundle_price") {
                 newValue = newValue.replace(/\D/g, ""); // remove non-digits
-                newValue = newValue ? parseInt(newValue) : 0;
             }
+
 
             // Auto-adjust discounted price if it exceeds total
             if (field === "discounted_price") {
@@ -141,7 +141,15 @@ export default function AdminBundles({ refreshTrigger, borderless = true }) {
 
     const handleSaveEdits = async () => {
         const total = calculateTotalPrice();
-        let discounted = Number(editedBundle.discounted_price) || 0;
+        let discounted = editedBundle.discounted_price !== "" && editedBundle.discounted_price !== null
+            ? Number(editedBundle.discounted_price)
+            : null;
+
+        // Prevent saving if discounted price is null, zero, or exceeds total
+        if (discounted === null || discounted <= 0) {
+            toast.error("Discounted price cannot be empty or zero.");
+            return;
+        }
 
         if (discounted >= total) {
             discounted = total - 1;
@@ -150,12 +158,18 @@ export default function AdminBundles({ refreshTrigger, borderless = true }) {
             return;
         }
 
+        // Prevent saving if bundle name is empty
+        if (!editedBundle.bundle_name || editedBundle.bundle_name.trim() === "") {
+            toast.error("Bundle name cannot be empty.");
+            return;
+        }
+
         try {
             const token = localStorage.getItem("token");
             const formData = new FormData();
 
             formData.append("bundle_name", editedBundle.bundle_name);
-            formData.append("description", editedBundle.description);
+            formData.append("description", editedBundle.description || "");
             formData.append("price", total);
             formData.append("discounted_price", discounted);
             formData.append("role", editedBundle.role || "retailer");
@@ -181,6 +195,7 @@ export default function AdminBundles({ refreshTrigger, borderless = true }) {
             toast.error("Failed to update bundle.");
         }
     };
+
 
     const formatPrice = (value) => Number(value || 0).toFixed(2);
 

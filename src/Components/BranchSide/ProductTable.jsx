@@ -295,19 +295,39 @@ export default function ProductTable({
                                             )}
                                         </div>
                                     </td>
-
                                     <td className="px-4 py-3 align-middle">
                                         <div className="flex justify-center flex-col items-center">
-                                            {p.branch_discounted_price && p.branch_discounted_price !== p.branch_price ? (
+                                            {p.isBundle ? (
+                                                // Bundle → always use branch_discounted_price if available
                                                 <>
-                                                    <span className="line-through text-gray-400 text-sm">₱{formatPrice(p.branch_price)}</span>
-                                                    <span className="font-semibold text-green-600">₱{formatPrice(p.branch_discounted_price)}</span>
+                                                    {p.branch_discounted_price && p.branch_discounted_price !== p.branch_price && (
+                                                        <span className="line-through text-gray-400 text-sm">
+                                                            ₱{formatPrice(p.branch_price)}
+                                                        </span>
+                                                    )}
+                                                    <span className="font-semibold text-green-600">
+                                                        ₱{formatPrice(p.branch_discounted_price ?? p.branch_price)}
+                                                    </span>
+                                                </>
+                                            ) : p.product_type === "discounted" ? (
+                                                // Discounted product → always show discounted price
+                                                <>
+                                                    {p.branch_discounted_price && p.branch_discounted_price !== p.branch_price && (
+                                                        <span className="line-through text-gray-400 text-sm">
+                                                            ₱{formatPrice(p.branch_price)}
+                                                        </span>
+                                                    )}
+                                                    <span className="font-semibold text-green-600">
+                                                        ₱{formatPrice(p.branch_discounted_price ?? p.branch_price)}
+                                                    </span>
                                                 </>
                                             ) : (
-                                                <span>₱{formatPrice(p.branch_price)}</span>
+                                                // Regular product → always show branch_price
+                                                <span>₱{formatPrice(p.branch_price ?? 0)}</span>
                                             )}
                                         </div>
                                     </td>
+
 
                                     <td className="px-4 py-3 align-middle">
                                         <div className="flex justify-center items-center gap-2">
