@@ -300,53 +300,56 @@ router.post("/walk-in", authenticateToken, async (req, res) => {
           [order_id, item.product_id || null, item.branch_bundle_id || null, item.quantity, item.price, item.type, branch_id]
         );
 
-        // Deduct from full & add to empty for products
+        // --- Deduct from full & add to empty for products ---
         if (item.product_id) {
-          const [fullRows] = await connection.query(
-            "SELECT inventory_id, stock FROM inventory WHERE product_id = ? AND branch_id = ? AND state = 'full'",
-            [item.product_id, branch_id]
-          );
-          if (fullRows.length) {
-            const fullInv = fullRows[0];
-            const prevFullStock = fullInv.stock;
-            const newFullStock = prevFullStock - item.quantity;
-            await connection.query("UPDATE inventory SET stock = ? WHERE inventory_id = ?", [newFullStock, fullInv.inventory_id]);
-            await connection.query(
-              `INSERT INTO inventory_logs (product_id, state, user_id, type, quantity, previous_stock, new_stock, description, created_at)
-               VALUES (?, 'full', ?, ?, ?, ?, ?, ?, NOW())`,
-              [item.product_id, req.user.id, item.type === "refill" ? "refill" : "sales", item.quantity, prevFullStock, newFullStock, `Walk-in sale Order #${order_id}`]
-            );
-
-            // Add to empty state (existing or create new)
-            const [emptyRows] = await connection.query(
-              "SELECT inventory_id, stock FROM inventory WHERE product_id = ? AND branch_id = ? AND state = 'empty'",
+          // Skip stock deduction for refill products
+          if (item.type !== "refill") {
+            const [fullRows] = await connection.query(
+              "SELECT inventory_id, stock FROM inventory WHERE product_id = ? AND branch_id = ? AND state = 'full'",
               [item.product_id, branch_id]
             );
-            if (emptyRows.length) {
-              const emptyInv = emptyRows[0];
-              const prevEmptyStock = emptyInv.stock;
-              const newEmptyStock = prevEmptyStock + item.quantity;
-              await connection.query("UPDATE inventory SET stock = ? WHERE inventory_id = ?", [newEmptyStock, emptyInv.inventory_id]);
+            if (fullRows.length) {
+              const fullInv = fullRows[0];
+              const prevFullStock = fullInv.stock;
+              const newFullStock = prevFullStock - item.quantity;
+              await connection.query("UPDATE inventory SET stock = ? WHERE inventory_id = ?", [newFullStock, fullInv.inventory_id]);
               await connection.query(
                 `INSERT INTO inventory_logs (product_id, state, user_id, type, quantity, previous_stock, new_stock, description, created_at)
-                 VALUES (?, 'empty', ?, 'sales', ?, ?, ?, ?, NOW())`,
-                [item.product_id, req.user.id, item.quantity, prevEmptyStock, newEmptyStock, `Walk-in sale Order #${order_id} added to empty state`]
+                 VALUES (?, 'full', ?, 'sales', ?, ?, ?, ?, NOW())`,
+                [item.product_id, req.user.id, item.quantity, prevFullStock, newFullStock, `Walk-in sale Order #${order_id}`]
               );
-            } else {
-              await connection.query(
-                "INSERT INTO inventory (product_id, branch_id, stock, stock_threshold, state) VALUES (?, ?, ?, NULL, 'empty')",
-                [item.product_id, branch_id, item.quantity]
+
+              // Add to empty state (existing or create new)
+              const [emptyRows] = await connection.query(
+                "SELECT inventory_id, stock FROM inventory WHERE product_id = ? AND branch_id = ? AND state = 'empty'",
+                [item.product_id, branch_id]
               );
-              await connection.query(
-                `INSERT INTO inventory_logs (product_id, state, user_id, type, quantity, previous_stock, new_stock, description, created_at)
-                 VALUES (?, 'empty', ?, 'sales', ?, 0, ?, ?, NOW())`,
-                [item.product_id, req.user.id, item.quantity, item.quantity, `Walk-in sale Order #${order_id} created empty state`]
-              );
+              if (emptyRows.length) {
+                const emptyInv = emptyRows[0];
+                const prevEmptyStock = emptyInv.stock;
+                const newEmptyStock = prevEmptyStock + item.quantity;
+                await connection.query("UPDATE inventory SET stock = ? WHERE inventory_id = ?", [newEmptyStock, emptyInv.inventory_id]);
+                await connection.query(
+                  `INSERT INTO inventory_logs (product_id, state, user_id, type, quantity, previous_stock, new_stock, description, created_at)
+                   VALUES (?, 'empty', ?, 'sales', ?, ?, ?, ?, NOW())`,
+                  [item.product_id, req.user.id, item.quantity, prevEmptyStock, newEmptyStock, `Walk-in sale Order #${order_id} added to empty state`]
+                );
+              } else {
+                await connection.query(
+                  "INSERT INTO inventory (product_id, branch_id, stock, stock_threshold, state) VALUES (?, ?, ?, NULL, 'empty')",
+                  [item.product_id, branch_id, item.quantity]
+                );
+                await connection.query(
+                  `INSERT INTO inventory_logs (product_id, state, user_id, type, quantity, previous_stock, new_stock, description, created_at)
+                   VALUES (?, 'empty', ?, 'sales', ?, 0, ?, ?, NOW())`,
+                  [item.product_id, req.user.id, item.quantity, item.quantity, `Walk-in sale Order #${order_id} created empty state`]
+                );
+              }
             }
           }
         }
 
-        // Deduct/add for bundle items
+        // --- Deduct/add for bundle items (bundles never have refill) ---
         if (item.bundle_items && item.bundle_items.length) {
           for (const bi of item.bundle_items) {
             const qtyToDeduct = bi.required_qty * item.quantity;
@@ -411,7 +414,6 @@ router.post("/walk-in", authenticateToken, async (req, res) => {
     return res.status(500).json({ success: false, error: "Failed to process walk-in order." });
   }
 });
-
 
 //buy endoint
 router.post("/buy", authenticateToken, async (req, res) => {

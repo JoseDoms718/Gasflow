@@ -189,7 +189,7 @@ export default function WalkInOrders() {
           product_id: selectedProduct.product_id, // send product_id
           branch_id: selectedProduct.branch_id,
           quantity,
-          type: "regular", // type is regular
+          type: selectedProduct.isRefill ? "refill" : "regular",
           branch_bundle_id: null, // bundle_id not applicable
           refill: selectedProduct.isRefill,
         });
