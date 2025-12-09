@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { X, Pencil, Check } from "lucide-react";
+import { X, Pencil, Check, Eye, EyeOff } from "lucide-react";
 import { toast } from "react-hot-toast";
 import axios from "axios";
 import EditBranchModal from "./EditBranchInfoModal";
 const BASE_URL = import.meta.env.VITE_BASE_URL;
+
 
 export default function EditProfileModal({ showModal, setShowModal, onProfileUpdated }) {
     const [user, setUser] = useState(null);
@@ -17,6 +18,8 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
 
     const [branchEditFields, setBranchEditFields] = useState({});
     const [branchBarangays, setBranchBarangays] = useState([]);
+    const [showEditPassword, setShowEditPassword] = useState(false);
+    const [showConfirmEditPassword, setShowConfirmEditPassword] = useState(false);
 
     const roles = ["User", "Retailer", "Admin"];
     const PH_MOBILE_REGEX = /^\+639\d{9}$/;
@@ -308,23 +311,47 @@ export default function EditProfileModal({ showModal, setShowModal, onProfileUpd
                         />
 
                         {/* Change Password */}
+                        {/* Change Password */}
                         <div className="flex flex-col gap-2 p-4 bg-gray-800 rounded-lg">
                             <span className="font-semibold mb-2">Change Password:</span>
-                            <input
-                                type="password"
-                                value={editPassword}
-                                onChange={(e) => setEditPassword(e.target.value)}
-                                className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-900 mb-2"
-                                placeholder="New Password"
-                            />
-                            <input
-                                type="password"
-                                value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
-                                className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-900"
-                                placeholder="Confirm Password"
-                            />
+
+                            {/* New Password */}
+                            <div className="relative w-full">
+                                <input
+                                    type={showEditPassword ? "text" : "password"}
+                                    value={editPassword}
+                                    onChange={(e) => setEditPassword(e.target.value)}
+                                    className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-900 pr-10"
+                                    placeholder="New Password"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowEditPassword(!showEditPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                                >
+                                    {showEditPassword ? <Eye size={20} /> : <EyeOff size={20} />}
+                                </button>
+                            </div>
+
+                            {/* Confirm Password */}
+                            <div className="relative w-full">
+                                <input
+                                    type={showConfirmEditPassword ? "text" : "password"}
+                                    value={confirmPassword}
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                    className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-900 pr-10"
+                                    placeholder="Confirm Password"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowConfirmEditPassword(!showConfirmEditPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                                >
+                                    {showConfirmEditPassword ? <Eye size={20} /> : <EyeOff size={20} />}
+                                </button>
+                            </div>
                         </div>
+
                     </div>
                 )}
 

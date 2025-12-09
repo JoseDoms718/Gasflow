@@ -3,12 +3,13 @@ import axios from "axios";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import OtpVerificationForm from "./OtpVerificationForm";
+
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 
 export default function Userform({ setIsOtpActive, setOtpEmail }) {
   const [formData, setFormData] = useState({
     name: "",
-    home_address: "", // ✅ Added home_address
+    home_address: "",
     municipality: "",
     barangay_id: "",
     contact_number: "+63",
@@ -42,6 +43,7 @@ export default function Userform({ setIsOtpActive, setOtpEmail }) {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+
     if (name === "municipality") {
       setFormData((prev) => ({ ...prev, municipality: value, barangay_id: "" }));
       return;
@@ -81,7 +83,7 @@ export default function Userform({ setIsOtpActive, setOtpEmail }) {
     if (loading || sendingOtp) return;
     setLoading(true);
 
-    // Validation
+    // Validations
     if (formData.password !== formData.confirmPassword) {
       toast.error("❌ Passwords do not match!");
       setLoading(false);
@@ -122,7 +124,7 @@ export default function Userform({ setIsOtpActive, setOtpEmail }) {
   const handleOtpVerified = () => {
     setFormData({
       name: "",
-      home_address: "", // Reset home_address
+      home_address: "",
       municipality: "",
       barangay_id: "",
       contact_number: "+63",
@@ -166,7 +168,7 @@ export default function Userform({ setIsOtpActive, setOtpEmail }) {
             name="home_address"
             value={formData.home_address}
             onChange={handleChange}
-            placeholder="Home Address" // ✅ Added placeholder
+            placeholder="Home Address"
             required
             className="col-span-1 md:col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
           />
@@ -219,6 +221,8 @@ export default function Userform({ setIsOtpActive, setOtpEmail }) {
             className="col-span-1 md:col-span-2 w-full p-4 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
           />
 
+          {/* Password */}
+          {/* Password */}
           <div className="col-span-1 md:col-span-2 relative">
             <input
               type={showPassword ? "text" : "password"}
@@ -227,7 +231,6 @@ export default function Userform({ setIsOtpActive, setOtpEmail }) {
               onChange={handleChange}
               placeholder="Password"
               required
-              minLength={8}
               className="w-full p-4 pr-12 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
             />
             <button
@@ -235,10 +238,11 @@ export default function Userform({ setIsOtpActive, setOtpEmail }) {
               onClick={() => setShowPassword(!showPassword)}
               className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600"
             >
-              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              {showPassword ? <Eye size={20} /> : <EyeOff size={20} />}
             </button>
           </div>
 
+          {/* Confirm Password */}
           <div className="col-span-1 md:col-span-2 relative">
             <input
               type={showConfirmPassword ? "text" : "password"}
@@ -247,7 +251,6 @@ export default function Userform({ setIsOtpActive, setOtpEmail }) {
               onChange={handleChange}
               placeholder="Confirm Password"
               required
-              minLength={8}
               className="w-full p-4 pr-12 rounded-full bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none"
             />
             <button
@@ -255,15 +258,15 @@ export default function Userform({ setIsOtpActive, setOtpEmail }) {
               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
               className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600"
             >
-              {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              {showConfirmPassword ? <Eye size={20} /> : <EyeOff size={20} />}
             </button>
           </div>
+
 
           <button
             type="submit"
             disabled={loading || sendingOtp}
-            className={`col-span-1 md:col-span-2 w-full py-4 rounded-full font-semibold text-lg transition ${loading ? "bg-gray-600 cursor-not-allowed" : "bg-[#2d5ee0] hover:bg-[#244bb5] text-white"
-              }`}
+            className={`col-span-1 md:col-span-2 w-full py-4 rounded-full font-semibold text-lg transition ${loading ? "bg-gray-600 cursor-not-allowed" : "bg-[#2d5ee0] hover:bg-[#244bb5] text-white"}`}
           >
             {loading ? <Loader2 className="mx-auto animate-spin" size={22} /> : "Sign Up"}
           </button>
@@ -274,23 +277,15 @@ export default function Userform({ setIsOtpActive, setOtpEmail }) {
         <OtpVerificationForm
           email={formData.email}
           onVerifyOtp={async (user, token) => {
-            // Save token for future authenticated requests
             if (token) localStorage.setItem("token", token);
-
-            // Show success toast
             toast.success("🎉 Account verified & logged in successfully!");
-
-            // Reset form
             handleOtpVerified();
-
-            // Redirect user
-            window.location.href = "/dashboard"; // or use navigate("/dashboard") if using react-router
+            window.location.href = "/dashboard";
           }}
           onCancel={handleCancelOtp}
           onResendOtp={sendOtpRequest}
         />
       )}
-
     </div>
   );
 }

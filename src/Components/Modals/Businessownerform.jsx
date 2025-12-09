@@ -37,7 +37,6 @@ export default function BusinessOwnerForm() {
     axios
       .get(`${BASE_URL}/barangays`, { params: { municipality: formData.municipality } })
       .then((res) => {
-        // Map backend response to match frontend expectations
         const mapped = res.data.map((b) => ({
           barangay_id: b.id,
           barangay_name: b.name,
@@ -271,7 +270,7 @@ export default function BusinessOwnerForm() {
               onClick={() => setShowPassword(!showPassword)}
               className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600"
             >
-              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              {showPassword ? <Eye size={20} /> : <EyeOff size={20} />}
             </button>
           </div>
 
@@ -316,9 +315,7 @@ export default function BusinessOwnerForm() {
           <button
             type="submit"
             disabled={loading}
-            className={`col-span-1 md:col-span-2 w-full py-4 rounded-full font-semibold text-lg transition ${loading
-                ? "bg-gray-600 cursor-not-allowed"
-                : "bg-[#2d5ee0] hover:bg-[#244bb5] text-white"
+            className={`col-span-1 md:col-span-2 w-full py-4 rounded-full font-semibold text-lg transition ${loading ? "bg-gray-600 cursor-not-allowed" : "bg-[#2d5ee0] hover:bg-[#244bb5] text-white"
               }`}
           >
             {loading ? <Loader2 className="mx-auto animate-spin" size={22} /> : "Sign Up"}

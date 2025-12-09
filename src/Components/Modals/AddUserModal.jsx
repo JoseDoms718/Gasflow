@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { X, Eye, EyeOff } from "lucide-react";
 import axios from "axios";
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;
@@ -15,6 +15,8 @@ export default function AddUserModal({
     availableManagers,
 }) {
     const [barangays, setBarangays] = useState([]);
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
     useEffect(() => {
         const fetchBarangays = async () => {
@@ -204,24 +206,45 @@ export default function AddUserModal({
                                 required
                                 className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
                             />
-                            <input
-                                type="password"
-                                name="password"
-                                placeholder="Password"
-                                value={formData.password || ""}
-                                onChange={handleChange}
-                                required
-                                className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
-                            />
-                            <input
-                                type="password"
-                                name="confirmPassword"
-                                placeholder="Confirm Password"
-                                value={formData.confirmPassword || ""}
-                                onChange={handleChange}
-                                required
-                                className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800"
-                            />
+                            <div className="relative w-full">
+                                <input
+                                    type={showPassword ? "text" : "password"}
+                                    name="password"
+                                    placeholder="Password"
+                                    value={formData.password || ""}
+                                    onChange={handleChange}
+                                    required
+                                    className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800 pr-10"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                                >
+                                    {/* Eye open when password is visible */}
+                                    {showPassword ? <Eye size={20} /> : <EyeOff size={20} />}
+                                </button>
+                            </div>
+
+                            <div className="relative w-full">
+                                <input
+                                    type={showConfirmPassword ? "text" : "password"}
+                                    name="confirmPassword"
+                                    placeholder="Confirm Password"
+                                    value={formData.confirmPassword || ""}
+                                    onChange={handleChange}
+                                    required
+                                    className="w-full border border-gray-600 rounded px-3 py-2 bg-gray-800 pr-10"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                                >
+                                    {/* Eye open when password is visible */}
+                                    {showConfirmPassword ? <Eye size={20} /> : <EyeOff size={20} />}
+                                </button>
+                            </div>
                         </>
                     )}
 

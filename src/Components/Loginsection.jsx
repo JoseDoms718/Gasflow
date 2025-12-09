@@ -7,6 +7,7 @@ import Userform from "./Modals/Userform";
 import Businessownerform from "./Modals/Businessownerform";
 import OtpVerificationForm from "./Modals/OtpVerificationForm";
 import { toast } from "react-hot-toast";
+import { Eye, EyeOff } from "lucide-react";
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 
@@ -17,6 +18,7 @@ export default function Loginsection() {
   const [password, setPassword] = useState("");
   const [isOtpActive, setIsOtpActive] = useState(false);
   const [otpEmail, setOtpEmail] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
   // Auto-login if token exists
@@ -136,13 +138,24 @@ export default function Loginsection() {
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full p-4 rounded-full bg-gray-100 text-gray-700 placeholder-gray-500 focus:outline-none"
               />
-              <input
-                type="password"
-                placeholder="Enter Your Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full p-4 rounded-full bg-gray-100 text-gray-700 placeholder-gray-500 focus:outline-none"
-              />
+              <div className="relative w-full">
+                <div className="relative w-full">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter Your Password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full p-4 rounded-full bg-gray-100 text-gray-700 placeholder-gray-500 focus:outline-none"
+                  />
+                  <span
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 cursor-pointer text-gray-500 hover:text-gray-700 select-none"
+                  >
+                    {showPassword ? <Eye size={20} /> : <EyeOff size={20} />}
+                  </span>
+                </div>
+              </div>
+
               <button
                 type="submit"
                 onClick={handleLogin}
@@ -156,7 +169,6 @@ export default function Loginsection() {
           {/* SIGNUP FORMS */}
           {!isLogin && !isOtpActive && (
             <div className="mt-6 md:mt-10">
-              {/* ⭐ TABS CENTERED HERE ⭐ */}
               <div className="flex justify-center items-center gap-6 mb-6">
                 {["normal", "business"].map((type) => (
                   <label key={type} className="flex items-center gap-2 text-white text-lg cursor-pointer">
