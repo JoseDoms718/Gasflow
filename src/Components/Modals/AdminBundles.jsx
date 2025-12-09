@@ -339,6 +339,28 @@ export default function AdminBundles({ refreshTrigger, borderless = true }) {
                                         {isEditing.discounted_price ? <Check size={16} /> : <Pencil size={16} />}
                                     </button>
                                 </div>
+                                <div className="flex items-center gap-2 mt-2">
+                                    <span className="font-semibold">Role:</span>
+
+                                    {isEditing.role ? (
+                                        <select
+                                            value={editedBundle.role}
+                                            onChange={(e) => handleEditChange("role", e.target.value)}
+                                            className="bg-gray-800 px-2 py-1 rounded"
+                                        >
+                                            <option value="business_owner">Business Owner</option>
+                                            <option value="retailer">Retailer</option>
+                                            <option value="users">Users</option>
+                                            <option value="all">All</option>
+                                        </select>
+                                    ) : (
+                                        <span className="capitalize">{editedBundle.role}</span>
+                                    )}
+
+                                    <button onClick={() => toggleEdit("role")}>
+                                        {isEditing.role ? <Check size={16} /> : <Pencil size={16} />}
+                                    </button>
+                                </div>
 
                                 {/* Items */}
                                 <div className="mt-4 flex flex-col">

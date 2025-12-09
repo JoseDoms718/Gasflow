@@ -48,6 +48,7 @@ router.get("/", async (req, res) => {
                 b.bundle_image,
                 b.is_active,
                 b.created_at,
+                b.role,
                 bi.quantity,
                 p.product_id,
                 p.product_name,
