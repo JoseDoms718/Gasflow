@@ -236,13 +236,60 @@ export default function BranchLoanSection() {
 
                         <h3 className="text-xl font-bold mb-5">Loan Details</h3>
 
-                        <div className="grid grid-cols-2 gap-4 text-base">
+                        <div className="grid grid-cols-2 gap-4 text-base mb-4">
                             <div><b>Product:</b> {selectedLoan.product_name}</div>
                             <div><b>Amount:</b> {formatPeso(selectedLoan.price)}</div>
                             <div><b>Issued:</b> {new Date(selectedLoan.created_at).toLocaleDateString()}</div>
                             <div><b>Due:</b> {new Date(selectedLoan.due_date).toLocaleDateString()}</div>
                             <div><b>Branch:</b> {selectedLoan.branch_name}</div>
                             <div><b>Borrower:</b> {selectedLoan.user_name}</div>
+                        </div>
+
+                        <div className="flex flex-col gap-3">
+                            <label className="font-semibold text-white">Select new due date:</label>
+                            <input
+                                type="date"
+                                className="rounded px-3 py-2 text-black bg-white"
+                                min={new Date().toISOString().slice(0, 10)} // prevent past dates
+                                value={selectedLoan.new_due_date || selectedLoan.due_date}
+                                onChange={(e) =>
+                                    setSelectedLoan({ ...selectedLoan, new_due_date: e.target.value })
+                                }
+                            />
+                            <button
+                                className="mt-2 w-full bg-white hover:bg-gray-200 text-black rounded py-2 font-semibold"
+                                onClick={async () => {
+                                    if (!selectedLoan.new_due_date) {
+                                        toast.error("Please select a new due date.");
+                                        return;
+                                    }
+                                    try {
+                                        const token = localStorage.getItem("token");
+                                        const res = await axios.patch(
+                                            `${BASE_URL}/orders/${selectedLoan.loan_id}/extend-date`,
+                                            { new_due_date: selectedLoan.new_due_date },
+                                            { headers: { Authorization: `Bearer ${token}` } }
+                                        );
+
+                                        // Update the loan in local state
+                                        setLoans((prev) =>
+                                            prev.map((loan) =>
+                                                loan.loan_id === selectedLoan.loan_id
+                                                    ? { ...loan, due_date: selectedLoan.new_due_date }
+                                                    : loan
+                                            )
+                                        );
+
+                                        toast.success(res.data.message);
+                                        setSelectedLoan(null);
+                                    } catch (err) {
+                                        console.error("Failed to extend due date:", err);
+                                        toast.error("Failed to extend due date.");
+                                    }
+                                }}
+                            >
+                                Save New Due Date
+                            </button>
                         </div>
                     </div>
                 </div>

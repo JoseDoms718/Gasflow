@@ -137,6 +137,58 @@ async function fetchBarangay(barangay_id) {
   }
 })();
 
+router.patch("/:loan_id/extend-date",authenticateToken,requireRole("admin", "branch_manager"),
+  async (req, res) => {
+    const { loan_id } = req.params;
+    const { new_due_date } = req.body;
+
+    if (!new_due_date || isNaN(new Date(new_due_date))) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid or missing 'new_due_date'. Use format YYYY-MM-DD.",
+      });
+    }
+
+    try {
+      // Check if loan exists
+      const [loanRows] = await db.query(
+        "SELECT due_date FROM loans WHERE loan_id = ?",
+        [loan_id]
+      );
+      if (loanRows.length === 0) {
+        return res.status(404).json({ success: false, error: "Loan not found." });
+      }
+
+      const requestedDue = new Date(new_due_date);
+
+      // Optional: don't allow setting due date in the past
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // ignore time
+      if (requestedDue < today) {
+        return res
+          .status(400)
+          .json({ success: false, error: "New due date cannot be in the past." });
+      }
+
+      // Format to YYYY-MM-DD
+      const formattedDate = requestedDue.toISOString().slice(0, 10);
+
+      // Update loan due date
+      await db.query("UPDATE loans SET due_date = ? WHERE loan_id = ?", [
+        formattedDate,
+        loan_id,
+      ]);
+
+      res.json({
+        success: true,
+        message: `Due date updated to ${formattedDate}`,
+      });
+    } catch (err) {
+      console.error("Error extending due date:", err);
+      res.status(500).json({ success: false, error: "Failed to update due date." });
+    }
+  }
+);
 /* -------------------------------------------------------------------
    WALK-IN ORDER (auto-delivered)
 ------------------------------------------------------------------- */
