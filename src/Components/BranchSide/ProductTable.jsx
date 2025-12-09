@@ -77,7 +77,7 @@ export default function ProductTable({
                             branch_name: b.branch_name,
                             items: (b.items || []).map((item) => ({
                                 ...item,
-                                quantity: item.quantity ?? item.product_quantity ?? item.qty ?? 0,
+                                quantity: item.required_qty ?? 0, // <-- FIX HERE
                             })),
                         };
                     });
@@ -99,9 +99,9 @@ export default function ProductTable({
                         branch_price: b.price ?? 0,
                         branch_discounted_price: b.discounted_price ?? null,
                         stock: null,
-                        items: (b.products || []).map((item) => ({
+                        items: (b.items || []).map((item) => ({
                             ...item,
-                            quantity: item.quantity ?? item.product_quantity ?? item.qty ?? 0,
+                            quantity: item.required_qty ?? 0,
                         })),
                         isBundle: true,
                         bundle_image: b.bundle_image,

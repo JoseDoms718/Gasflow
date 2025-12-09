@@ -161,7 +161,7 @@ export default function BranchLoanSection() {
                                     </td>
 
                                     <td className="px-5 py-4 text-center whitespace-nowrap">
-                                        {formatPeso(loan.price)}
+                                        {formatPeso(Math.abs(loan.price))}
                                     </td>
 
                                     <td className="px-5 py-4 text-center">
@@ -238,7 +238,7 @@ export default function BranchLoanSection() {
 
                         <div className="grid grid-cols-2 gap-4 text-base mb-4">
                             <div><b>Product:</b> {selectedLoan.product_name}</div>
-                            <div><b>Amount:</b> {formatPeso(selectedLoan.price)}</div>
+                            <div><b>Amount:</b> {formatPeso(Math.abs(selectedLoan.price))}</div>
                             <div><b>Issued:</b> {new Date(selectedLoan.created_at).toLocaleDateString()}</div>
                             <div><b>Due:</b> {new Date(selectedLoan.due_date).toLocaleDateString()}</div>
                             <div><b>Branch:</b> {selectedLoan.branch_name}</div>
