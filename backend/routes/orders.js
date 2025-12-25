@@ -823,19 +823,11 @@ router.post("/loan", authenticateToken, async (req, res) => {
           [order_id, item.product_id, item.quantity, item.price, item.type, branch_id]
         );
 
-        const order_item_id = itemResult.insertId;
-
-        // Insert into loans table
-        const dueDate = new Date();
-        dueDate.setDate(dueDate.getDate() + 7); // 7-day loan
-        await connection.query(
-          `INSERT INTO loans (order_item_id, user_id, branch_id, due_date, price, status) VALUES (?, ?, ?, ?, ?, 'pending')`,
-          [order_item_id, buyer_id, branch_id, dueDate, -Math.abs(item.price * item.quantity)]
-        );
+        // --- Do NOT insert into loans yet ---
+        // Loans will be created later after approval
       }
 
       createdOrders.push({ order_id, branch_id, total_price: totalBranchPrice, items: branchItems });
-
       io.emit("newLoan", { order_id, branch_id, items: branchItems });
     }
 
@@ -849,6 +841,7 @@ router.post("/loan", authenticateToken, async (req, res) => {
     return res.status(500).json({ success: false, error: "Failed to process loan orders." });
   }
 });
+
 
 
 router.post("/loan/:loan_id/pay", authenticateToken, async (req, res) => {

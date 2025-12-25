@@ -113,7 +113,6 @@ export default function Inventory() {
               >
                 <Download className="w-5 h-5" /> Export Excel
               </button>
-
               {(userRole === "branch_manager" || userRole === "admin") && (
                 <div className="flex gap-3">
                   <button

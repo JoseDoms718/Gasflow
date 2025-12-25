@@ -129,7 +129,6 @@ export default function InventoryLogSection() {
                                 <th className="px-6 py-4 text-center rounded-tl-lg">Product</th>
                                 <th className="px-6 py-4 text-center">State</th>
                                 <th className="px-6 py-4 text-center">User</th>
-                                <th className="px-6 py-4 text-center">Type</th>
                                 <th className="px-6 py-4 text-center">Quantity</th>
                                 <th className="px-6 py-4 text-center">Previous Stock</th>
                                 <th className="px-6 py-4 text-center">New Stock</th>
@@ -143,7 +142,6 @@ export default function InventoryLogSection() {
                                     <td className="px-6 py-4">{log.product_name || ""}</td>
                                     <td className="px-6 py-4">{log.state || ""}</td>
                                     <td className="px-6 py-4">{log.user_name || ""}</td>
-                                    <td className="px-6 py-4">{log.type || ""}</td>
                                     <td className="px-6 py-4">{log.quantity || ""}</td>
                                     <td className="px-6 py-4">{log.previous_stock || ""}</td>
                                     <td className="px-6 py-4">{log.new_stock || ""}</td>

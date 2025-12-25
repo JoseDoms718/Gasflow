@@ -123,6 +123,16 @@ export default function AddBundleModal({ setShowBundleForm, refreshBundles }) {
             return toast.error("Bundle must include at least 1 product.");
         }
 
+        // 🔒 NEW RULE — REQUIRED
+        if (
+            newBundle.products.length === 1 &&
+            newBundle.products[0].quantity === 1
+        ) {
+            return toast.error(
+                "A bundle must contain multiple products or a single product with quantity greater than 1."
+            );
+        }
+
         if (isNaN(price) || price <= 0) {
             return toast.error("Bundle price must be greater than ₱0.");
         }
