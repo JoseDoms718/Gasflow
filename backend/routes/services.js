@@ -163,6 +163,26 @@ router.get("/fetchServices", authenticateToken, async (req, res) => {
   }
 });
 
+// 👀 PUBLIC SERVICES (NO AUTH)
+router.get("/public", async (req, res) => {
+  try {
+    const query = `
+      SELECT s.*, s.user_id, u.name AS user_name
+      FROM services s
+      LEFT JOIN users u ON s.user_id = u.user_id
+      WHERE s.type = 'all'
+      ORDER BY s.created_at DESC
+    `;
+
+    const [services] = await pool.query(query);
+    res.json({ services });
+  } catch (err) {
+    console.error("GET /services/public ERROR:", err.message);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+
 
 
 module.exports = router;

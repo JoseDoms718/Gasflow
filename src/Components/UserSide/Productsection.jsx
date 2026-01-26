@@ -31,11 +31,25 @@ export default function Productsection() {
           dataToUse = (await axios.get(`${BASE_URL}/products/public/products`, { params: { type: "regular" } })).data;
         }
 
-        const formatted = dataToUse.map((p) => ({
-          ...p,
-          image_url: p.image_url?.startsWith("http") ? p.image_url : `${BASE_URL}/products/images/${p.image_url}`,
-          seller: { name: p.seller_name || "-", barangay: p.barangay || "-", municipality: p.municipality || "-" },
-        }));
+        const now = new Date();
+
+        const formatted = dataToUse
+          .filter((p) => {
+            if (!p.discount_until) return true; // regular product
+            return new Date(p.discount_until) > now; // only active discounts
+          })
+          .map((p) => ({
+            ...p,
+            image_url: p.image_url?.startsWith("http")
+              ? p.image_url
+              : `${BASE_URL}/products/images/${p.image_url}`,
+            seller: {
+              name: p.seller_name || "-",
+              barangay: p.barangay || "-",
+              municipality: p.municipality || "-",
+            },
+          }));
+
 
         setProducts(formatted);
         setShowNavigation(formatted.length > 3);

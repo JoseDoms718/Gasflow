@@ -17,17 +17,24 @@ export default function Servicesection() {
     const fetchServices = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.get(`${BASE_URL}/services/fetchServices`, {
-          headers: { Authorization: `Bearer ${token}` },
+
+        // 🔀 Choose endpoint based on auth
+        const endpoint = token
+          ? `${BASE_URL}/services/fetchServices`
+          : `${BASE_URL}/services/public`;
+
+        const res = await axios.get(endpoint, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
 
-        const normalized = (res.data.services || []).map((s) => ({
-          ...s,
-          image: s.image_url ? `${BASE_URL}${s.image_url}` : null,
+        const normalized = (res.data.services || []).map((service) => ({
+          ...service,
+          image: service.image_url ? `${BASE_URL}${service.image_url}` : null,
         }));
+
         setServices(normalized);
       } catch (err) {
-        console.error(err);
+        console.error("Failed to load services:", err);
         setServices([]);
         toast.error("Failed to load services.");
       }
@@ -36,20 +43,19 @@ export default function Servicesection() {
     fetchServices();
   }, []);
 
-  const getToken = () => localStorage.getItem("token");
-
   const handleInquireService = async (service) => {
-    const token = getToken();
+    const token = localStorage.getItem("token");
     if (!token) {
       toast.error("Please login first!");
+      navigate("/login");
       return;
     }
 
     try {
-      // 1️⃣ Create conversation with service owner
+      // 1️⃣ Create conversation
       const convRes = await axios.post(
         `${BASE_URL}/chat/conversations`,
-        { receiverId: service.user_id }, // user_two_id
+        { receiverId: service.user_id },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -59,7 +65,7 @@ export default function Servicesection() {
         return;
       }
 
-      // 2️⃣ Send initial fixed message
+      // 2️⃣ Send initial message
       await axios.post(
         `${BASE_URL}/chat/messages`,
         {
@@ -71,8 +77,10 @@ export default function Servicesection() {
 
       toast.success("Inquiry sent successfully!");
 
-      // 3️⃣ Redirect to /inquiry with conversationId
-      navigate("/inquiry", { state: { conversationId: conversation.conversation_id } });
+      // 3️⃣ Redirect
+      navigate("/inquiry", {
+        state: { conversationId: conversation.conversation_id },
+      });
     } catch (err) {
       console.error("Failed to start inquiry:", err.response || err);
       toast.error("Failed to send inquiry. Please try again.");
@@ -82,9 +90,12 @@ export default function Servicesection() {
   return (
     <section className="bg-white py-8 md:py-12">
       <div className="container mx-auto px-4">
-        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Our Services</h2>
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
+          Our Services
+        </h2>
         <p className="text-gray-600 text-sm md:text-base max-w-xl mb-6 md:mb-8">
-          Explore the range of services we offer to ensure you get the best experience from our company.
+          Explore the range of services we offer to ensure you get the best
+          experience from our company.
         </p>
 
         <Swiper
@@ -120,15 +131,18 @@ export default function Servicesection() {
                     <h3 className="text-lg font-semibold text-gray-800 line-clamp-1">
                       {service.title || "Service Title"}
                     </h3>
-                    <p className="text-gray-600 text-sm md:text-sm line-clamp-2 flex-grow">
+                    <p className="text-gray-600 text-sm line-clamp-2 flex-grow">
                       {service.description || "No description available."}
                     </p>
+
                     {service.user_id && (
                       <button
                         onClick={() => handleInquireService(service)}
                         className="mt-3 w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition"
                       >
-                        Inquire
+                        {localStorage.getItem("token")
+                          ? "Inquire"
+                          : "Login to Inquire"}
                       </button>
                     )}
                   </div>
