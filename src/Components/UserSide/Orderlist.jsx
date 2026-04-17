@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import OrderInfoModal from "./OrderInfoModal";
+import ReturnProductModal from "../Modals/ReturnProductModal";
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 const SOCKET_URL = BASE_URL;
@@ -30,6 +31,41 @@ export default function Orderlist({ role: propRole }) {
   const [expandedOrder, setExpandedOrder] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [checkoutItem, setCheckoutItem] = useState(null);
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [selectedReturnOrder, setSelectedReturnOrder] = useState(null);
+  const handleReturnRequest = async (reason) => {
+    const token = localStorage.getItem("token");
+
+    if (!token || !selectedReturnOrder) {
+      toast.error("Unable to process return.");
+      return;
+    }
+
+    try {
+      const res = await axios.put(
+        `${BASE_URL}/orders/update-status/${selectedReturnOrder.order_id}`,
+        {
+          status: "return_requested",
+          return_reason: reason,
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (res.data.success) {
+        toast.success("🔄 Return request submitted!");
+        setShowReturnModal(false);
+        setSelectedReturnOrder(null);
+        fetchOrders();
+      } else {
+        toast.error(res.data.message || "Failed to request return.");
+      }
+    } catch (err) {
+      console.error("Return request error:", err);
+      toast.error("Error submitting return request.");
+    }
+  };
 
   const getUserCart = useCallback(() => {
     const token = localStorage.getItem("token");
@@ -464,6 +500,20 @@ export default function Orderlist({ role: propRole }) {
                             Delivered at: {new Date(order.delivered_at).toLocaleString()}
                           </div>
                         )}
+                        {activeTab === "finished" && order.status === "delivered" && (
+                          <div className="flex justify-end pt-2 sm:pt-3 border-t border-gray-600">
+                            <button
+                              onClick={() => {
+                                setSelectedReturnOrder(order);
+                                setShowReturnModal(true);
+                              }}
+                              className="bg-orange-500 hover:bg-orange-600 text-white px-3 sm:px-4 py-1 sm:py-2 rounded text-xs sm:text-sm"
+                            >
+                              Request Return
+                            </button>
+                          </div>
+                        )}
+
 
                         {order.order_id === "local_cart" && (
                           <div className="flex flex-wrap justify-end gap-2 sm:gap-3 pt-2 sm:pt-3 border-t border-gray-600">
@@ -529,6 +579,17 @@ export default function Orderlist({ role: propRole }) {
           user={user}
         />
       )}
+      {showReturnModal && (
+        <ReturnProductModal
+          order={selectedReturnOrder}
+          onClose={() => {
+            setShowReturnModal(false);
+            setSelectedReturnOrder(null);
+          }}
+          onConfirm={handleReturnRequest}
+        />
+      )}
+
     </section>
   );
 }

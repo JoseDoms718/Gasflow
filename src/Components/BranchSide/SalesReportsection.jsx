@@ -299,7 +299,7 @@ export default function ReportsPage() {
             </button>
           )}
           <button onClick={() => toast.info("Export logic not shown here")} className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow">
-            <Download className="w-5 h-5" /> Export Excel
+            <Download className="w-5 h-5" /> Export PDF
           </button>
         </div>
       </div>
