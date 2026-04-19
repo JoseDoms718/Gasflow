@@ -240,7 +240,7 @@ export default function ReportsPage() {
   const lineSeries = [{ name: "Total Sales", data: sortedDates.map((d) => dateRevenueMap[d]) }];
 
   return (
-    <div className="p-6 w-full h-[750px] flex flex-col">
+    <div className="p-6 w-full h-screen flex flex-col min-h-0">
       <h2 className="text-2xl font-bold mb-4 text-gray-900">Reports</h2>
 
       {/* Tabs */}
@@ -306,75 +306,93 @@ export default function ReportsPage() {
 
       {/* Main Content */}
       {activeTab === "sales" ? (
-        <div className="flex flex-1 gap-6 overflow-hidden">
-          <div className="flex-1 border border-gray-300 rounded-lg overflow-y-auto">
-            {filteredTransactions.length === 0 ? (
-              <div className="flex justify-center items-center h-full text-gray-500 py-20">No sales data available for this period.</div>
-            ) : (
-              <table className="w-full border-collapse text-center">
-                <thead className="bg-gray-900 text-white sticky top-0 z-10">
-                  <tr>
-                    {userRole === "admin" && <th className="px-4 py-3 border-b border-gray-700">Municipality</th>}
-                    <th className="px-4 py-3 border-b border-gray-700">Product</th>
-                    <th className="px-4 py-3 border-b border-gray-700">Quantity</th>
-                    <th className="px-4 py-3 border-b border-gray-700">Price</th>
-                    <th className="px-4 py-3 border-b border-gray-700">Delivery Fee</th>
-                    <th className="px-4 py-3 border-b border-gray-700">Loss</th>
-                    <th className="px-4 py-3 border-b border-gray-700">Total Price</th>
-                    <th className="px-4 py-3 border-b border-gray-700">Delivery Date</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white">
-                  {filteredTransactions.map((t, idx) => {
-                    const loss = (t.branch_price_at_sale - (t.sold_discounted_price || t.price)) * t.quantity;
-                    const totalPrice = t.price * t.quantity + t.deliveryFee - loss;
+        <div className="flex flex-col h-[calc(100vh-120px)] gap-4 min-h-0">
 
-                    return (
-                      <tr
-                        key={t.id}
-                        className={`border-t border-gray-300 ${idx % 2 === 0 ? "bg-gray-50" : "bg-white"} hover:bg-gray-100`}
-                      >
-                        {userRole === "admin" && <td className="px-4 py-3">{t.branch}</td>}
-                        <td className="px-4 py-3 flex items-center gap-2">
-                          <img
-                            src={t.type === "bundle" ? t.bundle_image : t.image_url}
-                            alt={t.type === "bundle" ? t.bundle_name : t.productName}
-                            className="w-12 h-12 object-cover rounded"
-                          />
-                          <span className="font-semibold">
-                            {t.type === "bundle" ? t.bundle_name : t.productName}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">{t.quantity}</td>
-                        <td className="px-4 py-3 text-green-600 font-medium">₱{t.price.toFixed(2)}</td>
-                        <td className="px-4 py-3 text-purple-600 font-medium">₱{t.deliveryFee.toFixed(2)}</td>
-                        <td className="px-4 py-3 text-red-600 font-medium">₱{loss.toFixed(2)}</td>
-                        <td className="px-4 py-3 text-blue-600 font-medium">₱{totalPrice.toFixed(2)}</td>
-                        <td className="px-4 py-3">{t.date}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
+          {/* TABLE SECTION */}
+          <div className="flex-1 min-h-0 border border-gray-300 rounded-lg overflow-hidden flex flex-col">
 
-          <div className="w-[45%] flex flex-col gap-6">
             {filteredTransactions.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-gray-500 border border-gray-300 rounded-lg bg-white">
-                No chart data available for this period.
+              <div className="flex-1 flex justify-center items-center text-gray-500">
+                No sales data available for this period.
               </div>
             ) : (
-              <>
-                <div className="bg-white rounded-lg p-4 border border-gray-300">
-                  <Chart options={pieOptions} series={pieSeries} type="pie" height={250} />
-                </div>
-                <div className="bg-white rounded-lg p-4 border border-gray-300 flex-1">
-                  <Chart options={lineOptions} series={lineSeries} type="line" height="100%" />
-                </div>
-              </>
+              <div className="flex-1 overflow-y-auto">
+
+                <table className="w-full border-collapse text-center">
+
+                  <thead className="bg-gray-900 text-white sticky top-0 z-10">
+                    <tr>
+                      {userRole === "admin" && (
+                        <th className="px-4 py-3 border-b border-gray-700">Municipality</th>
+                      )}
+                      <th className="px-4 py-3 border-b border-gray-700">Product</th>
+                      <th className="px-4 py-3 border-b border-gray-700">Quantity</th>
+                      <th className="px-4 py-3 border-b border-gray-700">Price</th>
+                      <th className="px-4 py-3 border-b border-gray-700">Delivery Fee</th>
+                      <th className="px-4 py-3 border-b border-gray-700">Loss</th>
+                      <th className="px-4 py-3 border-b border-gray-700">Total Price</th>
+                      <th className="px-4 py-3 border-b border-gray-700">Date</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {filteredTransactions.map((t, idx) => {
+                      const loss =
+                        (t.branch_price_at_sale - (t.sold_discounted_price || t.price)) *
+                        t.quantity;
+
+                      const totalPrice =
+                        t.price * t.quantity + t.deliveryFee - loss;
+
+                      return (
+                        <tr
+                          key={t.id}
+                          className={`border-t border-gray-300 ${idx % 2 === 0 ? "bg-gray-50" : "bg-white"
+                            } hover:bg-gray-100`}
+                        >
+                          {userRole === "admin" && (
+                            <td className="px-4 py-3">{t.branch}</td>
+                          )}
+
+                          <td className="px-4 py-3 flex items-center gap-2">
+                            <img
+                              src={t.type === "bundle" ? t.bundle_image : t.image_url}
+                              className="w-10 h-10 object-cover rounded"
+                            />
+                            <span className="font-semibold">
+                              {t.type === "bundle" ? t.bundle_name : t.productName}
+                            </span>
+                          </td>
+
+                          <td className="px-4 py-3">{t.quantity}</td>
+                          <td className="px-4 py-3 text-green-600">₱{t.price.toFixed(2)}</td>
+                          <td className="px-4 py-3 text-purple-600">₱{t.deliveryFee.toFixed(2)}</td>
+                          <td className="px-4 py-3 text-red-600">₱{loss.toFixed(2)}</td>
+                          <td className="px-4 py-3 text-blue-600">₱{totalPrice.toFixed(2)}</td>
+                          <td className="px-4 py-3">{t.date}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+
+                </table>
+              </div>
             )}
           </div>
+
+          {/* CHARTS SECTION (ALWAYS VISIBLE) */}
+          <div className="h-[320px] flex gap-4 flex-shrink-0">
+
+            <div className="flex-1 bg-white border border-gray-300 rounded-lg p-3">
+              <Chart options={pieOptions} series={pieSeries} type="pie" height={300} />
+            </div>
+
+            <div className="flex-1 bg-white border border-gray-300 rounded-lg p-3">
+              <Chart options={lineOptions} series={lineSeries} type="line" height={300} />
+            </div>
+
+          </div>
+
         </div>
       ) : (
         <ExpensesReportSection

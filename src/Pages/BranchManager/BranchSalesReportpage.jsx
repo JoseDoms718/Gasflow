@@ -3,14 +3,14 @@ import SalesReportsection from "../../Components/BranchSide/SalesReportsection";
 
 function BranchSalesReportPage() {
   return (
-    <div className="flex min-h-screen bg-gray-100">
-      {/* Sidebar on the left */}
-      <aside className="w-64 bg-white shadow-lg">
+    <div className="flex h-screen bg-gray-100 overflow-hidden">
+      {/* Sidebar */}
+      <aside className="w-64 bg-white shadow-lg h-full">
         <Sidebar />
       </aside>
 
-      {/* Main content on the right */}
-      <main className="flex-1 p-6 overflow-y-auto">
+      {/* Main content */}
+      <main className="flex-1 p-6 overflow-y-auto h-full min-h-0">
         <SalesReportsection />
       </main>
     </div>
