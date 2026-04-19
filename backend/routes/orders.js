@@ -717,6 +717,7 @@ router.post("/loan", authenticateToken, async (req, res) => {
   }
 
   const connection = await db.getConnection();
+
   try {
     const io = req.app.get("io");
     let { items, full_name, contact_number, barangay_id, delivery_address } = req.body;
@@ -730,7 +731,10 @@ router.post("/loan", authenticateToken, async (req, res) => {
 
     if (!PH_PHONE_REGEX.test(contact_number)) {
       connection.release();
-      return res.status(400).json({ success: false, error: "Invalid Philippine contact number format (+639XXXXXXXXX)." });
+      return res.status(400).json({
+        success: false,
+        error: "Invalid Philippine contact number format (+639XXXXXXXXX).",
+      });
     }
 
     if (!Array.isArray(items) || items.length === 0) {
@@ -742,10 +746,13 @@ router.post("/loan", authenticateToken, async (req, res) => {
     const requestedQty = items.reduce((sum, i) => sum + (i.quantity || 0), 0);
     if (requestedQty > 2) {
       connection.release();
-      return res.status(400).json({ success: false, error: "You can only loan a maximum of 2 items at a time." });
+      return res.status(400).json({
+        success: false,
+        error: "You can only loan a maximum of 2 items at a time.",
+      });
     }
 
-    // --- Check existing pending loans ---
+    // --- Check existing pending loans (ONLY real loans table) ---
     const [pendingLoans] = await connection.query(
       `SELECT SUM(oi.quantity) AS total_qty
        FROM loans l
@@ -755,6 +762,7 @@ router.post("/loan", authenticateToken, async (req, res) => {
     );
 
     const currentLoanQty = pendingLoans[0].total_qty || 0;
+
     if (currentLoanQty + requestedQty > 2) {
       connection.release();
       return res.status(400).json({
@@ -763,6 +771,7 @@ router.post("/loan", authenticateToken, async (req, res) => {
       });
     }
 
+    // --- Validate barangay ---
     const barangayRow = await fetchBarangay(barangay_id);
     if (!barangayRow) {
       connection.release();
@@ -771,20 +780,29 @@ router.post("/loan", authenticateToken, async (req, res) => {
 
     // --- Group items by branch ---
     const branchMap = {};
+
     for (const item of items) {
       if (!item.product_id || !item.branch_id || !item.quantity) {
         connection.release();
-        return res.status(400).json({ success: false, error: "Each item must include product_id, branch_id, and quantity." });
+        return res.status(400).json({
+          success: false,
+          error: "Each item must include product_id, branch_id, and quantity.",
+        });
       }
 
       const [rows] = await connection.query(
         `SELECT p.price FROM products p WHERE p.product_id = ? LIMIT 1`,
         [item.product_id]
       );
+
       const product = rows[0];
+
       if (!product) {
         connection.release();
-        return res.status(400).json({ success: false, error: `Product ${item.product_id} not found.` });
+        return res.status(400).json({
+          success: false,
+          error: `Product ${item.product_id} not found.`,
+        });
       }
 
       const basePrice = item.price ?? product.price;
@@ -793,48 +811,61 @@ router.post("/loan", authenticateToken, async (req, res) => {
       branchMap[item.branch_id].push({
         product_id: item.product_id,
         quantity: item.quantity,
-        price: -Math.abs(basePrice),
-        type: "loan",
+        price: Math.abs(basePrice), // ✅ always positive
+        type: "loan", // ✅ marks as loan request
       });
     }
 
     // --- Transaction ---
     await connection.beginTransaction();
+
     const createdOrders = [];
 
     for (const [branch_id, branchItems] of Object.entries(branchMap)) {
-      const totalBranchPrice = branchItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
+      const totalBranchPrice = branchItems.reduce(
+        (sum, i) => sum + i.price * i.quantity,
+        0
+      );
 
       const [orderResult] = await connection.query(
         `INSERT INTO orders (
           buyer_id, full_name, contact_number, barangay_id, delivery_address,
           status, total_price, delivery_fee, is_active, ordered_at, inventory_deducted
         ) VALUES (?, ?, ?, ?, ?, 'pending', ?, 0, 1, NOW(), 0)`,
-        [buyer_id, full_name, contact_number, barangay_id, delivery_address, totalBranchPrice]
+        [
+          buyer_id,
+          full_name,
+          contact_number,
+          barangay_id,
+          delivery_address,
+          totalBranchPrice,
+        ]
       );
 
       const order_id = orderResult.insertId;
 
       for (const item of branchItems) {
-        const [itemResult] = await connection.query(
+        await connection.query(
           `INSERT INTO order_items
            (order_id, product_id, quantity, price, type, branch_id)
            VALUES (?, ?, ?, ?, ?, ?)`,
-          [order_id, item.product_id, item.quantity, item.price, item.type, branch_id]
-        );
-
-        const order_item_id = itemResult.insertId;
-
-        // Insert into loans table
-        const dueDate = new Date();
-        dueDate.setDate(dueDate.getDate() + 7); // 7-day loan
-        await connection.query(
-          `INSERT INTO loans (order_item_id, user_id, branch_id, due_date, price, status) VALUES (?, ?, ?, ?, ?, 'pending')`,
-          [order_item_id, buyer_id, branch_id, dueDate, -Math.abs(item.price * item.quantity)]
+          [
+            order_id,
+            item.product_id,
+            item.quantity,
+            item.price,
+            item.type,
+            branch_id,
+          ]
         );
       }
 
-      createdOrders.push({ order_id, branch_id, total_price: totalBranchPrice, items: branchItems });
+      createdOrders.push({
+        order_id,
+        branch_id,
+        total_price: totalBranchPrice,
+        items: branchItems,
+      });
 
       io.emit("newLoan", { order_id, branch_id, items: branchItems });
     }
@@ -842,11 +873,23 @@ router.post("/loan", authenticateToken, async (req, res) => {
     await connection.commit();
     connection.release();
 
-    return res.status(201).json({ success: true, message: "Loan orders created successfully.", orders: createdOrders });
+    return res.status(201).json({
+      success: true,
+      message: "Loan request created successfully.",
+      orders: createdOrders,
+    });
   } catch (err) {
-    try { await connection.rollback(); connection.release(); } catch (e) {}
+    try {
+      await connection.rollback();
+      connection.release();
+    } catch (e) {}
+
     console.error("❌ Error (loan):", err);
-    return res.status(500).json({ success: false, error: "Failed to process loan orders." });
+
+    return res.status(500).json({
+      success: false,
+      error: "Failed to process loan request.",
+    });
   }
 });
 

@@ -47,7 +47,7 @@ export default function BranchMarketSection() {
       .then((res) => {
         const formatted = res.data.map((p) => ({
           ...p,
-          branch_id: p.branch_id || p.branch, // ensure branch_id exists
+          branch_id: p.municipality_id || p.municipality, // ensure branch_id exists
           image_url: p.image_url
             ? p.image_url.startsWith("http")
               ? p.image_url
@@ -89,13 +89,13 @@ export default function BranchMarketSection() {
     if (!products) return;
     if (selectedMunicipality === "All") {
       const prioritized = [...products].sort((a, b) => {
-        if (a.branch === user?.municipality && b.branch !== user?.municipality) return -1;
-        if (a.branch !== user?.municipality && b.branch === user?.municipality) return 1;
+        if (a.branch === user?.municipality && b.municipality !== user?.municipality) return -1;
+        if (a.branch !== user?.municipality && b.municipality === user?.municipality) return 1;
         return 0;
       });
       setFilteredProducts(prioritized);
     } else {
-      const filtered = products.filter((p) => p.branch === selectedMunicipality);
+      const filtered = products.filter((p) => p.municipality === selectedMunicipality);
       setFilteredProducts(filtered);
     }
   }, [selectedMunicipality, products, user]);
@@ -174,7 +174,7 @@ export default function BranchMarketSection() {
             </thead>
             <tbody className="bg-white">
               {filteredProducts.map((p) => (
-                <tr key={`product-${p.product_id}-${p.branch_id}`} className="hover:bg-gray-50">
+                <tr key={`product-${p.product_id}-${p.municipality_id}`} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     {p.image_url ? (
                       <img
@@ -189,7 +189,7 @@ export default function BranchMarketSection() {
                     )}
                   </td>
                   <td className="px-4 py-3 font-semibold">{p.product_name}</td>
-                  <td className="px-4 py-3">{p.seller_name || p.branch || "—"}</td>
+                  <td className="px-4 py-3">{p.seller_name || p.municipality || "—"}</td>
                   <td className="px-4 py-3">₱{formatPrice(p.discounted_price || p.price)}</td>
                   <td className="px-4 py-3 flex justify-center gap-2">
                     <button

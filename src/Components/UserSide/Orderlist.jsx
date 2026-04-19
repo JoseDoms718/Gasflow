@@ -350,9 +350,13 @@ export default function Orderlist({ role: propRole }) {
               {filteredOrders.map((order) => {
                 const isExpanded = expandedOrder === order.order_id;
                 const firstItem = order.items?.find(i => i.image_url) || order.items?.[0] || {};
-                const orderTotal = Number(order.total_price || 0);
-                const deliveryFee = Number(order.delivery_fee || 0);
-                const grandTotal = orderTotal + deliveryFee;
+                const rawOrderTotal = Number(order.total_price || 0);
+                const rawDeliveryFee = Number(order.delivery_fee || 0);
+
+                // Prevent negative display (especially for business owner loans)
+                const orderTotal = Math.max(0, rawOrderTotal);
+                const deliveryFee = Math.max(0, rawDeliveryFee);
+                const grandTotal = Math.max(0, orderTotal + deliveryFee);
 
                 return (
                   <div
@@ -490,7 +494,7 @@ export default function Orderlist({ role: propRole }) {
                             <div>Delivery Fee: ₱{deliveryFee.toLocaleString()}</div>
                           )}
                           <div className="font-bold">
-                            Total: ₱{(orderTotal + (order.status === "cart" ? 0 : deliveryFee)).toLocaleString()}
+                            Total: ₱{Math.max(0, orderTotal + (order.status === "cart" ? 0 : deliveryFee)).toLocaleString()}
                           </div>
                         </div>
 
