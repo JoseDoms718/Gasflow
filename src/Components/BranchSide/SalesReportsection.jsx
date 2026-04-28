@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useMemo } from "react";
 import Chart from "react-apexcharts";
 import { PlusCircle, Download } from "lucide-react";
-import axios from "axios";
-import * as XLSX from "xlsx-js-style";
-import { saveAs } from "file-saver";
 import { toast } from "react-hot-toast";
-
+import axios from "axios";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import ExpensesReportSection from "./ExpensesReportSection";
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;
@@ -121,6 +120,106 @@ export default function ReportsPage() {
     fetchData();
   }, []);
 
+  const handleExportPDF = async () => {
+    const salesTransactions = filteredTransactions.filter(t => t.type !== "loan");
+    const loanTransactions = filteredTransactions.filter(t => t.type === "loan");
+    try {
+      const doc = new jsPDF();
+
+      const timestamp = new Date().toLocaleString("en-PH", {
+        timeZone: "Asia/Manila",
+      });
+
+      const safeNum = (val) => Number(val || 0);
+
+      // HEADER
+      doc.setFontSize(16);
+      doc.text("Sales Report", 14, 15);
+
+      doc.setFontSize(11);
+      const salesRevenue = salesTransactions.reduce((sum, t) => {
+        const qty = safeNum(t.quantity);
+        const price = safeNum(t.price);
+        const delivery = safeNum(t.deliveryFee);
+        return sum + (price * qty) + delivery;
+      }, 0);
+
+      const loanExpense = loanTransactions.reduce((sum, t) => {
+        const qty = safeNum(t.quantity);
+        const price = safeNum(t.price);
+        const delivery = safeNum(t.deliveryFee);
+        return sum + (price * qty) + delivery;
+      }, 0);
+      doc.text(`Revenue: PHP ${salesRevenue.toFixed(2)}`, 14, 24);
+      doc.text(`Loan Expense: PHP ${loanExpense.toFixed(2)}`, 14, 30);
+      doc.text(`Expenses: PHP ${(safeNum(totalExpenses) + safeNum(damagedTotal)).toFixed(2)}`, 14, 36);
+      doc.text(
+        `Net: PHP ${(salesRevenue - totalExpenses - loanExpense).toFixed(2)}`,
+        14,
+        42
+      );
+
+      // TABLE DATA
+      const tableData = filteredTransactions.map((t) => {
+        const qty = safeNum(t.quantity);
+        const price = safeNum(t.price);
+        const delivery = safeNum(t.deliveryFee);
+        const branchPrice = safeNum(t.branch_price_at_sale);
+        const soldPrice = safeNum(t.sold_discounted_price || t.price);
+
+        const base = price * qty + delivery;
+
+        const loss =
+          t.type === "loan"
+            ? 0
+            : (branchPrice - soldPrice) * qty;
+
+        const totalPrice =
+          t.type === "loan"
+            ? -base
+            : base - loss;
+
+        return [
+          t.branch || "N/A",
+          t.type || "N/A",
+          t.type === "bundle" ? t.bundle_name : t.productName,
+          qty,
+          `PHP ${price.toFixed(2)}`,
+          `PHP ${delivery.toFixed(2)}`,
+          `PHP ${loss.toFixed(2)}`,
+          `PHP ${totalPrice.toFixed(2)}`,
+          t.date || "N/A",
+        ];
+      });
+
+      autoTable(doc, {
+        startY: 50,
+        head: [
+          [
+            "Municipality",
+            "Type",
+            "Product",
+            "Qty",
+            "Price",
+            "Delivery",
+            "Loss",
+            "Total",
+            "Date",
+          ],
+        ],
+        body: tableData,
+        styles: {
+          fontSize: 8,
+          cellPadding: 2,
+        },
+      });
+
+      doc.save(`Sales_Report_${year}_${month}.pdf`);
+    } catch (err) {
+      console.error("PDF Export Error:", err);
+      toast.error("Failed to export PDF");
+    }
+  };
   // Add expense
   const handleAddExpense = async () => {
     if (!newExpense.name.trim() || !newExpense.amount || newExpense.amount <= 0)
@@ -203,14 +302,29 @@ export default function ReportsPage() {
     );
   }, [damagedProducts, month, year, timeFilter, branch]);
 
-  // Revenue, Expenses, Loss
   const totalRevenue = filteredTransactions.reduce((sum, t) => {
-    const loss = (t.branch_price_at_sale - (t.sold_discounted_price || t.price)) * t.quantity;
-    const totalPrice = t.price * t.quantity + t.deliveryFee - loss;
-    return sum + totalPrice;
+    if (t.type === "loan") return sum; // ❌ exclude loans
+
+    const qty = t.quantity || 0;
+    const price = t.price || 0;
+    const delivery = t.deliveryFee || 0;
+
+    return sum + price * qty + delivery;
   }, 0);
 
-  const totalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const loanTotal = filteredTransactions
+    .filter(t => t.type === "loan")
+    .reduce((sum, t) => {
+      const qty = t.quantity || 0;
+      const price = t.price || 0;
+      const delivery = t.deliveryFee || 0;
+      return sum + price * qty + delivery;
+    }, 0);
+
+  const totalExpenses = filteredExpenses.reduce(
+    (sum, e) => sum + e.amount,
+    0
+  );
 
   // Total loss from cost - sold
   const totalLoss = filteredTransactions.reduce((sum, t) => {
@@ -220,7 +334,7 @@ export default function ReportsPage() {
     return sum + quantity * (costPrice - sellingPrice);
   }, 0);
 
-  const totalNetWithLoss = totalRevenue - (totalExpenses + damagedTotal + totalLoss);
+  const totalNet = totalRevenue - totalExpenses - loanTotal;
 
   // Charts
   const productQuantityMap = filteredTransactions.reduce((acc, t) => {
@@ -259,8 +373,12 @@ export default function ReportsPage() {
 
         <div className="text-lg font-semibold text-gray-800 flex gap-4">
           Revenue: <span className="text-green-600">₱{totalRevenue.toFixed(2)}</span> |{" "}
-          Expenses: <span className="text-red-600">₱{(totalExpenses + damagedTotal).toFixed(2)}</span> |{" "}
-          Net: <span className="text-blue-600">₱{totalNetWithLoss.toFixed(2)}</span>
+          Expenses: <span className="text-red-600">
+            ₱{(totalExpenses + loanTotal + damagedTotal).toFixed(2)}
+          </span>
+          Net: <span className="text-blue-600">
+            ₱{totalNet.toFixed(2)}
+          </span>
         </div>
       </div>
 
@@ -298,7 +416,10 @@ export default function ReportsPage() {
               <PlusCircle className="w-5 h-5" /> Add Expense
             </button>
           )}
-          <button onClick={() => toast.info("Export logic not shown here")} className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow">
+          <button
+            onClick={handleExportPDF}
+            className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow"
+          >
             <Download className="w-5 h-5" /> Export PDF
           </button>
         </div>
@@ -338,20 +459,17 @@ export default function ReportsPage() {
 
                   <tbody>
                     {filteredTransactions.map((t, idx) => {
+                      const qty = t.quantity || 0;
+                      const price = t.price || 0;
+                      const delivery = t.deliveryFee || 0;
+
                       const loss =
                         t.type === "loan"
                           ? 0
-                          : (t.branch_price_at_sale - (t.sold_discounted_price || t.price)) * t.quantity;
+                          : ((t.branch_price_at_sale || 0) -
+                            (t.sold_discounted_price || t.price || 0)) * qty;
 
-                      // base computation (NEVER invert loss, only final revenue if loan)
-                      const baseTotal =
-                        (t.price * t.quantity) + t.deliveryFee - loss;
-
-                      // FIX: loan should not re-apply full negative again
-                      const totalPrice =
-                        t.type === "loan"
-                          ? -(t.price * t.quantity + t.deliveryFee)
-                          : baseTotal;
+                      const totalPrice = (price * qty) + delivery - loss;
                       return (
                         <tr
                           key={t.id}
