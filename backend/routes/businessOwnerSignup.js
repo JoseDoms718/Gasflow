@@ -85,7 +85,7 @@ router.post("/", upload.array("picture"), async (req, res) => {
           .replace(/\\/g, "/");
 
         await db.query(
-          `INSERT INTO otp_images (otp_id, type, image_url) 
+          `INSERT INTO otp (otp_id, type, image_url) 
            VALUES (?, ?, ?)`,
           [pendingId, "establishmentPhoto", relativePath]
         );
@@ -151,7 +151,7 @@ router.post("/approve/:pendingId", authenticateToken, async (req, res) => {
       ]
     );
 
-    // Delete pending account (images remain in otp_images)
+    // Delete pending account (images remain in otp)
     await db.query("DELETE FROM pending_accounts WHERE id = ?", [pendingId]);
 
     // Send approval email
@@ -239,7 +239,7 @@ router.post("/reject/:pendingId", authenticateToken, async (req, res) => {
 
     // Fetch and delete all uploaded images
     const [images] = await db.query(
-      "SELECT * FROM otp_images WHERE otp_id = ?",
+      "SELECT * FROM otp WHERE otp_id = ?",
       [pendingId]
     );
 
@@ -255,7 +255,7 @@ router.post("/reject/:pendingId", authenticateToken, async (req, res) => {
     }
 
     // Delete DB records
-    await db.query("DELETE FROM otp_images WHERE otp_id = ?", [pendingId]);
+    await db.query("DELETE FROM otp WHERE otp_id = ?", [pendingId]);
     await db.query("DELETE FROM pending_accounts WHERE id = ?", [pendingId]);
 
     // Send rejection email
@@ -356,7 +356,7 @@ router.get("/pending-registrations", authenticateToken, async (req, res) => {
     // Fetch images for each pending account
     for (let record of records) {
       const [images] = await db.query(
-        "SELECT * FROM otp_images WHERE otp_id = ?",
+        "SELECT * FROM otp WHERE otp_id = ?",
         [record.id]
       );
       record.images = images;

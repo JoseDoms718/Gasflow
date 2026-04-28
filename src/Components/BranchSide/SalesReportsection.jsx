@@ -326,6 +326,7 @@ export default function ReportsPage() {
                         <th className="px-4 py-3 border-b border-gray-700">Municipality</th>
                       )}
                       <th className="px-4 py-3 border-b border-gray-700">Product</th>
+                      <th className="px-4 py-3 border-b border-gray-700">Type</th>
                       <th className="px-4 py-3 border-b border-gray-700">Quantity</th>
                       <th className="px-4 py-3 border-b border-gray-700">Price</th>
                       <th className="px-4 py-3 border-b border-gray-700">Delivery Fee</th>
@@ -338,12 +339,19 @@ export default function ReportsPage() {
                   <tbody>
                     {filteredTransactions.map((t, idx) => {
                       const loss =
-                        (t.branch_price_at_sale - (t.sold_discounted_price || t.price)) *
-                        t.quantity;
+                        t.type === "loan"
+                          ? 0
+                          : (t.branch_price_at_sale - (t.sold_discounted_price || t.price)) * t.quantity;
 
+                      // base computation (NEVER invert loss, only final revenue if loan)
+                      const baseTotal =
+                        (t.price * t.quantity) + t.deliveryFee - loss;
+
+                      // FIX: loan should not re-apply full negative again
                       const totalPrice =
-                        t.price * t.quantity + t.deliveryFee - loss;
-
+                        t.type === "loan"
+                          ? -(t.price * t.quantity + t.deliveryFee)
+                          : baseTotal;
                       return (
                         <tr
                           key={t.id}
@@ -363,11 +371,29 @@ export default function ReportsPage() {
                               {t.type === "bundle" ? t.bundle_name : t.productName}
                             </span>
                           </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`px-2 py-1 rounded text-xs font-semibold ${t.type === "loan"
+                                ? "bg-red-100 text-red-600"
+                                : t.type === "bundle"
+                                  ? "bg-blue-100 text-blue-600"
+                                  : "bg-green-100 text-green-700"
+                                }`}
+                            >
+                              {t.type === "loan"
+                                ? "Loan"
+                                : t.type === "bundle"
+                                  ? "Bundle"
+                                  : "Regular"}
+                            </span>
+                          </td>
 
                           <td className="px-4 py-3">{t.quantity}</td>
                           <td className="px-4 py-3 text-green-600">₱{t.price.toFixed(2)}</td>
                           <td className="px-4 py-3 text-purple-600">₱{t.deliveryFee.toFixed(2)}</td>
-                          <td className="px-4 py-3 text-red-600">₱{loss.toFixed(2)}</td>
+                          <td className="px-4 py-3 text-red-600">
+                            ₱{loss.toFixed(2)}
+                          </td>
                           <td className="px-4 py-3 text-blue-600">₱{totalPrice.toFixed(2)}</td>
                           <td className="px-4 py-3">{t.date}</td>
                         </tr>

@@ -987,7 +987,7 @@ router.post("/loan/:loan_id/pay", authenticateToken, async (req, res) => {
 
     // --- Mark loan as paid ---
     await connection.query(
-      `UPDATE loans SET status = 'paid', payed_at = NOW() WHERE loan_id = ?`,
+      `UPDATE loans SET status = 'paid', paid_at = NOW() WHERE loan_id = ?`,
       [loan_id]
     );
 
@@ -1030,7 +1030,7 @@ router.get("/my-loans", authenticateToken, async (req, res) => {
           l.due_date,
           l.status,
           l.created_at,
-          l.payed_at,
+          l.paid_at,
           l.price AS loan_price,   -- get price from loans table
 
           oi.order_items_id,
@@ -1094,7 +1094,7 @@ router.get("/branch-loans", authenticateToken, async (req, res) => {
           l.due_date,
           l.status,
           l.created_at,
-          l.payed_at,
+          l.paid_at,
 
           oi.order_items_id,
           oi.product_id,
@@ -1307,16 +1307,20 @@ router.get(
 
           br.branch_name,
 
-          -- PRODUCT FIELDS
           p.product_name,
           p.product_description,
           p.image_url AS product_image,
 
-          -- BRANCH BUNDLE FIELDS
           bund.bundle_name,
           bund.description AS bundle_description,
-          bund.bundle_image
-          
+          bund.bundle_image,
+
+          -- 🔥 LOAN FIELDS
+          l.loan_id,
+          l.due_date AS loan_due_date,
+          l.status AS loan_status,
+          l.paid_at AS loan_paid_at
+
         FROM orders o
         JOIN order_items oi ON o.order_id = oi.order_id
 
@@ -1338,12 +1342,16 @@ router.get(
         LEFT JOIN barangays b 
             ON o.barangay_id = b.barangay_id
 
+        -- 🔥 JOIN LOANS
+        LEFT JOIN loans l
+            ON l.order_item_id = oi.order_items_id
+
         WHERE 1
       `;
 
       const params = [];
 
-      // Filter by branch manager’s branches
+      // Branch manager filter
       if (
         req.user.role === "branch_manager" &&
         req.user.branches &&
@@ -1355,7 +1363,7 @@ router.get(
         params.push(...req.user.branches);
       }
 
-      // Filter by retailer’s single branch
+      // Retailer filter
       if (req.user.role === "retailer") {
         query += " AND oi.branch_id = ?";
         params.push(req.user.branch_id);
@@ -1393,10 +1401,10 @@ router.get(
           acc.push(order);
         }
 
-        // PRODUCT ITEM
+        // 🔥 PRODUCT ITEM
         if (row.product_id) {
           order.items.push({
-            type: row.type,  // regular, discounted, refill, loan
+            type: row.type,
             product_id: row.product_id,
             product_name: row.product_name,
             product_description: row.product_description,
@@ -1407,13 +1415,20 @@ router.get(
             sold_discounted_price: parseFloat(row.sold_discounted_price) || 0,
             branch_id: row.branch_id,
             branch_name: row.branch_name || "Unknown",
+
+            // 🔥 LOAN INFO
+            is_loan: !!row.loan_id,
+            loan_id: row.loan_id || null,
+            loan_due_date: row.loan_due_date || null,
+            loan_status: row.loan_status || null,
+            loan_paid_at: row.loan_paid_at || null,
           });
         }
 
-        // BUNDLE ITEM
+        // 🔥 BUNDLE ITEM
         if (row.branch_bundle_id) {
           order.items.push({
-            type: row.type,  // should be 'bundle'
+            type: row.type,
             branch_bundle_id: row.branch_bundle_id,
             bundle_name: row.bundle_name,
             bundle_description: row.bundle_description,
@@ -1424,6 +1439,13 @@ router.get(
             sold_discounted_price: parseFloat(row.sold_discounted_price) || 0,
             branch_id: row.branch_id,
             branch_name: row.branch_name || "Unknown",
+
+            // 🔥 LOAN INFO
+            is_loan: !!row.loan_id,
+            loan_id: row.loan_id || null,
+            loan_due_date: row.loan_due_date || null,
+            loan_status: row.loan_status || null,
+            loan_paid_at: row.loan_paid_at || null,
           });
         }
 
