@@ -9,6 +9,7 @@ import EditBundle from "./EditBundleModal";
 export default function ProductTable({
     userRole,
     selectedBranch,
+    selectedMunicipality,
     setProducts,
     onRestock,
     borderless = false,
@@ -22,13 +23,25 @@ export default function ProductTable({
     const BASE_URL = import.meta.env.VITE_BASE_URL;
     const token = localStorage.getItem("token");
 
+    const cleanNumber = (val) => {
+        if (val === null || val === undefined) return 0;
+
+        const num = Number(
+            String(val)
+                .replace(/\s/g, "")        // remove spaced digits
+                .replace(/[^\d.-]/g, "")   // remove symbols
+        );
+
+        return isNaN(num) ? 0 : num;
+    };
+
     useEffect(() => {
         const fetchProducts = async () => {
             if (!token) return;
             try {
                 const productEndpoint =
                     userRole === "admin"
-                        ? `${BASE_URL}/products/admin/all-products?branch=${selectedBranch}`
+                        ? `${BASE_URL}/products/admin/all-products?branch=${selectedBranch}&municipality=${selectedMunicipality}`
                         : `${BASE_URL}/products/my-products`;
 
                 const resProducts = await axios.get(productEndpoint, {
@@ -39,9 +52,9 @@ export default function ProductTable({
                     ...p,
                     isBundle: false,
                     branch_product_id: p.id,
-                    branch_price: p.branch_price,
-                    branch_refill_price: p.branch_refill_price,
-                    branch_discounted_price: p.branch_discounted_price ?? null, // null if no discount
+                    branch_price: cleanNumber(p.branch_price),
+                    branch_refill_price: cleanNumber(p.branch_refill_price),
+                    branch_discounted_price: cleanNumber(p.branch_discounted_price),
                     stock: p.stock,
                     stock_threshold: p.stock_threshold,
                     branch_id: p.branch_id,
@@ -52,7 +65,21 @@ export default function ProductTable({
 
                 // Only show admin products if stock > 0 and owned by branch
                 if (userRole === "admin") {
-                    fetchedProducts = fetchedProducts.filter((p) => p.stock > 0 && p.branch_id);
+                    fetchedProducts = fetchedProducts.filter((p) => {
+                        const branch = (p.branch_name || "").trim().toLowerCase();
+                        const municipality = (p.municipality || "").trim().toLowerCase();
+
+                        const selectedB = (selectedBranch || "").trim().toLowerCase();
+                        const selectedM = (selectedMunicipality || "").trim().toLowerCase();
+
+                        const matchBranch =
+                            selectedBranch === "All" || branch === selectedB;
+
+                        const matchMunicipality =
+                            selectedMunicipality === "All" || municipality === selectedM;
+
+                        return matchBranch && matchMunicipality;
+                    });
                 }
 
                 // Branch manager bundles
@@ -91,24 +118,48 @@ export default function ProductTable({
                         headers: { Authorization: `Bearer ${token}` },
                     });
 
-                    const adminBundles = (resAdminBundles.data.bundles || []).map((b) => ({
+                    let adminBundles = (resAdminBundles.data.bundles || []).map((b) => ({
                         branch_bundle_id: b.branch_bundle_id,
                         bundle_id: b.bundle_id,
                         product_name: b.bundle_name,
                         description: b.description,
+
                         branch_price: b.price ?? 0,
                         branch_discounted_price: b.discounted_price ?? null,
+
                         stock: null,
-                        items: (b.items || []).map((item) => ({
+
+                        items: (b.products || []).map((item) => ({
                             ...item,
-                            quantity: item.required_qty ?? 0,
+                            quantity: item.quantity ?? 0,
                         })),
+
                         isBundle: true,
                         bundle_image: b.bundle_image,
                         branch_id: b.branch_id,
                         branch_name: b.branch_name,
+
+                        municipality: b.municipality, // ✅ 🔥 ADD THIS (MAIN FIX)
+
                         branch_bundle_price_id: b.branch_bundle_price_id ?? null,
                     }));
+
+                    // 🔥 APPLY FILTER HERE (THIS WAS MISSING)
+                    adminBundles = adminBundles.filter((b) => {
+                        const branch = (b.branch_name || "").trim().toLowerCase();
+                        const municipality = (b.municipality || "").trim().toLowerCase();
+
+                        const selectedB = (selectedBranch || "").trim().toLowerCase();
+                        const selectedM = (selectedMunicipality || "").trim().toLowerCase();
+
+                        const matchBranch =
+                            selectedBranch === "All" || branch === selectedB;
+
+                        const matchMunicipality =
+                            selectedMunicipality === "All" || municipality === selectedM;
+
+                        return matchBranch && matchMunicipality;
+                    });
 
                     fetchedProducts = [...adminBundles, ...fetchedProducts];
                 }
@@ -122,7 +173,7 @@ export default function ProductTable({
         };
 
         fetchProducts();
-    }, [userRole, selectedBranch, refreshTrigger, token]);
+    }, [userRole, selectedBranch, selectedMunicipality, refreshTrigger, token]);
 
     const resolveRowId = (row) =>
         row.branch_product_id ?? row.branch_bundle_id ?? row.product_id ?? row.id ?? null;

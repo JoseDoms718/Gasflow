@@ -177,6 +177,7 @@ router.get("/admin/get-bundles", authenticateToken, async (req, res) => {
                 bb.id AS branch_bundle_id,
                 bb.branch_id,
                 b.branch_name,
+                br.municipality,   -- ✅ ADDED FIX
 
                 bl.bundle_id,
                 bl.bundle_name,
@@ -199,6 +200,7 @@ router.get("/admin/get-bundles", authenticateToken, async (req, res) => {
 
             FROM branch_bundles bb
             JOIN branches b ON b.branch_id = bb.branch_id
+            JOIN barangays br ON br.barangay_id = b.barangay_id   -- ✅ ADDED FIX
             JOIN bundles bl ON bl.bundle_id = bb.bundle_id
             LEFT JOIN branch_bundle_prices bbp 
                 ON bbp.branch_id = bb.branch_id 
@@ -224,6 +226,7 @@ router.get("/admin/get-bundles", authenticateToken, async (req, res) => {
                     branch_bundle_id: item.branch_bundle_id,
                     branch_id: item.branch_id,
                     branch_name: item.branch_name,
+                    municipality: item.municipality, // ✅ ADDED FIX
 
                     bundle_id: item.bundle_id,
                     bundle_name: item.bundle_name,

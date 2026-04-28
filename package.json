@@ -20,6 +20,8 @@
     "express": "^5.1.0",
     "file-saver": "^2.0.5",
     "jsonwebtoken": "^9.0.2",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.542.0",
     "multer": "^2.0.2",
     "mysql2": "^3.14.5",

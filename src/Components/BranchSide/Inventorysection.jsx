@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { PlusCircle, Download } from "lucide-react";
-import * as XLSX from "xlsx-js-style";
-import { saveAs } from "file-saver";
+import axios from "axios";
 import { toast } from "react-hot-toast";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 import ProductTable from "./ProductTable";
 import AddProductModal from "./AddProductModal";
@@ -14,14 +15,26 @@ import AddBranchBundleModal from "../Modals/AddBranchBundleModal";
 
 export default function Inventory() {
   const [userRole, setUserRole] = useState(null);
-  const [products, setProducts] = useState([]);
-  const [restockHistory, setRestockHistory] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [showBundleForm, setShowBundleForm] = useState(false);
+
+  const [selectedMunicipality, setSelectedMunicipality] = useState("All");
   const [selectedBranch, setSelectedBranch] = useState("All");
+
   const [restockCounter, setRestockCounter] = useState(0);
 
-  const branches = ["All", "Boac", "Mogpog", "Gasan", "Buenavista", "Torrijos", "Santa Cruz"];
+  const BASE_URL = import.meta.env.VITE_BASE_URL;
+  const token = localStorage.getItem("token");
+
+  const municipalities = [
+    "All",
+    "Boac",
+    "Mogpog",
+    "Gasan",
+    "Buenavista",
+    "Torrijos",
+    "Santa Cruz",
+  ];
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
@@ -31,158 +44,222 @@ export default function Inventory() {
     }
   }, []);
 
-  const handleRestockUpdate = () => setRestockCounter((prev) => prev + 1);
+  const handleRestockUpdate = () =>
+    setRestockCounter((prev) => prev + 1);
 
-  const handleExportExcel = () => {
-    if (!products.length && (!restockHistory.length || userRole === "admin")) {
-      return toast.error("No data to export.");
+  const cleanNumber = (val) => {
+    if (val === null || val === undefined) return 0;
+    const num = Number(
+      String(val)
+        .replace(/\s/g, "")
+        .replace(/[^\d.-]/g, "")
+    );
+    return isNaN(num) ? 0 : num;
+  };
+
+  const buildQuery = () => {
+    const params = new URLSearchParams();
+
+    if (selectedMunicipality !== "All") {
+      params.append("municipality", selectedMunicipality);
     }
 
-    const timestamp = new Date()
-      .toLocaleString("en-PH", { timeZone: "Asia/Manila" })
-      .replace(/[/:,]/g, "-")
-      .replace(/\s+/g, "_");
+    return params.toString();
+  };
 
-    const wb = XLSX.utils.book_new();
+  const handleExportPDF = async () => {
+    try {
+      if (!token) return toast.error("Unauthorized");
 
-    if (products.length) {
-      const productData = products.map((p) => ({
-        "Product Name": p.product_name || "N/A",
-        "Price (₱)": p.price ? Number(p.price).toFixed(2) : "0.00",
-        Stock: p.stock || 0,
-        Branch: p.branch || "N/A",
-      }));
+      let endpoint = "";
 
-      const ws1 = XLSX.utils.json_to_sheet(productData);
-      XLSX.utils.book_append_sheet(wb, ws1, "Inventory");
+      if (userRole === "admin") {
+        const query = buildQuery();
+        endpoint = `${BASE_URL}/products/admin/all-products${query ? `?${query}` : ""}`;
+      } else if (userRole === "branch_manager") {
+        endpoint = `${BASE_URL}/products/my-products`;
+      } else {
+        return toast.error("You are not allowed to export this data.");
+      }
+
+      const res = await axios.get(endpoint, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const products = Array.isArray(res.data)
+        ? res.data
+        : res.data?.data || [];
+
+      if (!products.length) {
+        return toast.error("No data to export.");
+      }
+
+      const doc = new jsPDF();
+
+      const timestamp = new Date().toLocaleString("en-PH", {
+        timeZone: "Asia/Manila",
+      });
+
+      doc.setFontSize(16);
+      doc.text("Products & Inventory", 14, 15);
+
+      doc.setFontSize(12);
+      doc.text(`Role: ${userRole}`, 14, 22);
+      doc.text(`Municipality: ${selectedMunicipality}`, 14, 28);
+      doc.text(`Generated: ${timestamp}`, 14, 34);
+
+      const tableData = products.map((p) => {
+        const price = cleanNumber(
+          p.branch_discounted_price ??
+          p.branch_price ??
+          p.price
+        );
+
+        return [
+          p.product_name || "N/A",
+          p.branch_name || "N/A",
+          p.stock ?? 0,
+          `PHP ${price.toFixed(2)}`
+        ];
+      });
+
+      autoTable(doc, {
+        startY: 42,
+        head: [["Product Name", "Branch", "Stock", "Price"]],
+        body: tableData,
+      });
+
+      doc.save(`Inventory_${userRole}_${selectedMunicipality}.pdf`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to export PDF.");
     }
-
-    if (restockHistory.length && userRole !== "admin") {
-      const historyData = restockHistory.map((h) => ({
-        "Product Name": h.product_name,
-        Quantity: h.quantity,
-        "Previous Stock": h.previous_stock,
-        "New Stock": h.new_stock,
-        "Restocked By": h.restocked_by_name || "-",
-        Date: h.restocked_at ? new Date(h.restocked_at).toLocaleString("en-PH") : "-",
-      }));
-
-      const ws2 = XLSX.utils.json_to_sheet(historyData);
-      XLSX.utils.book_append_sheet(wb, ws2, "Restock History");
-    }
-
-    const fileName = `Inventory_${selectedBranch}_${timestamp}.xlsx`;
-    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-    saveAs(new Blob([wbout]), fileName);
   };
 
   if (!userRole) return null;
 
   return (
-    <div className="p-4 w-full flex flex-col gap-3 relative">
+    <div className="p-4 w-full flex flex-col gap-3">
+
       {/* HEADER */}
-      <div className="flex flex-col gap-2">
-        {userRole !== "retailer" && (
-          <h2 className="text-2xl font-bold text-gray-900">Products & Inventory</h2>
-        )}
+      <div className="flex flex-col gap-3">
 
-        {(userRole === "admin" || userRole === "branch_manager" || userRole === "retailer") && (
-          <div className="flex flex-col sm:flex-row items-center gap-3">
-            <div className="flex-1 w-full">
-              {userRole === "admin" ? (
-                <select
-                  value={selectedBranch}
-                  onChange={(e) => setSelectedBranch(e.target.value)}
-                  className="px-3 py-2 border rounded bg-white shadow-sm"
-                >
-                  {branches.map((b) => (
-                    <option key={b}>{b}</option>
-                  ))}
-                </select>
-              ) : userRole === "retailer" ? (
-                <h2 className="text-lg text-gray-800">
-                  Browse and purchase from nearby branches.
-                </h2>
-              ) : null}
-            </div>
+        <h2 className="text-2xl font-bold text-gray-900">
+          Products & Inventory
+        </h2>
 
-            <div className="flex gap-3 ml-auto">
-              <button
-                onClick={handleExportExcel}
-                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow"
+        {/* TOP BAR */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+
+          {/* FILTERS */}
+          <div className="flex items-center gap-3">
+            {userRole === "admin" && (
+              <select
+                value={selectedMunicipality}
+                onChange={(e) => setSelectedMunicipality(e.target.value)}
+                className="px-3 py-2 border rounded bg-white shadow-sm h-10"
               >
-                <Download className="w-5 h-5" /> Export PDF
-              </button>
-              {(userRole === "branch_manager" || userRole === "admin") && (
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setShowForm(true)}
-                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow"
-                  >
-                    <PlusCircle className="w-5 h-5" /> Add Product
-                  </button>
-
-                  <button
-                    onClick={() => setShowBundleForm(true)}
-                    className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded shadow"
-                  >
-                    <PlusCircle className="w-5 h-5" /> Add Bundle
-                  </button>
-                </div>
-              )}
-            </div>
+                {municipalities.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
-        )}
+
+          {/* ACTIONS */}
+          <div className="flex gap-3 items-center flex-wrap sm:ml-auto">
+
+            <button
+              onClick={handleExportPDF}
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 h-10 rounded shadow whitespace-nowrap"
+            >
+              <Download className="w-5 h-5" />
+              Export PDF
+            </button>
+
+            {(userRole === "branch_manager" || userRole === "admin") && (
+              <>
+                <button
+                  onClick={() => setShowForm(true)}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 h-10 rounded shadow whitespace-nowrap"
+                >
+                  <PlusCircle className="w-5 h-5" />
+                  Add Product
+                </button>
+
+                <button
+                  onClick={() => setShowBundleForm(true)}
+                  className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 h-10 rounded shadow whitespace-nowrap"
+                >
+                  <PlusCircle className="w-5 h-5" />
+                  Add Bundle
+                </button>
+              </>
+            )}
+
+          </div>
+        </div>
       </div>
 
       {/* MAIN CONTENT */}
       <div className="flex gap-4 w-full h-[calc(100vh-180px)]">
-        {/* PRODUCT TABLE */}
+
         <div className="flex-1 overflow-hidden">
           <div className="overflow-y-auto h-full">
             <ProductTable
               userRole={userRole}
               selectedBranch={selectedBranch}
-              setProducts={setProducts}
+              selectedMunicipality={selectedMunicipality}
               onRestock={handleRestockUpdate}
-              borderless
               refreshTrigger={restockCounter}
             />
           </div>
         </div>
 
-        {/* RIGHT PANEL */}
         <div className="w-[380px] h-full">
-          {/* Make the entire right panel scrollable */}
           <div className="overflow-y-auto h-full flex flex-col gap-4">
+
             {userRole === "admin" ? (
               <>
-                <AdminProducts refreshTrigger={restockCounter} borderless />
-                <AdminBundles refreshTrigger={restockCounter} borderless />
+                <AdminProducts
+                  refreshTrigger={restockCounter}
+                  selectedMunicipality={selectedMunicipality}
+                  borderless
+                />
+
+                <AdminBundles
+                  refreshTrigger={restockCounter}
+                  selectedMunicipality={selectedMunicipality}
+                  borderless
+                />
               </>
             ) : (
               <RestockHistory
                 userRole={userRole}
-                selectedBranch={selectedBranch}
+                selectedMunicipality={selectedMunicipality}
                 refreshTrigger={restockCounter}
-                onHistoryFetched={setRestockHistory}
                 borderless
               />
             )}
+
           </div>
         </div>
+
       </div>
 
       {/* MODALS */}
-      {showForm && <AddProductModal setShowForm={setShowForm} setProducts={setProducts} />}
+      {showForm && <AddProductModal setShowForm={setShowForm} />}
 
       {showBundleForm && userRole === "branch_manager" && (
-        <AddBranchBundleModal setShowBundleForm={setShowBundleForm} refreshBundles={() => { }} />
+        <AddBranchBundleModal setShowBundleForm={setShowBundleForm} />
       )}
 
-      {showBundleForm && userRole !== "branch_manager" && (
-        <AddBundleModal setShowBundleForm={setShowBundleForm} refreshBundles={() => { }} />
+      {showBundleForm && userRole === "admin" && (
+        <AddBundleModal setShowBundleForm={setShowBundleForm} />
       )}
+
     </div>
   );
 }

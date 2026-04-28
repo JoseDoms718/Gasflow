@@ -344,14 +344,13 @@ router.get("/public/products", async (req, res) => {
 // ==============================
 router.get("/admin/all-products", authenticateToken, async (req, res) => {
   try {
-    if (req.user.role !== "admin") 
+    if (req.user.role !== "admin")
       return res.status(403).json({ error: "Admins only" });
 
     const { branch } = req.query;
-    let whereClause = "WHERE i.state = 'full'"; // Only full state
+    let whereClause = "WHERE i.state = 'full'";
 
     if (branch && branch !== "All") {
-      // Filter by branch_name from branches table
       whereClause += ` AND b.branch_name LIKE ${db.escape(`%${branch}%`)}`;
     }
 
@@ -366,11 +365,16 @@ router.get("/admin/all-products", authenticateToken, async (req, res) => {
         b.branch_picture,
         br.municipality, 
         br.barangay_name,
+
         bp.id AS branch_price_id,
-        bp.price AS branch_price,
-        bp.discounted_price AS branch_discounted_price,
-        bp.refill_price AS branch_refill_price,
+
+        -- FIX: clean + cast prices (removes spaced strings like "1 0 0 0 . 0 0")
+        CAST(REPLACE(bp.price, ' ', '') AS DECIMAL(10,2)) AS branch_price,
+        CAST(REPLACE(bp.discounted_price, ' ', '') AS DECIMAL(10,2)) AS branch_discounted_price,
+        CAST(REPLACE(bp.refill_price, ' ', '') AS DECIMAL(10,2)) AS branch_refill_price,
+
         bp.updated_at AS branch_price_updated_at
+
       FROM products p
       LEFT JOIN inventory i ON i.product_id = p.product_id
       LEFT JOIN branches b ON i.branch_id = b.branch_id
@@ -383,8 +387,13 @@ router.get("/admin/all-products", authenticateToken, async (req, res) => {
 
     const [rows] = await db.query(sql);
 
-    // Optional: format images
-    const formattedRows = rows.map(formatProductImage);
+    // extra safety normalization (frontend-safe guarantee)
+    const formattedRows = rows.map((r) => ({
+      ...formatProductImage(r),
+      branch_price: Number(r.branch_price) || 0,
+      branch_discounted_price: Number(r.branch_discounted_price) || null,
+      branch_refill_price: Number(r.branch_refill_price) || 0,
+    }));
 
     res.json(formattedRows);
   } catch (err) {
@@ -392,7 +401,6 @@ router.get("/admin/all-products", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Failed to fetch admin products." });
   }
 });
-
 
 //admin edit branch prices
 router.put("/branch/update/:id", authenticateToken, async (req, res) => {
